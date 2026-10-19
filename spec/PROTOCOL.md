@@ -58,9 +58,11 @@ so that every language maps it the same way.
 Rules:
 
 - `type` is a stable kebab-case identifier. It never changes meaning.
-- `version` is a positive integer. Additive, optional props MAY be added within a
-  version. Anything else (removing, renaming, retyping, making required, adding an enum
-  value) is a new version.
+- `version` is a positive integer. Within a version, a change MUST keep old clients decoding
+  new payloads and new clients decoding old payloads: optional props MAY be added or removed;
+  anything else (adding or removing required props, changing whether a prop is required,
+  retyping, changing a format, adding or removing an enum value) is a new version. The
+  `codegen compat` command checks this.
 - A client MAY support several versions of one island at once.
 
 ---

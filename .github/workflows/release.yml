@@ -90,6 +90,8 @@ jobs:
     permissions:
       contents: write # push release tags and GitHub releases
       id-token: write # npm trusted publishing and provenance
+    outputs:
+      published-packages: ${{ steps.publish.outputs.published-packages }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -99,6 +101,37 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - uses: changesets/action/publish@v2.1.2
+        id: publish
         with:
           pack-dir-artifact-id: ${{ needs.pack.outputs.pack-dir-artifact-id }}
           create-github-releases: true
+
+  # Standalone client-compose-codegen executables (no Node needed), attached to the codegen release.
+  codegen-binaries:
+    needs: publish
+    if: contains(needs.publish.outputs.published-packages, '"@client-compose/codegen"')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # upload release assets
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/setup-go@v5 # gofmt, for the smoke test
+        with:
+          go-version: stable
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: BUN=bun scripts/build-codegen-binaries.sh build/codegen-binaries
+      - name: Smoke test
+        run: build/codegen-binaries/client-compose-codegen-linux-x64 --check examples/profile/client-compose.codegen.json
+      - name: Attach to the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="$(node -p 'require("./codegen/package.json").version')"
+          gh release upload "@client-compose/codegen@$version" build/codegen-binaries/* --clobber --repo "$GITHUB_REPOSITORY"

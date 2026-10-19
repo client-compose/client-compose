@@ -72,8 +72,9 @@ full app projects, so drop them into an Xcode / Android Studio project to run th
 
 ## Changing an island
 
-1. Edit or add a manifest in `islands/`. Within a version, only add optional props; anything
-   else is a new version file (see [codegen's compatibility rules](../../codegen/README.md#compatibility-rules-for-manifests)).
+1. Edit or add a manifest in `islands/`. Within a version, only add or remove optional props;
+   anything else is a new version file (see [codegen's compatibility rules](../../codegen/README.md#compatibility-rules-for-manifests)).
+   CI runs `codegen compat` on pull requests to catch mistakes.
 2. Regenerate the Go, Swift, Kotlin and TypeScript types: `go generate` in `composer-go/`, or
    `node codegen/cli.ts examples/profile/client-compose.codegen.json` from the repo root.
 3. The compilers now point at every resolver and renderer that needs updating. CI runs

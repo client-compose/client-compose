@@ -6,6 +6,7 @@ on:
   pull_request:
     paths:
       - "codegen/**"
+      - "scripts/build-codegen-binaries.sh"
       - "examples/**"
       - "shared/typescript/**"
       - "composers/go/**"
@@ -16,6 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the compat check compares with the PR's base branch
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -32,3 +35,16 @@ jobs:
         working-directory: codegen/test/golden/go
         run: go vet ./... && go test ./...
       # Swift and Kotlin golden output is exercised by swift.yml and kotlin.yml.
+      - name: Island manifests have no breaking changes without a version bump
+        if: github.event_name == 'pull_request'
+        run: node codegen/cli.ts compat examples/profile/client-compose.codegen.json --base "origin/$GITHUB_BASE_REF"
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - name: Standalone binary builds and matches the Node CLI
+        run: |
+          TARGETS=linux-x64 BUN=bun scripts/build-codegen-binaries.sh build/codegen-binaries
+          bin=build/codegen-binaries/client-compose-codegen-linux-x64
+          $bin --version
+          $bin --check codegen/test/fixtures/client-compose.codegen.json examples/profile/client-compose.codegen.json
+          $bin compat examples/profile/client-compose.codegen.json --base-dir examples/profile/islands

@@ -88,8 +88,8 @@ Releases are managed with Changesets; see [RELEASING.md](RELEASING.md).
 ## Roadmap
 
 - [x] Codegen: island manifests → Go, Swift, Kotlin, TypeScript ([codegen/](codegen/))
-- [ ] Codegen: a lint that flags breaking manifest changes made without a version bump
-- [ ] Codegen distributed without needing Node (e.g. a standalone binary)
+- [x] Codegen: `compat` lint that flags breaking manifest changes made without a version bump
+- [x] Codegen: standalone binaries, no Node needed ([install](codegen/README.md#install))
 - [ ] Jetpack Compose binding (`ComposedScreen`) and Kotlin Multiplatform targets
 - [x] React / React Native binding ([clients/typescript/react](clients/typescript/react))
 - [x] TypeScript packages ready for npm (see [RELEASING.md](RELEASING.md))

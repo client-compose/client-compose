@@ -46,6 +46,9 @@ The `release` workflow runs on every push to `main`:
    versions, updates internal dependency ranges and writes `CHANGELOG.md` files.
 2. Merging that PR runs `scripts/check-packages.sh`, then publishes the bumped packages to npm,
    tags them and creates GitHub releases.
+3. When `@client-compose/codegen` is published, standalone `client-compose-codegen` executables for
+   Linux, macOS and Windows (built with `scripts/build-codegen-binaries.sh`) and a `SHA256SUMS`
+   file are attached to its GitHub release.
 
 Publishing uses npm [trusted publishing](https://docs.npmjs.com/trusted-publishers): npm accepts
 publishes only from this repository's `release.yml`, authenticated with a short-lived OIDC token, so

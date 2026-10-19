@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, relative, resolve } from "node:path";
+import { compareIslands, loadManifestsAtRef, type CompatIssue } from "./compat.ts";
 import { loadManifests, ManifestError, type EnumDef, type Island, type ObjectDef } from "./manifest.ts";
 import { generateGo, type GoOptions } from "./targets/go.ts";
 import { generateKotlin, type KotlinOptions } from "./targets/kotlin.ts";
@@ -7,6 +8,7 @@ import { generateSwift, type SwiftOptions } from "./targets/swift.ts";
 import { generateTypeScript, type TypeScriptOptions } from "./targets/typescript.ts";
 
 export { loadManifests, parseManifest, ManifestError } from "./manifest.ts";
+export { compareIslands, loadManifestsAtRef, type CompatIssue } from "./compat.ts";
 export { generateGo, generateKotlin, generateSwift, generateTypeScript };
 
 type OneOrMany<T> = T | T[];
@@ -32,10 +34,26 @@ export interface GeneratedFile {
   contents: string;
 }
 
-export function generate(configPath: string): GeneratedFile[] {
+function manifestsDirOf(configPath: string): { config: CodegenConfig; base: string; manifestsDir: string } {
   const config = JSON.parse(readFileSync(configPath, "utf8")) as CodegenConfig;
   const base = dirname(resolve(configPath));
-  const manifestsDir = resolve(base, config.manifests);
+  return { config, base, manifestsDir: resolve(base, config.manifests) };
+}
+
+/**
+ * Compares a config's manifests with an earlier state, either a git ref (e.g. "origin/main") or a
+ * directory of manifests, and reports changes that break apps without an island version bump.
+ */
+export function checkCompat(configPath: string, against: { ref: string } | { dir: string }): CompatIssue[] {
+  const { manifestsDir } = manifestsDirOf(configPath);
+  const head = loadManifests(manifestsDir);
+  if ("dir" in against) return compareIslands(loadManifests(against.dir), head);
+  const base = loadManifestsAtRef(manifestsDir, against.ref);
+  return [...base.issues, ...compareIslands(base.islands, head)];
+}
+
+export function generate(configPath: string): GeneratedFile[] {
+  const { config, base, manifestsDir } = manifestsDirOf(configPath);
   const islands = loadManifests(manifestsDir);
   checkFlatNames(islands);
 
