@@ -1,21 +1,47 @@
 name: release
 
-# On every push to main: if there are pending changesets, open or update a "Release packages" PR
-# that bumps versions and changelogs. When that PR is merged, publish the bumped packages to npm.
+# On every push to main:
+# - pending changesets: open or update a "Release packages" PR that bumps versions and changelogs;
+# - no pending changesets but unpublished versions (i.e. that PR was merged): check, pack and
+#   publish them to npm with trusted publishing (OIDC, no token) and provenance.
+#
+# Jobs are split so that only `publish` can mint an npm identity token. See RELEASING.md.
 on:
   push:
     branches: [main]
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
-permissions:
-  contents: write # push the release commit and tags
-  pull-requests: write # open the release PR
-  id-token: write # npm provenance
+permissions: {}
 
 jobs:
-  release:
+  select-mode:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      mode: ${{ steps.select-mode.outputs.mode }}
+      publish-plan-artifact-id: ${{ steps.select-mode.outputs.publish-plan-artifact-id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: changesets/action/select-mode@v2.1.2
+        id: select-mode
+
+  version:
+    needs: select-mode
+    if: needs.select-mode.outputs.mode == 'version'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # commit version bumps
+      pull-requests: write # open the release PR
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -23,20 +49,56 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-          registry-url: https://registry.npmjs.org
+      - run: pnpm install --frozen-lockfile
+      - uses: changesets/action/version@v2.1.2
+        with:
+          script: pnpm changeset version
+          pr-title: Release packages
+          commit-message: Release packages
+
+  pack:
+    needs: select-mode
+    if: needs.select-mode.outputs.mode == 'publish'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      pack-dir-artifact-id: ${{ steps.pack.outputs.pack-dir-artifact-id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
       - uses: actions/setup-go@v5 # gofmt, for the codegen check
         with:
           go-version: stable
       - run: pnpm install --frozen-lockfile
+      # Builds every package, then lints and install-tests the tarballs before anything is published.
       - run: scripts/check-packages.sh
-      - uses: changesets/action@v1
+      - uses: changesets/action/pack@v2.1.2
+        id: pack
         with:
-          version: pnpm changeset version
-          publish: pnpm release
-          title: Release packages
-          commit: Release packages
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_CONFIG_PROVENANCE: true
+          publish-plan-artifact-id: ${{ needs.select-mode.outputs.publish-plan-artifact-id }}
+
+  publish:
+    needs: pack
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # push release tags and GitHub releases
+      id-token: write # npm trusted publishing and provenance
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24 # ships npm >= 11.5.1, which trusted publishing needs
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: changesets/action/publish@v2.1.2
+        with:
+          pack-dir-artifact-id: ${{ needs.pack.outputs.pack-dir-artifact-id }}
+          create-github-releases: true

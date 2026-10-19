@@ -44,22 +44,34 @@ The `release` workflow runs on every push to `main`:
 
 1. If there are pending changesets, it opens (or updates) a **Release packages** PR that bumps
    versions, updates internal dependency ranges and writes `CHANGELOG.md` files.
-2. Merging that PR publishes the bumped packages to npm with
-   [provenance](https://docs.npmjs.com/generating-provenance-statements), and tags the release.
+2. Merging that PR runs `scripts/check-packages.sh`, then publishes the bumped packages to npm,
+   tags them and creates GitHub releases.
 
-## One-time setup
+Publishing uses npm [trusted publishing](https://docs.npmjs.com/trusted-publishers): npm accepts
+publishes only from this repository's `release.yml`, authenticated with a short-lived OIDC token, so
+there's no npm token to leak. Every version gets a [provenance](https://docs.npmjs.com/generating-provenance-statements)
+statement linking it to the commit and workflow run that built it. Only the `publish` job can
+request the OIDC token.
 
-1. **Create the npm organisation** `client-compose` at <https://www.npmjs.com/org/create>
-   (free for public packages). Scoped packages can only be published by members of that org.
-2. **Add an npm token as a repository secret.** Create a granular access token with read and
-   write access to the `@client-compose` scope, then add it to the GitHub repo as `NPM_TOKEN`
-   (Settings → Secrets and variables → Actions).
-3. **Let GitHub Actions open pull requests**: Settings → Actions → General → "Allow GitHub
-   Actions to create and approve pull requests" (on the organisation, then on the repo).
+## One-time setup (already done)
 
-After the first release you can replace the token with npm
-[trusted publishing](https://docs.npmjs.com/trusted-publishers): configure each package on npmjs.com
-to trust this repository's `release.yml` workflow, then remove the `NPM_TOKEN` secret.
+1. The npm organisation `client-compose` owns the `@client-compose` scope.
+2. GitHub Actions may create pull requests (Settings → Actions → General, on the organisation and
+   the repository).
+3. The first versions were published from a maintainer's machine with `scripts/first-release.sh`,
+   which also registered `release.yml` as each package's trusted publisher. (Trusted publishing can
+   only be configured for packages that already exist.)
+
+## Adding a new package
+
+A brand-new package has the same chicken-and-egg problem: publish its first version from a
+maintainer's machine (`npm login`, then `pnpm build && pnpm changeset publish`), then trust the
+workflow:
+
+```sh
+npx npm@11.19.0 trust github @client-compose/<name> --file release.yml \
+  --repository client-compose/client-compose --allow-publish
+```
 
 ## Publishing manually
 
