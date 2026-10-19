@@ -20,22 +20,24 @@ function run(command: string, args: string[], input?: NodeJS.ReadableStream): Pr
   });
 }
 
-test("renders a screen in React Server Components", async () => {
-  // Test the built output, i.e. what's published.
-  execFileSync("pnpm", ["exec", "tsc", "-b", here("../tsconfig.build.json")], { stdio: "inherit" });
-
+async function renderRsc(mode?: string) {
   const server = spawn(
     process.execPath,
-    ["--conditions", "react-server", "--import", here("rsc/register-loader.mjs"), here("rsc/render-server.mjs")],
+    ["--conditions", "react-server", "--import", here("rsc/register-loader.mjs"), here("rsc/render-server.mjs"), ...(mode ? [mode] : [])],
     { stdio: ["ignore", "pipe", "pipe"] },
   );
   let serverErr = "";
   server.stderr.on("data", (d) => (serverErr += d));
   const serverExit = new Promise<number | null>((resolve) => server.on("close", resolve));
-
   const output = await run(process.execPath, [here("rsc/render-client.mjs")], server.stdout);
   assert.equal(await serverExit, 0, `RSC render failed:\n${serverErr}`);
-  const { html, errors } = JSON.parse(output) as { html: string; errors: string[] };
+  return JSON.parse(output) as { html: string; errors: string[] };
+}
+
+test("renders a screen in React Server Components", async () => {
+  // Test the built output, i.e. what's published.
+  execFileSync("pnpm", ["exec", "tsc", "-b", here("../tsconfig.build.json")], { stdio: "inherit" });
+  const { html, errors } = await renderRsc();
 
   // Server Component islands (including async ones) render to HTML on the server.
   assert.match(html, /<h1>Ada<\/h1>/);
@@ -45,4 +47,11 @@ test("renders a screen in React Server Components", async () => {
   assert.doesNotMatch(html, /loading/);
   assert.ok(html.indexOf("<h1>Ada</h1>") < html.indexOf("<button>"), "islands keep their order");
   assert.deepEqual(errors, ["broken island"]);
+});
+
+test("renders a response passed in instead of fetching", async () => {
+  execFileSync("pnpm", ["exec", "tsc", "-b", here("../tsconfig.build.json")], { stdio: "inherit" });
+  const { html } = await renderRsc("preloaded");
+  assert.match(html, /<h1>Ada<\/h1>/);
+  assert.match(html, /<button>count 1<\/button>/);
 });

@@ -15,11 +15,18 @@ const response = {
   ],
 };
 
+// "preloaded": the page passes a response it already loaded, so the component must not fetch.
+const preloaded = process.argv[2] === "preloaded";
+
 const config = {
   registry,
   baseUrl: "https://composer.test",
   client: { platform: "web", appVersion: "1.0.0" },
-  fetch: async () => Response.json(response),
+  fetch: preloaded
+    ? async () => {
+        throw new Error("fetched although a response was passed in");
+      }
+    : async () => Response.json(response),
 };
 
 // Client references are "<file url>#<export>"; this test loads modules by URL, so map them as-is.
@@ -30,5 +37,10 @@ const clientManifest = new Proxy({}, {
   },
 });
 
-const element = createElement("main", null, createElement(ComposedScreen, { config, screen: "profile", fallback: "loading" }));
+const element = createElement("main", null, createElement(ComposedScreen, {
+    config,
+    screen: "profile",
+    fallback: "loading",
+    response: preloaded ? Promise.resolve(response) : undefined,
+  }));
 renderToPipeableStream(element, clientManifest, { onError: () => {} }).pipe(process.stdout);

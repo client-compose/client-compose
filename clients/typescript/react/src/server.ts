@@ -24,6 +24,12 @@ export interface ServerComposedScreenProps {
   screen: string;
   params?: Record<string, string>;
   /**
+   * A response (or its promise) you've already loaded with `loadScreen`, e.g. because
+   * `generateMetadata` needs its `meta` too. Given this, the component doesn't fetch. Wrap your
+   * loader in React's `cache()` so both share one request.
+   */
+  response?: ScreenResponse | Promise<ScreenResponse>;
+  /**
    * Streamed while the screen loads. Omit it to suspend to the nearest `<Suspense>` boundary (or
    * your framework's loading UI) instead.
    */
@@ -50,7 +56,7 @@ async function ScreenIslands(props: ServerComposedScreenProps): Promise<ReactNod
   const { config } = props;
   let response: ScreenResponse;
   try {
-    response = await loadScreen(config, props.screen, props.params);
+    response = await (props.response ?? loadScreen(config, props.screen, props.params));
   } catch (error) {
     if (props.renderError) return props.renderError(error);
     throw error;

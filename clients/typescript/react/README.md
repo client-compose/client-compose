@@ -151,6 +151,22 @@ export default async function Page({ params }: { params: Promise<{ userId: strin
 - `requestInit` is passed to every request, so framework fetch options such as
   `{ next: { revalidate: 30 } }` work too.
 - To refresh, use your framework's mechanism (e.g. `router.refresh()`).
+- If the page also needs the response (e.g. its `meta` in Next.js's `generateMetadata`), load it
+  once and pass it in, so the component doesn't fetch again:
+
+  ```tsx
+  const getScreen = cache((id: string) => loadScreen(config, "recipe", { recipeId: id }));
+
+  export async function generateMetadata({ params }) {
+    const { meta } = await getScreen((await params).recipeId);
+    return { title: meta?.title, description: meta?.description };
+  }
+
+  export default async function Page({ params }) {
+    const { recipeId } = await params;
+    return <ComposedScreen config={config} screen="recipe" params={{ recipeId }} response={getScreen(recipeId)} />;
+  }
+  ```
 - `onRenderError` in this config sees errors thrown while creating an island's element on the
   server. Errors thrown inside a Server Component island are re-thrown in the browser and caught
   there; to report those, put a `<ClientComposeProvider>` with `onRenderError` above the page.
