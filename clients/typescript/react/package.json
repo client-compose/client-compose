@@ -1,0 +1,20 @@
+{
+  "name": "@client-compose/react",
+  "version": "0.0.0",
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "dependencies": {
+    "@client-compose/client": "workspace:*",
+    "@client-compose/protocol": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "devDependencies": {
+    "@happy-dom/global-registrator": "^17.0.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
+  }
+}

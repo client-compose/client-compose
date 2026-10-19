@@ -26,8 +26,8 @@ schema ends up as a second, worse UI framework. Client Compose sits in between:
 You can move, add, remove, A/B test, or re-source islands without shipping an app
 update, as long as the app already has a renderer for that island.
 
-**Start with [`examples/profile`](examples/profile)**: native iOS and Android apps backed by a Go
-composer.
+**Start with [`examples/profile`](examples/profile)**: one Go composer serving native iOS (SwiftUI),
+native Android (Compose), React web and React Native apps.
 
 ## Implementations
 
@@ -40,7 +40,8 @@ Every implementation passes the shared [conformance suites](conformance/).
 | Composer | TypeScript (`node:http`)  | `composers/typescript`     | Core | v0       |
 | Client   | Swift (+ SwiftUI)         | `clients/swift`            | Core | v0       |
 | Client   | Kotlin (JVM / Android)    | `clients/kotlin`           | Core | v0       |
-| Client   | TypeScript                | `clients/typescript`       | Core | v0       |
+| Client   | TypeScript                | `clients/typescript/core`  | Core | v0       |
+| Client   | React / React Native      | `clients/typescript/react` | Core | v0       |
 
 Using a stack that isn't listed? See [CONTRIBUTING.md](CONTRIBUTING.md). Adding a framework
 adapter for an existing core is usually under 50 lines.
@@ -75,6 +76,7 @@ pnpm test
 - [ ] Codegen: a lint that flags breaking manifest changes made without a version bump
 - [ ] Codegen distributed without needing Node (e.g. a standalone binary)
 - [ ] Jetpack Compose binding (`ComposedScreen`) and Kotlin Multiplatform targets
-- [ ] React / React Native binding
+- [x] React / React Native binding ([clients/typescript/react](clients/typescript/react))
+- [ ] Build step for the TypeScript packages, so they can be published to npm (they ship as `.ts` today)
 - [ ] More composer adapters: chi/gin/echo (Go), Express/Fastify/Hono/Lambda (TS)
 - [ ] v1 candidates in `spec/PROTOCOL.md` §7 (streaming, single-island refresh)

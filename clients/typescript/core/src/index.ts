@@ -97,17 +97,29 @@ export function plan<R>(
   return out;
 }
 
+export class ScreenFetchError extends Error {
+  readonly status: number;
+  readonly body: string;
+
+  constructor(status: number, body: string) {
+    super(`Screen request failed with status ${status}`);
+    this.status = status;
+    this.body = body;
+  }
+}
+
 export async function fetchScreen(
   baseUrl: string,
   request: ScreenRequest,
   init: RequestInit = {},
+  fetchImpl: typeof fetch = fetch,
 ): Promise<ScreenResponse> {
-  const res = await fetch(`${baseUrl}/screens/${encodeURIComponent(request.screen)}`, {
+  const res = await fetchImpl(`${baseUrl}/screens/${encodeURIComponent(request.screen)}`, {
     ...init,
     method: "POST",
     headers: { "content-type": "application/json", ...init.headers },
     body: JSON.stringify(request),
   });
-  if (!res.ok) throw new Error(`Screen ${request.screen} failed: ${res.status} ${await res.text()}`);
+  if (!res.ok) throw new ScreenFetchError(res.status, await res.text());
   return (await res.json()) as ScreenResponse;
 }

@@ -1,6 +1,7 @@
-# Example: native iOS + Android apps with a Go backend
+# Example: one Go composer, four kinds of app
 
-A profile screen built from four islands, shared by both apps:
+A profile screen served by a Go composer to native iOS (SwiftUI), native Android (Jetpack Compose),
+a React web app and a React Native app. All four share the same islands:
 
 | Island           | Version(s) | What the composer provides                  | What stays in the app                |
 | ---------------- | ---------- | ------------------------------------------- | ------------------------------------ |
@@ -17,6 +18,10 @@ ios/                          SwiftUI views + registry (ClientCompose + ClientCo
   Islands.generated.swift     generated
 android/                      Jetpack Compose UI + registry + OkHttp transport (dev.clientcompose:core)
   Islands.generated.kt        generated
+web/                          Vite + React DOM app (@client-compose/react)
+  src/islands.generated.ts    generated
+react-native/                 Expo + React Native app (@client-compose/react)
+  src/islands.generated.ts    generated
 ```
 
 ## What this setup lets you do without an app release
@@ -49,14 +54,27 @@ go test ./...   # the scenarios above
 go run .        # then use the curl at the top of main.go
 ```
 
-The `ios/` and `android/` files show how an app uses the clients. They aren't part of a buildable
-app project here, so drop them into an Xcode / Android Studio project to run them.
+With the composer running:
+
+```sh
+# React web: http://localhost:5173 (Vite proxies /screens to the composer)
+cd web && npm install && npm run dev
+
+# React Native (Expo SDK 57): iOS Simulator, Android emulator, or Expo Go on a device
+cd react-native && npm install && npm run ios   # or: npm run android
+```
+
+The web and React Native apps use the Client Compose packages straight from this repo (see their
+`vite.config.ts` / `metro.config.js`); in your own app, install them from npm instead.
+
+The `ios/` and `android/` folders hold the native app code (views, registry, screen). They aren't
+full app projects, so drop them into an Xcode / Android Studio project to run them.
 
 ## Changing an island
 
 1. Edit or add a manifest in `islands/`. Within a version, only add optional props; anything
    else is a new version file (see [codegen's compatibility rules](../../codegen/README.md#compatibility-rules-for-manifests)).
-2. Regenerate the Go, Swift and Kotlin types: `go generate` in `composer-go/`, or
+2. Regenerate the Go, Swift, Kotlin and TypeScript types: `go generate` in `composer-go/`, or
    `node codegen/cli.ts examples/profile/client-compose.codegen.json` from the repo root.
 3. The compilers now point at every resolver and renderer that needs updating. CI runs
    `--check` so generated files can't drift from the manifests.

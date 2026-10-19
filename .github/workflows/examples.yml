@@ -1,0 +1,44 @@
+name: examples
+
+# Keeps the web and React Native examples building against the current library sources.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "examples/profile/web/**"
+      - "examples/profile/react-native/**"
+      - "clients/typescript/**"
+      - "shared/typescript/**"
+      - ".github/workflows/examples.yml"
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: examples/profile/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run build # typecheck + vite build
+
+  react-native:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: examples/profile/react-native
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - name: Bundle for iOS and Android with Metro
+        run: npx expo export --platform ios --platform android
+        env:
+          CI: 1

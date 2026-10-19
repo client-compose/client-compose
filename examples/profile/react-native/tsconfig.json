@@ -1,0 +1,15 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "allowImportingTsExtensions": true,
+    "paths": {
+      "@client-compose/react": ["../../../clients/typescript/react/src/index.ts"],
+      "@client-compose/client": ["../../../clients/typescript/core/src/index.ts"],
+      "@client-compose/protocol": ["../../../shared/typescript/protocol/src/index.ts"],
+      "react": ["./node_modules/@types/react"],
+      "react/*": ["./node_modules/@types/react/*"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.tsx"]
+}

@@ -18,7 +18,7 @@ const islands = plan(registry, response, { onSkipped: (e, reason) => console.war
 
 Props aren't validated at runtime, so the `typedOnly` conformance cases don't apply.
 
-**Planned:** a React / React Native binding (`<ComposedScreen>`).
+For React and React Native, use [`react`](react/) (`@client-compose/react`), which builds on this core.
 
 ## Tests
 

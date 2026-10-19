@@ -9,16 +9,23 @@ import { generateTypeScript, type TypeScriptOptions } from "./targets/typescript
 export { loadManifests, parseManifest, ManifestError } from "./manifest.ts";
 export { generateGo, generateKotlin, generateSwift, generateTypeScript };
 
-/** `client-compose.codegen.json`. Paths are relative to the config file. */
+type OneOrMany<T> = T | T[];
+
+/**
+ * `client-compose.codegen.json`. Paths are relative to the config file. Each target may be a list,
+ * e.g. to generate TypeScript into both a web app and a React Native app.
+ */
 export interface CodegenConfig {
   manifests: string;
   targets: {
-    go?: GoOptions & { out: string };
-    swift?: SwiftOptions & { out: string };
-    kotlin?: KotlinOptions & { out: string };
-    typescript?: TypeScriptOptions & { out: string };
+    go?: OneOrMany<GoOptions & { out: string }>;
+    swift?: OneOrMany<SwiftOptions & { out: string }>;
+    kotlin?: OneOrMany<KotlinOptions & { out: string }>;
+    typescript?: OneOrMany<TypeScriptOptions & { out: string }>;
   };
 }
+
+const list = <T>(v: OneOrMany<T> | undefined): T[] => (v === undefined ? [] : Array.isArray(v) ? v : [v]);
 
 export interface GeneratedFile {
   path: string;
@@ -40,12 +47,14 @@ export function generate(configPath: string): GeneratedFile[] {
 
   const { go, swift, kotlin, typescript } = config.targets;
   const files: GeneratedFile[] = [];
-  if (go) files.push({ path: resolve(base, go.out), contents: generateGo(islands, header, required(go, "package", "go")) });
-  if (swift) files.push({ path: resolve(base, swift.out), contents: generateSwift(islands, header, swift) });
-  if (kotlin) {
-    files.push({ path: resolve(base, kotlin.out), contents: generateKotlin(islands, header, required(kotlin, "package", "kotlin")) });
+  for (const t of list(go)) {
+    files.push({ path: resolve(base, t.out), contents: generateGo(islands, header, required(t, "package", "go")) });
   }
-  if (typescript) files.push({ path: resolve(base, typescript.out), contents: generateTypeScript(islands, header, typescript) });
+  for (const t of list(swift)) files.push({ path: resolve(base, t.out), contents: generateSwift(islands, header, t) });
+  for (const t of list(kotlin)) {
+    files.push({ path: resolve(base, t.out), contents: generateKotlin(islands, header, required(t, "package", "kotlin")) });
+  }
+  for (const t of list(typescript)) files.push({ path: resolve(base, t.out), contents: generateTypeScript(islands, header, t) });
   if (files.length === 0) throw new ManifestError(`${configPath}: no targets configured`);
   return files;
 }
