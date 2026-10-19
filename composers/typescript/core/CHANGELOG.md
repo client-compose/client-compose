@@ -1,5 +1,15 @@
 # @client-compose/composer
 
+## 0.2.0
+
+### Minor Changes
+
+- [`55613c9`](https://github.com/client-compose/client-compose/commit/55613c91f661064f9856b1654c08c47a697a64f4) Thanks [@LewisYearsley](https://github.com/LewisYearsley)! - Request-scoped data loading. `rc.load(key, fn)` (on resolver and layout contexts) runs `fn` once per
+  key per screen request and shares the result with every island and the layout; the work runs under
+  the request's signal, so an island timing out never cancels work other islands are waiting on, and
+  whatever is still running is cancelled once the response is ready. `defineBatchLoader` combines and
+  de-duplicates keys requested by different islands into one call. Also exports `LayoutContext`.
+
 ## 0.1.1
 
 ### Patch Changes
