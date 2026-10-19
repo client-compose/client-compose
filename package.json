@@ -1,0 +1,16 @@
+{
+  "name": "client-compose",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "node --test \"{clients,composers}/typescript/*/test/*.test.ts\" \"codegen/test/*.test.ts\"",
+    "conformance": "node conformance/runner/cli.ts composer",
+    "codegen": "node codegen/cli.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  }
+}

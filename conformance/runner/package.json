@@ -1,0 +1,7 @@
+{
+  "name": "@client-compose/conformance",
+  "version": "0.0.0",
+  "type": "module",
+  "bin": { "client-compose-conformance": "./cli.ts" },
+  "exports": { ".": "./src/index.ts" }
+}

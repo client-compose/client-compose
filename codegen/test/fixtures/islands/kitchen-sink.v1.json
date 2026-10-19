@@ -1,0 +1,43 @@
+{
+  "type": "kitchen-sink",
+  "version": 1,
+  "description": "Exercises every schema feature codegen supports.",
+  "props": {
+    "type": "object",
+    "required": ["title", "count", "enabled", "tags", "size", "author", "class"],
+    "properties": {
+      "title": { "type": "string", "description": "Shown as the heading." },
+      "count": { "type": "integer" },
+      "ratio": { "type": "number" },
+      "enabled": { "type": "boolean" },
+      "link": { "type": "string", "format": "uri" },
+      "tags": { "type": "array", "items": { "type": "string" } },
+      "size": { "type": "string", "enum": ["small", "medium", "extra-large"] },
+      "author": {
+        "type": "object",
+        "description": "Who made it.",
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string" },
+          "avatar-url": { "type": "string", "format": "uri" },
+          "role": { "type": "string", "enum": ["admin", "member"] }
+        }
+      },
+      "items": {
+        "type": "array",
+        "items": {
+          "title": "Entry",
+          "type": "object",
+          "required": ["id"],
+          "properties": {
+            "id": { "type": "string" },
+            "label": { "type": "string" }
+          }
+        }
+      },
+      "metadata": { "type": "object", "additionalProperties": { "type": "string" } },
+      "class": { "type": "string", "description": "A reserved word in several languages." },
+      "bigNumber": { "type": "integer", "format": "int64" }
+    }
+  }
+}

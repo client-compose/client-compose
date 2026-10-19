@@ -1,0 +1,34 @@
+name: go
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "spec/**"
+      - "conformance/**"
+      - "composers/go/**"
+      - "examples/profile/composer-go/**"
+      - ".github/workflows/go.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Unit tests
+        working-directory: composers/go/core
+        run: go vet ./... && go test ./...
+      - name: Conformance
+        run: |
+          (cd composers/go/core && go build -o /tmp/conformance-server ./cmd/conformance-server)
+          conformance/run-against.sh 4100 /tmp/conformance-server -addr :4100
+      - name: Example
+        working-directory: examples/profile/composer-go
+        run: go vet ./... && go test ./...

@@ -1,0 +1,12 @@
+{
+  "name": "@client-compose/client",
+  "version": "0.0.0",
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "dependencies": {
+    "@client-compose/protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "@client-compose/conformance": "workspace:*"
+  }
+}

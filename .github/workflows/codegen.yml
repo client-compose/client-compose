@@ -1,0 +1,34 @@
+name: codegen
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "codegen/**"
+      - "examples/**"
+      - "shared/typescript/**"
+      - "composers/go/**"
+      - ".github/workflows/codegen.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: actions/setup-go@v5 # gofmt for Go output
+        with:
+          go-version: stable
+      - run: pnpm install --frozen-lockfile
+      - name: Generated files are up to date
+        run: node codegen/cli.ts --check codegen/test/fixtures/client-compose.codegen.json examples/profile/client-compose.codegen.json
+      - run: node --test "codegen/test/*.test.ts"
+      - name: Go golden output compiles and decodes
+        working-directory: codegen/test/golden/go
+        run: go vet ./... && go test ./...
+      # Swift and Kotlin golden output is exercised by swift.yml and kotlin.yml.

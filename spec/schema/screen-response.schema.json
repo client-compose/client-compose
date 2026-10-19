@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://client-compose.dev/schema/v0/screen-response.json",
+  "title": "Screen response",
+  "type": "object",
+  "required": ["protocol", "screen", "islands"],
+  "properties": {
+    "protocol": { "const": 0 },
+    "screen": { "type": "string" },
+    "islands": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/island" }
+    },
+    "cache": {
+      "type": "object",
+      "properties": { "maxAge": { "type": "integer", "minimum": 0 } }
+    }
+  },
+  "$defs": {
+    "island": {
+      "type": "object",
+      "required": ["key", "type", "version", "status"],
+      "properties": {
+        "key": { "type": "string" },
+        "type": { "type": "string" },
+        "version": { "type": "integer", "minimum": 1 },
+        "status": { "enum": ["ok", "error"] }
+      },
+      "oneOf": [
+        {
+          "properties": { "status": { "const": "ok" }, "props": { "type": "object" } },
+          "required": ["props"]
+        },
+        {
+          "properties": {
+            "status": { "const": "error" },
+            "error": {
+              "type": "object",
+              "required": ["code"],
+              "properties": {
+                "code": { "type": "string" },
+                "message": { "type": "string" },
+                "retryable": { "type": "boolean" }
+              }
+            }
+          },
+          "required": ["error"]
+        }
+      ]
+    }
+  }
+}

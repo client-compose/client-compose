@@ -1,0 +1,8 @@
+{
+  "manifests": "islands",
+  "targets": {
+    "go": { "out": "composer-go/islands_gen.go", "package": "main" },
+    "swift": { "out": "ios/Islands.generated.swift" },
+    "kotlin": { "out": "android/Islands.generated.kt", "package": "com.example.profile" }
+  }
+}

@@ -1,0 +1,15 @@
+# Every implementation has a named owner. Community implementations list their
+# maintainers here; see CONTRIBUTING.md for tiers and the unmaintained policy.
+# Replace @OWNER with real GitHub handles/teams.
+
+*                          @OWNER
+/spec/                     @OWNER
+/conformance/              @OWNER
+
+/shared/typescript/        @OWNER
+/composers/typescript/     @OWNER
+/clients/typescript/       @OWNER
+/composers/go/             @OWNER
+/clients/swift/            @OWNER
+/Package.swift             @OWNER
+/clients/kotlin/           @OWNER

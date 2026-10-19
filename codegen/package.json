@@ -1,0 +1,16 @@
+{
+  "name": "@client-compose/codegen",
+  "version": "0.0.0",
+  "type": "module",
+  "bin": {
+    "client-compose-codegen": "./cli.ts"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "devDependencies": {
+    "@client-compose/client": "workspace:*",
+    "@client-compose/composer": "workspace:*",
+    "@client-compose/protocol": "workspace:*"
+  }
+}

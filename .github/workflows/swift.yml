@@ -1,0 +1,27 @@
+name: swift
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "spec/**"
+      - "conformance/client/**"
+      - "clients/swift/**"
+      - "Package.swift"
+      - "codegen/test/**"
+      - ".github/workflows/swift.yml"
+
+jobs:
+  # macOS builds the SwiftUI target too; Linux only checks the core.
+  test-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift test
+  test-linux:
+    runs-on: ubuntu-latest
+    container: swift:6.0
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift test

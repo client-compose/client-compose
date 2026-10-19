@@ -1,0 +1,6 @@
+packages:
+  - "shared/typescript/*"
+  - "composers/typescript/*"
+  - "clients/typescript/*"
+  - "conformance/runner"
+  - "codegen"

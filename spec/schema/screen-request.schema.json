@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://client-compose.dev/schema/v0/screen-request.json",
+  "title": "Screen request",
+  "type": "object",
+  "required": ["protocol", "screen", "client", "islands"],
+  "properties": {
+    "protocol": { "const": 0 },
+    "screen": { "type": "string", "minLength": 1 },
+    "params": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "client": {
+      "type": "object",
+      "required": ["platform", "appVersion"],
+      "properties": {
+        "platform": { "type": "string" },
+        "appVersion": { "type": "string" },
+        "locale": { "type": "string" }
+      },
+      "additionalProperties": { "type": ["string", "number", "boolean"] }
+    },
+    "islands": {
+      "description": "Capabilities: island type -> supported versions.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": { "type": "integer", "minimum": 1 },
+        "minItems": 1,
+        "uniqueItems": true
+      }
+    }
+  }
+}

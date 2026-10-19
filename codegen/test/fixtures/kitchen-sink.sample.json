@@ -1,0 +1,15 @@
+{
+  "title": "Hello",
+  "count": 3,
+  "ratio": 0.5,
+  "enabled": true,
+  "link": "https://example.com/",
+  "tags": ["a", "b"],
+  "size": "extra-large",
+  "author": { "name": "Ada", "avatar-url": "https://example.com/ada.png", "role": "admin" },
+  "items": [{ "id": "1" }, { "id": "2", "label": "Two" }],
+  "metadata": { "k": "v" },
+  "class": "x",
+  "bigNumber": 5000000000,
+  "addedInAFutureMinorChange": true
+}

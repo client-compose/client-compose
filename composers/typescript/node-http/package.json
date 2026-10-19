@@ -1,0 +1,15 @@
+{
+  "name": "@client-compose/node-http",
+  "version": "0.0.0",
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "conformance-server": "node conformance-server.ts"
+  },
+  "dependencies": {
+    "@client-compose/composer": "workspace:*"
+  },
+  "devDependencies": {
+    "@client-compose/conformance": "workspace:*"
+  }
+}

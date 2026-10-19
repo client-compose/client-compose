@@ -1,0 +1,9 @@
+{
+  "name": "@client-compose/composer",
+  "version": "0.0.0",
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "dependencies": {
+    "@client-compose/protocol": "workspace:*"
+  }
+}

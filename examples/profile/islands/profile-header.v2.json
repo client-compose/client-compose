@@ -1,0 +1,15 @@
+{
+  "type": "profile-header",
+  "version": 2,
+  "description": "User avatar, display name and optional badge.",
+  "props": {
+    "type": "object",
+    "required": ["userId", "displayName", "avatarUrl"],
+    "properties": {
+      "userId": { "type": "string" },
+      "displayName": { "type": "string" },
+      "avatarUrl": { "type": "string", "format": "uri" },
+      "badge": { "type": "string" }
+    }
+  }
+}

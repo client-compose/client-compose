@@ -1,0 +1,35 @@
+name: typescript
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "spec/**"
+      - "conformance/**"
+      - "shared/typescript/**"
+      - "composers/typescript/**"
+      - "clients/typescript/**"
+      - "package.json"
+      - "pnpm-*.yaml"
+      - "tsconfig.json"
+      - "codegen/**"
+      - ".github/workflows/typescript.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: actions/setup-go@v5 # gofmt, for the codegen golden check
+        with:
+          go-version: stable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      # Includes client fixtures and composer conformance over HTTP.
+      - run: pnpm test

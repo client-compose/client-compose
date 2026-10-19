@@ -1,0 +1,6 @@
+{
+  "type": "divider",
+  "version": 1,
+  "description": "An island with no props.",
+  "props": { "type": "object" }
+}
