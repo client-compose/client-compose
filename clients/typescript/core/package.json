@@ -1,12 +1,53 @@
 {
   "name": "@client-compose/client",
   "version": "0.0.0",
+  "description": "Framework-agnostic Client Compose client: island registry, screen requests and render planning.",
+  "keywords": [
+    "client-compose",
+    "server-driven-ui",
+    "backend-for-frontend",
+    "islands",
+    "client"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/client-compose/client-compose.git",
+    "directory": "clients/typescript/core"
+  },
+  "homepage": "https://github.com/client-compose/client-compose/tree/main/clients/typescript/core#readme",
+  "bugs": {
+    "url": "https://github.com/client-compose/client-compose/issues"
+  },
   "type": "module",
-  "exports": { ".": "./src/index.ts" },
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.tsbuildinfo",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
   "dependencies": {
     "@client-compose/protocol": "workspace:*"
   },
   "devDependencies": {
     "@client-compose/conformance": "workspace:*"
+  },
+  "publishConfig": {
+    "access": "public",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "./package.json": "./package.json"
+    }
   }
 }

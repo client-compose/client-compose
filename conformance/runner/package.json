@@ -1,7 +1,57 @@
 {
   "name": "@client-compose/conformance",
   "version": "0.0.0",
+  "description": "Conformance suites and runner for Client Compose composer and client implementations.",
+  "keywords": [
+    "client-compose",
+    "server-driven-ui",
+    "backend-for-frontend",
+    "islands",
+    "conformance",
+    "testing"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/client-compose/client-compose.git",
+    "directory": "conformance/runner"
+  },
+  "homepage": "https://github.com/client-compose/client-compose/tree/main/conformance/runner#readme",
+  "bugs": {
+    "url": "https://github.com/client-compose/client-compose/issues"
+  },
   "type": "module",
-  "bin": { "client-compose-conformance": "./cli.ts" },
-  "exports": { ".": "./src/index.ts" }
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "client-compose-conformance": "./cli.ts"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.tsbuildinfo",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "./package.json": "./package.json"
+    },
+    "bin": {
+      "client-compose-conformance": "./dist/cli.js"
+    }
+  }
 }

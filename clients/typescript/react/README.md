@@ -1,6 +1,13 @@
-# React binding
+# @client-compose/react
+
+React and React Native bindings for [Client Compose](https://github.com/client-compose/client-compose):
+a protocol for server-composed screens made of client-owned islands.
 
 Tier: **core** · Protocol: **v0** · React 18+ · Works with **React DOM and React Native**
+
+```sh
+npm install @client-compose/react
+```
 
 `@client-compose/react` uses only React itself: no DOM APIs and no wrapper elements. The same
 package and the same registry pattern work on the web, on iOS and Android via React Native, and
@@ -8,7 +15,7 @@ with any other React renderer.
 
 ## Register island components
 
-Island props types come from [codegen](../../../codegen/README.md). `registerComponent` renders the
+Island props types come from [`@client-compose/codegen`](https://www.npmjs.com/package/@client-compose/codegen). `registerComponent` renders the
 component as an element, so island components can use hooks.
 
 ```tsx
@@ -91,11 +98,5 @@ response, a failed reload keeps the current islands (`status: "ready"` with `err
 
 ## Examples
 
-- [`examples/profile/web`](../../../examples/profile/web): Vite + React DOM
-- [`examples/profile/react-native`](../../../examples/profile/react-native): Expo + React Native
-
-## Tests
-
-```sh
-pnpm test   # from the repo root; renders with React DOM on happy-dom
-```
+- [`examples/profile/web`](https://github.com/client-compose/client-compose/tree/main/examples/profile/web): Vite + React DOM
+- [`examples/profile/react-native`](https://github.com/client-compose/client-compose/tree/main/examples/profile/react-native): Expo + React Native

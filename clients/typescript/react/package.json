@@ -1,14 +1,50 @@
 {
   "name": "@client-compose/react",
   "version": "0.0.0",
+  "description": "React and React Native bindings for Client Compose.",
+  "keywords": [
+    "client-compose",
+    "server-driven-ui",
+    "backend-for-frontend",
+    "islands",
+    "react",
+    "react-native"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/client-compose/client-compose.git",
+    "directory": "clients/typescript/react"
+  },
+  "homepage": "https://github.com/client-compose/client-compose/tree/main/clients/typescript/react#readme",
+  "bugs": {
+    "url": "https://github.com/client-compose/client-compose/issues"
+  },
   "type": "module",
-  "exports": { ".": "./src/index.ts" },
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.tsbuildinfo",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
   "dependencies": {
     "@client-compose/client": "workspace:*",
     "@client-compose/protocol": "workspace:*"
   },
   "peerDependencies": {
+    "@types/react": ">=18",
     "react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "@types/react": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@happy-dom/global-registrator": "^17.0.0",
@@ -16,5 +52,17 @@
     "@types/react-dom": "^19.1.0",
     "react": "19.1.0",
     "react-dom": "19.1.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "./package.json": "./package.json"
+    }
   }
 }

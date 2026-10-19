@@ -1,0 +1,16 @@
+{
+  "name": "client-compose-package-consumer",
+  "private": true,
+  "type": "module",
+  "description": "Installs the packed @client-compose/* tarballs and uses them like a consumer would. See scripts/check-packages.sh.",
+  "dependencies": {
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "typescript": "~5.9.0"
+  }
+}

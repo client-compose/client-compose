@@ -1,6 +1,48 @@
 {
   "name": "@client-compose/protocol",
   "version": "0.0.0",
+  "description": "Wire types for the Client Compose protocol: server-composed screens made of client-owned islands.",
+  "keywords": [
+    "client-compose",
+    "server-driven-ui",
+    "backend-for-frontend",
+    "islands",
+    "protocol",
+    "types"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/client-compose/client-compose.git",
+    "directory": "shared/typescript/protocol"
+  },
+  "homepage": "https://github.com/client-compose/client-compose/tree/main/shared/typescript/protocol#readme",
+  "bugs": {
+    "url": "https://github.com/client-compose/client-compose/issues"
+  },
   "type": "module",
-  "exports": { ".": "./src/index.ts" }
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.tsbuildinfo",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "./package.json": "./package.json"
+    }
+  }
 }

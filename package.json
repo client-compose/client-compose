@@ -4,13 +4,22 @@
   "type": "module",
   "packageManager": "pnpm@10.33.0",
   "scripts": {
+    "build": "tsc -b tsconfig.build.json && node scripts/copy-conformance-cases.ts",
+    "clean": "tsc -b tsconfig.build.json --clean && rm -rf conformance/runner/dist/cases",
     "typecheck": "tsc -p tsconfig.json",
     "test": "node --test \"{clients,composers}/typescript/*/test/*.test.ts\" \"codegen/test/*.test.ts\"",
     "conformance": "node conformance/runner/cli.ts composer",
-    "codegen": "node codegen/cli.ts"
+    "codegen": "node codegen/cli.ts",
+    "check-packages": "scripts/check-packages.sh",
+    "changeset": "changeset",
+    "release": "pnpm build && changeset publish"
   },
   "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
+    "@changesets/changelog-github": "^1.0.1",
+    "@changesets/cli": "^3.0.3",
     "@types/node": "^24.0.0",
+    "publint": "^0.3.25",
     "typescript": "^5.9.0"
   }
 }

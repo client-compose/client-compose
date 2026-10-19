@@ -1,14 +1,15 @@
-# Codegen
+# @client-compose/codegen
 
 Generates island props types for every stack from the island manifests, so the composer and
 every app agree on each island's props by construction rather than by hand.
 
 ```sh
-node codegen/cli.ts path/to/client-compose.codegen.json           # write
-node codegen/cli.ts path/to/client-compose.codegen.json --check   # CI: exit 1 if out of date
+npx @client-compose/codegen client-compose.codegen.json           # write
+npx @client-compose/codegen client-compose.codegen.json --check   # CI: exit 1 if out of date
 ```
 
-Requires Node 24+. Go output is formatted with `gofmt` if it's on your PATH.
+Requires Node 20+. Go output is formatted with `gofmt` if it's on your PATH. (In this repo, run
+`node codegen/cli.ts …` to use the source directly.)
 
 ## Config
 
@@ -26,8 +27,8 @@ Requires Node 24+. Go output is formatted with `gofmt` if it's on your PATH.
 }
 ```
 
-In a Go project, a `//go:generate node <path>/codegen/cli.ts <config>` line lets `go generate`
-run it (see `examples/profile/composer-go/main.go`).
+In a Go project, a `//go:generate npx @client-compose/codegen <config>` line lets `go generate` run it
+(see [`examples/profile/composer-go/main.go`](https://github.com/client-compose/client-compose/blob/main/examples/profile/composer-go/main.go)).
 
 ## What you get
 
@@ -81,6 +82,5 @@ add **optional** properties. Each of these needs a **new version** instead:
 
 ## Tests
 
-`codegen/test/fixtures/islands` covers every supported feature. Its generated output in
-`codegen/test/golden/` is compiled and decoded by tests in each language: `pnpm test` (TS and
-golden up-to-date check), `go test` in `golden/go`, and the Swift and Kotlin client test suites.
+[`codegen/test/fixtures/islands`](https://github.com/client-compose/client-compose/tree/main/codegen/test/fixtures/islands) covers every supported
+feature. Its generated output is compiled and decoded by tests in Go, Swift, Kotlin and TypeScript.

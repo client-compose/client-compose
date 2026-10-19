@@ -14,6 +14,8 @@ on:
       - "pnpm-*.yaml"
       - "tsconfig.json"
       - "codegen/**"
+      - "scripts/**"
+      - ".changeset/**"
       - ".github/workflows/typescript.yml"
 
 jobs:
@@ -33,3 +35,5 @@ jobs:
       - run: pnpm typecheck
       # Includes client fixtures and composer conformance over HTTP.
       - run: pnpm test
+      # Build, pack, lint and install the npm packages, then use them like a consumer would.
+      - run: scripts/check-packages.sh

@@ -1,0 +1,13 @@
+{
+  // Builds every publishable package to its dist/ folder: tsc -b tsconfig.build.json
+  "files": [],
+  "references": [
+    { "path": "shared/typescript/protocol/tsconfig.build.json" },
+    { "path": "clients/typescript/core/tsconfig.build.json" },
+    { "path": "clients/typescript/react/tsconfig.build.json" },
+    { "path": "composers/typescript/core/tsconfig.build.json" },
+    { "path": "composers/typescript/node-http/tsconfig.build.json" },
+    { "path": "codegen/tsconfig.build.json" },
+    { "path": "conformance/runner/tsconfig.build.json" }
+  ]
+}

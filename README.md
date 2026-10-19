@@ -61,14 +61,29 @@ adapter for an existing core is usually under 50 lines.
 
 ## Development
 
-Each implementation has its own README and test command. To run TypeScript plus the conformance
-runner:
+Each implementation has its own README and test command. For the TypeScript packages
+(Node 24+ in this repo; the published packages need Node 20+):
 
 ```sh
 pnpm install
 pnpm typecheck
 pnpm test
+pnpm check-packages   # build, pack, lint and install-test the npm packages
 ```
+
+Releases are managed with Changesets; see [RELEASING.md](RELEASING.md).
+
+## npm packages
+
+| Package | What |
+| --- | --- |
+| [`@client-compose/react`](clients/typescript/react) | React and React Native bindings |
+| [`@client-compose/client`](clients/typescript/core) | Framework-agnostic client |
+| [`@client-compose/composer`](composers/typescript/core) | Framework-agnostic composer |
+| [`@client-compose/node-http`](composers/typescript/node-http) | `node:http` adapter for the composer |
+| [`@client-compose/codegen`](codegen) | Props types for Go, Swift, Kotlin and TypeScript from manifests |
+| [`@client-compose/conformance`](conformance/runner) | Conformance suites and runner, for implementations in any language |
+| [`@client-compose/protocol`](shared/typescript/protocol) | Wire types |
 
 ## Roadmap
 
@@ -77,6 +92,6 @@ pnpm test
 - [ ] Codegen distributed without needing Node (e.g. a standalone binary)
 - [ ] Jetpack Compose binding (`ComposedScreen`) and Kotlin Multiplatform targets
 - [x] React / React Native binding ([clients/typescript/react](clients/typescript/react))
-- [ ] Build step for the TypeScript packages, so they can be published to npm (they ship as `.ts` today)
+- [x] TypeScript packages ready for npm (see [RELEASING.md](RELEASING.md))
 - [ ] More composer adapters: chi/gin/echo (Go), Express/Fastify/Hono/Lambda (TS)
 - [ ] v1 candidates in `spec/PROTOCOL.md` §7 (streaming, single-island refresh)

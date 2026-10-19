@@ -1,16 +1,65 @@
 {
   "name": "@client-compose/codegen",
   "version": "0.0.0",
+  "description": "Generate island props types for Go, Swift, Kotlin and TypeScript from Client Compose island manifests.",
+  "keywords": [
+    "client-compose",
+    "server-driven-ui",
+    "backend-for-frontend",
+    "islands",
+    "codegen",
+    "swift",
+    "kotlin",
+    "go",
+    "typescript"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/client-compose/client-compose.git",
+    "directory": "codegen"
+  },
+  "homepage": "https://github.com/client-compose/client-compose/tree/main/codegen#readme",
+  "bugs": {
+    "url": "https://github.com/client-compose/client-compose/issues"
+  },
   "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
   "bin": {
     "client-compose-codegen": "./cli.ts"
   },
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
   },
+  "files": [
+    "dist",
+    "!dist/**/*.tsbuildinfo",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
   "devDependencies": {
     "@client-compose/client": "workspace:*",
     "@client-compose/composer": "workspace:*",
     "@client-compose/protocol": "workspace:*"
+  },
+  "publishConfig": {
+    "access": "public",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "./package.json": "./package.json"
+    },
+    "bin": {
+      "client-compose-codegen": "./dist/cli.js"
+    }
   }
 }

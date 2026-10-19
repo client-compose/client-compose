@@ -63,6 +63,12 @@ re-implementing negotiation or error codes in an adapter, it belongs in the core
 Keep dependencies minimal. A core should depend on the language's standard library plus,
 at most, its usual JSON library.
 
+## Changing an npm package
+
+If your change touches a published TypeScript package (see [RELEASING.md](RELEASING.md)), run
+`pnpm changeset` and commit the generated file, so the change is versioned and lands in the
+changelog. Run `pnpm check-packages` if you changed a package's `package.json`, exports or build.
+
 ## Tiers
 
 | Tier          | Meaning                                                                       |

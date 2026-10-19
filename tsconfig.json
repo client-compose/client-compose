@@ -1,17 +1,12 @@
 {
+  // Type-checks everything (sources, tests, examples of use) without emitting. See tsconfig.build.json for builds.
+  "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "target": "ES2023",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "strict": true,
+    "lib": ["ES2023", "DOM"],
     "noEmit": true,
-    "allowImportingTsExtensions": true,
-    "erasableSyntaxOnly": true,
-    "verbatimModuleSyntax": true,
     "resolveJsonModule": true,
-    "skipLibCheck": true,
     "types": ["node"]
   },
   "include": ["shared/typescript", "composers/typescript", "clients/typescript", "conformance/runner", "codegen"],
-  "exclude": ["**/node_modules"]
+  "exclude": ["**/node_modules", "**/dist"]
 }

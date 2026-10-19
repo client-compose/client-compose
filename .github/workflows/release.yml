@@ -1,0 +1,42 @@
+name: release
+
+# On every push to main: if there are pending changesets, open or update a "Release packages" PR
+# that bumps versions and changelogs. When that PR is merged, publish the bumped packages to npm.
+on:
+  push:
+    branches: [main]
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+permissions:
+  contents: write # push the release commit and tags
+  pull-requests: write # open the release PR
+  id-token: write # npm provenance
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - uses: actions/setup-go@v5 # gofmt, for the codegen check
+        with:
+          go-version: stable
+      - run: pnpm install --frozen-lockfile
+      - run: scripts/check-packages.sh
+      - uses: changesets/action@v1
+        with:
+          version: pnpm changeset version
+          publish: pnpm release
+          title: Release packages
+          commit: Release packages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: true

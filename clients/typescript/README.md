@@ -1,27 +1,6 @@
-# TypeScript client
+# TypeScript clients
 
-Tier: **core** · Protocol: **v0** · Any JS runtime with `fetch`
+- [`core`](core/) (`@client-compose/client`): framework-agnostic client.
+- [`react`](react/) (`@client-compose/react`): React and React Native bindings.
 
-`core` (`@client-compose/client`): `IslandRegistry<R>`, `buildRequest`, `plan`, `fetchScreen`.
-`R` is whatever your UI layer renders (a React element, a DOM node...), so the same core serves
-web, React Native and server-side rendering.
-
-```ts
-// ProfileHeaderV2 is generated from the island manifest by codegen/.
-const registry = new IslandRegistry<ReactNode>()
-  .register(ProfileHeaderV2, (props) => <ProfileHeader {...props} />);
-
-const response = await fetchScreen(baseUrl, buildRequest(registry, "profile", { platform: "web", appVersion }, { userId }));
-const islands = plan(registry, response, { onSkipped: (e, reason) => console.warn(e.key, reason) });
-// islands.map((i) => <Fragment key={i.key}>{i.render()}</Fragment>)
-```
-
-Props aren't validated at runtime, so the `typedOnly` conformance cases don't apply.
-
-For React and React Native, use [`react`](react/) (`@client-compose/react`), which builds on this core.
-
-## Tests
-
-```sh
-pnpm test   # from the repo root; runs the shared client conformance fixtures
-```
+Run the tests from the repo root with `pnpm test`.

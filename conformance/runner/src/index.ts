@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 export interface ComposerCase {
   name: string;
@@ -34,11 +34,19 @@ export interface CaseResult {
   message?: string;
 }
 
-const load = <T>(path: string): T =>
-  (JSON.parse(readFileSync(new URL(path, import.meta.url), "utf8")) as { cases: T }).cases;
+/**
+ * The published package carries the cases in dist/cases/ (copied at build time); in this repo
+ * they're read from conformance/{composer,client}/cases.json.
+ */
+function load<T>(suite: "composer" | "client"): T {
+  const bundled = new URL(`./cases/${suite}.json`, import.meta.url);
+  const inRepo = new URL(`../../${suite}/cases.json`, import.meta.url);
+  const file = existsSync(bundled) ? bundled : inRepo;
+  return (JSON.parse(readFileSync(file, "utf8")) as { cases: T }).cases;
+}
 
-export const composerCases = (): ComposerCase[] => load("../../composer/cases.json");
-export const clientCases = (): ClientCase[] => load("../../client/cases.json");
+export const composerCases = (): ComposerCase[] => load("composer");
+export const clientCases = (): ClientCase[] => load("client");
 
 export async function runComposerCase(baseUrl: string, c: ComposerCase): Promise<CaseResult> {
   const request = {

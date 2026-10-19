@@ -7,7 +7,14 @@ Language-neutral test suites every implementation must pass (spec §8).
 | `composer/cases.json` | Composers     | Over HTTP against a test-only conformance server: `run-against.sh <port> <command…>` |
 | `client/cases.json`   | Clients       | Loaded by each client's own unit tests                              |
 
-The composer runner needs Node 24+, and nothing from the implementation's language:
+The composer runner needs Node, and nothing from the implementation's language. Outside this repo,
+use the published runner (Node 20+):
+
+```sh
+npx @client-compose/conformance composer http://localhost:4100
+```
+
+In this repo (Node 24+, runs from source):
 
 ```sh
 conformance/run-against.sh 4100 go run ./composers/go/core/cmd/conformance-server -addr :4100
