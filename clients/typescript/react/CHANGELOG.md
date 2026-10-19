@@ -1,5 +1,13 @@
 # @client-compose/react
 
+## 0.3.0
+
+### Minor Changes
+
+- [`dae1216`](https://github.com/client-compose/client-compose/commit/dae12167859425424f1475a4c2f1f83e404f8169) Thanks [@LewisYearsley](https://github.com/LewisYearsley)! - The Server Component `ComposedScreen` accepts a `response` (or promise of one) already loaded with
+  `loadScreen`, and renders it without fetching. Lets a page share one request between
+  `generateMetadata` and the screen (with React's `cache()`).
+
 ## 0.2.1
 
 ### Patch Changes
