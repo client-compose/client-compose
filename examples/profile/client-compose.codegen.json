@@ -18,6 +18,10 @@
       },
       {
         "out": "react-native/src/islands.generated.ts"
+      },
+      {
+        "out": "next/src/islands.generated.ts",
+        "protocolImport": "@client-compose/react"
       }
     ]
   }

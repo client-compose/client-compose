@@ -56,7 +56,8 @@ const html = renderToString(
     createElement(Island, { island: hello }),
   ),
 );
-assert.equal(html, "<h1>Hello Ada</h1>");
+// Each island is isolated in its own Suspense boundary (<!--$-->…<!--/$-->).
+assert.equal(html, "<!--$--><h1>Hello Ada</h1><!--/$-->");
 console.log("react render:", html);
 server.close();
 

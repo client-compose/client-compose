@@ -16,12 +16,17 @@ cd "$root"
 step "build"
 pnpm build
 
+# Publishable packages only: the workspace also has private apps (e.g. examples/profile/next).
+packages=$(pnpm -r exec node -e 'const p = require("./package.json"); if (!p.private) console.log(process.cwd())')
+
 step "pack"
-pnpm -r pack --pack-destination "$work/tarballs" >/dev/null
+for dir in $packages; do
+  (cd "$dir" && pnpm pack --pack-destination "$work/tarballs" >/dev/null)
+done
 ls "$work/tarballs"
 
 step "lint packages (publint, are-the-types-wrong)"
-for dir in $(pnpm -r exec pwd); do
+for dir in $packages; do
   (cd "$dir" && pnpm exec publint --pack pnpm --strict)
 done
 for tgz in "$work"/tarballs/*.tgz; do

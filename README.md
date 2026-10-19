@@ -27,7 +27,7 @@ You can move, add, remove, A/B test, or re-source islands without shipping an ap
 update, as long as the app already has a renderer for that island.
 
 **Start with [`examples/profile`](examples/profile)**: one Go composer serving native iOS (SwiftUI),
-native Android (Compose), React web and React Native apps.
+native Android (Compose), React web, Next.js (Server Components) and React Native apps.
 
 ## Implementations
 
@@ -41,7 +41,7 @@ Every implementation passes the shared [conformance suites](conformance/).
 | Client   | Swift (+ SwiftUI)         | `clients/swift`            | Core | v0       |
 | Client   | Kotlin (JVM / Android)    | `clients/kotlin`           | Core | v0       |
 | Client   | TypeScript                | `clients/typescript/core`  | Core | v0       |
-| Client   | React / React Native      | `clients/typescript/react` | Core | v0       |
+| Client   | React, React Native, SSR and Server Components | `clients/typescript/react` | Core | v0 |
 
 Using a stack that isn't listed? See [CONTRIBUTING.md](CONTRIBUTING.md). Adding a framework
 adapter for an existing core is usually under 50 lines.

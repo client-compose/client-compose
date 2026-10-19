@@ -20,6 +20,8 @@ android/                      Jetpack Compose UI + registry + OkHttp transport (
   Islands.generated.kt        generated
 web/                          Vite + React DOM app (@client-compose/react)
   src/islands.generated.ts    generated
+next/                         Next.js App Router: React Server Components and server rendering
+  src/islands.generated.ts    generated
 react-native/                 Expo + React Native app (@client-compose/react)
   src/islands.generated.ts    generated
 ```
@@ -59,6 +61,10 @@ With the composer running:
 ```sh
 # React web: http://localhost:5173 (Vite proxies /screens to the composer)
 cd web && npm install && npm run dev
+
+# Next.js: http://localhost:3000/rsc/u_2 (Server Components) and /ssr/u_2 (server-rendered,
+# hydrated without refetching). Part of the pnpm workspace: run `pnpm install` at the repo root.
+cd next && pnpm dev
 
 # React Native (Expo SDK 57): iOS Simulator, Android emulator, or Expo Go on a device
 cd react-native && npm install && npm run ios   # or: npm run android

@@ -1,0 +1,48 @@
+// React Server Components, end to end with React's own RSC renderer: the built package renders a
+// screen on the server (react-server conditions, "use client" modules as client references), and the
+// payload is server-rendered to HTML the way a framework does on first load.
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { execFileSync, spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
+
+const here = (path: string) => fileURLToPath(new URL(path, import.meta.url));
+
+function run(command: string, args: string[], input?: NodeJS.ReadableStream): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { stdio: [input ? "pipe" : "ignore", "pipe", "pipe"] });
+    if (input) input.pipe(child.stdin!);
+    let out = "";
+    let err = "";
+    child.stdout!.on("data", (d) => (out += d));
+    child.stderr!.on("data", (d) => (err += d));
+    child.on("close", (code) => (code === 0 ? resolve(out) : reject(new Error(`${args.join(" ")} exited ${code}:\n${err}`))));
+  });
+}
+
+test("renders a screen in React Server Components", async () => {
+  // Test the built output, i.e. what's published.
+  execFileSync("pnpm", ["exec", "tsc", "-b", here("../tsconfig.build.json")], { stdio: "inherit" });
+
+  const server = spawn(
+    process.execPath,
+    ["--conditions", "react-server", "--import", here("rsc/register-loader.mjs"), here("rsc/render-server.mjs")],
+    { stdio: ["ignore", "pipe", "pipe"] },
+  );
+  let serverErr = "";
+  server.stderr.on("data", (d) => (serverErr += d));
+  const serverExit = new Promise<number | null>((resolve) => server.on("close", resolve));
+
+  const output = await run(process.execPath, [here("rsc/render-client.mjs")], server.stdout);
+  assert.equal(await serverExit, 0, `RSC render failed:\n${serverErr}`);
+  const { html, errors } = JSON.parse(output) as { html: string; errors: string[] };
+
+  // Server Component islands (including async ones) render to HTML on the server.
+  assert.match(html, /<h1>Ada<\/h1>/);
+  // Client Component islands are server-rendered too, ready to hydrate.
+  assert.match(html, /<button>count 1<\/button>/);
+  // A crashing island renders as nothing; the rest of the screen is unaffected, in order.
+  assert.doesNotMatch(html, /loading/);
+  assert.ok(html.indexOf("<h1>Ada</h1>") < html.indexOf("<button>"), "islands keep their order");
+  assert.deepEqual(errors, ["broken island"]);
+});

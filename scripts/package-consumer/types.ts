@@ -5,8 +5,17 @@ import { composeHttp, createComposer, defineIsland, defineScreen, type ComposeRe
 import { composerCases, type ClientCase } from "@client-compose/conformance";
 import { generate, type CodegenConfig } from "@client-compose/codegen";
 import { createRequestListener } from "@client-compose/node-http";
-import type { IslandDescriptor, ScreenRequest, ScreenResponse } from "@client-compose/protocol";
-import { ComposedScreen, ReactIslandRegistry, useScreen, type ClientComposeConfig, type ScreenState } from "@client-compose/react";
+import type { IslandDescriptor, ScreenRequest } from "@client-compose/protocol";
+import {
+  ComposedScreen,
+  loadScreen,
+  ReactIslandRegistry,
+  useScreen,
+  type ClientComposeConfig,
+  type ScreenResponse,
+  type ScreenState,
+} from "@client-compose/react";
+import { ComposedScreen as ServerComposedScreen } from "@client-compose/react/server";
 
 interface GreetingV1 {
   name: string;
@@ -33,3 +42,8 @@ export const cases: number = composerCases().length;
 export const firstClientCase = (c: ClientCase): string => c.name;
 export const codegenConfig: CodegenConfig = { manifests: "islands", targets: { typescript: [{ out: "a.ts" }] } };
 export const files = () => generate("client-compose.codegen.json").map((f) => f.path);
+
+// Server rendering and Server Components.
+export const seeded = (initialResponse: ScreenResponse) => ComposedScreen({ screen: "home", initialResponse });
+export const loaded: Promise<ScreenResponse> = loadScreen(config, "home", { id: "1" });
+export const rsc = ServerComposedScreen({ config, screen: "home", fallback: "loading", renderError: () => "oops" });

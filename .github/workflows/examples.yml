@@ -8,6 +8,7 @@ on:
     paths:
       - "examples/profile/web/**"
       - "examples/profile/react-native/**"
+      - "examples/profile/next/**"
       - "clients/typescript/**"
       - "shared/typescript/**"
       - ".github/workflows/examples.yml"
@@ -25,6 +26,21 @@ jobs:
           node-version: 24
       - run: npm ci
       - run: npm run build # typecheck + vite build
+
+  next:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build (type-check, compile Server Components and client bundles)
+        run: pnpm --filter profile-next-example build
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
 
   react-native:
     runs-on: ubuntu-latest

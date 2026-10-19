@@ -15,6 +15,11 @@ const aliases = {
 config.watchFolders = [path.join(repo, "clients/typescript"), path.join(repo, "shared/typescript")];
 config.resolver.resolveRequest = (context, moduleName, platform) => {
   if (aliases[moduleName]) return { type: "sourceFile", filePath: aliases[moduleName] };
+  // The repo sources import siblings as "./file.ts" (the published packages use ".js"); Metro wants
+  // them without the extension.
+  if (moduleName.startsWith(".") && moduleName.endsWith(".ts")) {
+    return context.resolveRequest(context, moduleName.slice(0, -3), platform);
+  }
   // Bare imports from the repo sources (e.g. `react`) resolve from this app, so there's one copy of React.
   const fromOutside = !context.originModulePath.startsWith(__dirname + path.sep);
   const origin = fromOutside ? { ...context, originModulePath: path.join(__dirname, "index.ts") } : context;
