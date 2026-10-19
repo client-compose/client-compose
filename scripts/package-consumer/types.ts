@@ -1,7 +1,16 @@
 // Type-checks the published declaration files under both nodenext and bundler resolution.
 import type { ReactNode } from "react";
 import { buildRequest, IslandRegistry, plan, ScreenFetchError, type PlannedIsland } from "@client-compose/client";
-import { composeHttp, createComposer, defineIsland, defineScreen, type ComposeResult } from "@client-compose/composer";
+import {
+  composeHttp,
+  createComposer,
+  defineBatchLoader,
+  defineIsland,
+  defineScreen,
+  LoadNotFoundError,
+  type ComposeResult,
+  type LayoutContext,
+} from "@client-compose/composer";
 import { composerCases, type ClientCase } from "@client-compose/conformance";
 import { generate, type CodegenConfig } from "@client-compose/codegen";
 import { createRequestListener } from "@client-compose/node-http";
@@ -47,3 +56,11 @@ export const files = () => generate("client-compose.codegen.json").map((f) => f.
 export const seeded = (initialResponse: ScreenResponse) => ComposedScreen({ screen: "home", initialResponse });
 export const loaded: Promise<ScreenResponse> = loadScreen(config, "home", { id: "1" });
 export const rsc = ServerComposedScreen({ config, screen: "home", fallback: "loading", renderError: () => "oops" });
+
+// Request-scoped loading.
+const nameById = defineBatchLoader(async (ids: string[]) => new Map(ids.map((id) => [id, `user ${id}`])), { maxBatchSize: 50 });
+const greeting = (rc: LayoutContext<Ctx>, id: string) => rc.load(`greet:${id}`, () => rc.ctx.greet(id));
+export const loadingIsland = defineIsland<GreetingV1, Ctx>(GreetingV1, async (rc) => ({
+  name: `${await greeting(rc, rc.params.id)} / ${await nameById.load(rc, rc.params.id)}`,
+}));
+export const notFound = (e: unknown): boolean => e instanceof LoadNotFoundError;

@@ -129,6 +129,11 @@ func (c *Composer) Compose(ctx context.Context, req ScreenRequest) Result {
 		return fail(http.StatusNotFound, "unknown_screen", req.Screen)
 	}
 
+	// Shared loads (Load, BatchLoader) live as long as this request; whatever is still running when
+	// the response is ready is cancelled.
+	ctx, endRequest := withRequestScope(ctx)
+	defer endRequest()
+
 	r := Request{Params: req.Params, Client: *req.Client}
 	if r.Params == nil {
 		r.Params = map[string]string{}

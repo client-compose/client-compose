@@ -8,6 +8,8 @@ package main
 type FollowButtonV1 struct {
 	UserID      string `json:"userId"`
 	IsFollowing bool   `json:"isFollowing"`
+	// Who the button follows, for its label. Added in v1 as optional, so older apps ignore it.
+	DisplayName *string `json:"displayName,omitempty"`
 }
 
 func (FollowButtonV1) IslandType() string { return "follow-button" }

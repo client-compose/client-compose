@@ -234,6 +234,11 @@ The mock resolver for version `n`:
 `params.placements` is not valid JSON, the screen's layout fails. The runner then
 sends each case in `conformance/composer/cases.json` and checks status codes and bodies.
 
+If a mock has `load` (a key), its resolver first waits `startDelayMs`, then calls the composer's
+request-scoped load (§9) with that key and work that counts how often it runs, takes `loadDelayMs`,
+and fails if its cancellation signal fires. It then resolves to `{ "v": n, "calls": <runs of that
+key's work so far in this request> }`.
+
 The `__conformance` screen MUST NOT be registered in production builds.
 
 Error codes the suite checks, for composers to use consistently:
@@ -256,3 +261,24 @@ Error codes the suite checks, for composers to use consistently:
 render output. Each client implementation runs them in its own unit tests, using a test
 renderer that outputs `"{type}@{version}:{props.v}"` and, when a case sets
 `renderErrors`, an error fallback that outputs `"error:{key}:{error.code}"`.
+
+---
+
+## 9. Request-scoped loading (composer implementations)
+
+Several islands on one screen often need the same data (the header and the follow button both
+need the profile's user). Composer cores MUST provide a request-scoped load:
+
+- `load(key, work)` runs `work` at most once per key per screen request, and every caller in that
+  request (other islands and the layout) receives the same result or error.
+- `work` runs under the **request's** lifetime, not the calling island's: an island timing out MUST
+  NOT cancel work that other islands are waiting on. Each caller still stops waiting at its own
+  timeout.
+- Work still running when the response is ready is cancelled.
+- Results are never shared between requests.
+
+Cores SHOULD also offer a batch loader that combines keys requested by different islands in the same
+request into one call. Caching across requests is out of scope here: it belongs in the services a
+composer calls, where cache keys can account for who is asking.
+
+The conformance suite checks the MUST rules (§8.1).

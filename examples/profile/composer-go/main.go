@@ -65,14 +65,20 @@ func viewer(ctx context.Context) string {
 // --- Islands and screens ---------------------------------------------------------------
 
 func profileScreen(s Services) cc.Screen {
+	// The header and the follow button both need the profile's user. cc.Load shares one GetUser call
+	// between them per request, and a timeout in one island never cancels it for the other.
+	user := func(ctx context.Context, id string) (User, error) {
+		return cc.Load(ctx, "user:"+id, func(ctx context.Context) (User, error) { return s.GetUser(ctx, id) })
+	}
+
 	// cc.Define takes the island type and version from the generated props type.
 	headerV1 := cc.Define(func(ctx context.Context, r cc.Request) (ProfileHeaderV1, error) {
-		u, err := s.GetUser(ctx, r.Params["userId"])
+		u, err := user(ctx, r.Params["userId"])
 		return ProfileHeaderV1{DisplayName: u.Name, AvatarURL: u.AvatarURL}, err
 	})
 
 	headerV2 := cc.Define(func(ctx context.Context, r cc.Request) (ProfileHeaderV2, error) {
-		u, err := s.GetUser(ctx, r.Params["userId"])
+		u, err := user(ctx, r.Params["userId"])
 		props := ProfileHeaderV2{UserID: u.ID, DisplayName: u.Name, AvatarURL: u.AvatarURL}
 		if u.Pro {
 			badge := "PRO"
@@ -82,8 +88,13 @@ func profileScreen(s Services) cc.Screen {
 	})
 
 	followButton := cc.Define(func(ctx context.Context, r cc.Request) (FollowButtonV1, error) {
-		following, err := s.IsFollowing(ctx, viewer(ctx), r.Params["userId"])
-		return FollowButtonV1{UserID: r.Params["userId"], IsFollowing: following}, err
+		id := r.Params["userId"]
+		following, err := s.IsFollowing(ctx, viewer(ctx), id)
+		if err != nil {
+			return FollowButtonV1{}, err
+		}
+		u, err := user(ctx, id)
+		return FollowButtonV1{UserID: id, IsFollowing: following, DisplayName: &u.Name}, err
 	})
 
 	postGrid := cc.Define(func(ctx context.Context, r cc.Request) (PostGridV1, error) {

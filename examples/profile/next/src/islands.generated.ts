@@ -7,6 +7,8 @@ import type { IslandDescriptor } from "@client-compose/react";
 export interface FollowButtonV1 {
   userId: string;
   isFollowing: boolean;
+  /** Who the button follows, for its label. Added in v1 as optional, so older apps ignore it. */
+  displayName?: string;
 }
 export const FollowButtonV1: IslandDescriptor<FollowButtonV1> = { type: "follow-button", version: 1 };
 

@@ -1,55 +1,170 @@
 {
-  "$comment": "Composer conformance cases (spec §8.1). The runner POSTs to {base}/screens/{path ?? request.screen} with a request built from `placements` and `capabilities`, merged with any `request` overrides; `rawBody` replaces the body entirely. Expected bodies are subset matches, except arrays, which must match in length and order.",
+  "$comment": "Composer conformance cases (spec \u00a78.1). The runner POSTs to {base}/screens/{path ?? request.screen} with a request built from `placements` and `capabilities`, merged with any `request` overrides; `rawBody` replaces the body entirely. Expected bodies are subset matches, except arrays, which must match in length and order.",
   "cases": [
     {
       "name": "picks highest mutually supported version",
-      "placements": [{ "key": "header", "type": "profile-header", "versions": [1, 2, 3], "outcome": "ok" }],
-      "capabilities": { "profile-header": [1, 2] },
+      "placements": [
+        {
+          "key": "header",
+          "type": "profile-header",
+          "versions": [
+            1,
+            2,
+            3
+          ],
+          "outcome": "ok"
+        }
+      ],
+      "capabilities": {
+        "profile-header": [
+          1,
+          2
+        ]
+      },
       "expect": {
         "status": 200,
         "body": {
           "protocol": 0,
           "screen": "__conformance",
-          "islands": [{ "key": "header", "type": "profile-header", "version": 2, "status": "ok", "props": { "v": 2 } }]
+          "islands": [
+            {
+              "key": "header",
+              "type": "profile-header",
+              "version": 2,
+              "status": "ok",
+              "props": {
+                "v": 2
+              }
+            }
+          ]
         }
       }
     },
     {
       "name": "omits islands the client cannot render",
       "placements": [
-        { "key": "header", "type": "profile-header", "versions": [1], "outcome": "ok" },
-        { "key": "promo", "type": "promo-banner", "versions": [2], "outcome": "ok" },
-        { "key": "ad", "type": "ad-slot", "versions": [1], "outcome": "ok" }
+        {
+          "key": "header",
+          "type": "profile-header",
+          "versions": [
+            1
+          ],
+          "outcome": "ok"
+        },
+        {
+          "key": "promo",
+          "type": "promo-banner",
+          "versions": [
+            2
+          ],
+          "outcome": "ok"
+        },
+        {
+          "key": "ad",
+          "type": "ad-slot",
+          "versions": [
+            1
+          ],
+          "outcome": "ok"
+        }
       ],
-      "capabilities": { "profile-header": [1], "promo-banner": [1] },
+      "capabilities": {
+        "profile-header": [
+          1
+        ],
+        "promo-banner": [
+          1
+        ]
+      },
       "expect": {
         "status": 200,
         "body": {
-          "islands": [{ "key": "header", "type": "profile-header", "version": 1, "status": "ok", "props": { "v": 1 } }]
+          "islands": [
+            {
+              "key": "header",
+              "type": "profile-header",
+              "version": 1,
+              "status": "ok",
+              "props": {
+                "v": 1
+              }
+            }
+          ]
         }
       }
     },
     {
       "name": "isolates a failing island",
       "placements": [
-        { "key": "header", "type": "profile-header", "versions": [1], "outcome": "ok" },
-        { "key": "posts", "type": "post-grid", "versions": [1], "outcome": "error" }
+        {
+          "key": "header",
+          "type": "profile-header",
+          "versions": [
+            1
+          ],
+          "outcome": "ok"
+        },
+        {
+          "key": "posts",
+          "type": "post-grid",
+          "versions": [
+            1
+          ],
+          "outcome": "error"
+        }
       ],
-      "capabilities": { "profile-header": [1], "post-grid": [1] },
+      "capabilities": {
+        "profile-header": [
+          1
+        ],
+        "post-grid": [
+          1
+        ]
+      },
       "expect": {
         "status": 200,
         "body": {
           "islands": [
-            { "key": "header", "type": "profile-header", "version": 1, "status": "ok", "props": { "v": 1 } },
-            { "key": "posts", "type": "post-grid", "version": 1, "status": "error", "error": { "code": "resolve_failed" } }
+            {
+              "key": "header",
+              "type": "profile-header",
+              "version": 1,
+              "status": "ok",
+              "props": {
+                "v": 1
+              }
+            },
+            {
+              "key": "posts",
+              "type": "post-grid",
+              "version": 1,
+              "status": "error",
+              "error": {
+                "code": "resolve_failed"
+              }
+            }
           ]
         }
       }
     },
     {
       "name": "times out a slow island as retryable",
-      "placements": [{ "key": "posts", "type": "post-grid", "versions": [1], "outcome": "timeout", "timeoutMs": 50 }],
-      "capabilities": { "post-grid": [1] },
+      "placements": [
+        {
+          "key": "posts",
+          "type": "post-grid",
+          "versions": [
+            1
+          ],
+          "outcome": "timeout",
+          "timeoutMs": 50
+        }
+      ],
+      "capabilities": {
+        "post-grid": [
+          1
+        ]
+      },
       "expect": {
         "status": 200,
         "body": {
@@ -59,7 +174,10 @@
               "type": "post-grid",
               "version": 1,
               "status": "error",
-              "error": { "code": "timeout", "retryable": true }
+              "error": {
+                "code": "timeout",
+                "retryable": true
+              }
             }
           ]
         }
@@ -67,80 +185,383 @@
     },
     {
       "name": "fails the screen when a required island fails",
-      "placements": [{ "key": "header", "type": "profile-header", "versions": [1], "outcome": "error", "required": true }],
-      "capabilities": { "profile-header": [1] },
-      "expect": { "status": 502, "body": { "protocol": 0, "error": { "code": "required_island_failed" } } }
+      "placements": [
+        {
+          "key": "header",
+          "type": "profile-header",
+          "versions": [
+            1
+          ],
+          "outcome": "error",
+          "required": true
+        }
+      ],
+      "capabilities": {
+        "profile-header": [
+          1
+        ]
+      },
+      "expect": {
+        "status": 502,
+        "body": {
+          "protocol": 0,
+          "error": {
+            "code": "required_island_failed"
+          }
+        }
+      }
     },
     {
       "name": "fails the screen when a required island is unsupported",
-      "placements": [{ "key": "header", "type": "profile-header", "versions": [3], "outcome": "ok", "required": true }],
-      "capabilities": { "profile-header": [1] },
-      "expect": { "status": 502, "body": { "error": { "code": "required_island_unsupported" } } }
+      "placements": [
+        {
+          "key": "header",
+          "type": "profile-header",
+          "versions": [
+            3
+          ],
+          "outcome": "ok",
+          "required": true
+        }
+      ],
+      "capabilities": {
+        "profile-header": [
+          1
+        ]
+      },
+      "expect": {
+        "status": 502,
+        "body": {
+          "error": {
+            "code": "required_island_unsupported"
+          }
+        }
+      }
     },
     {
       "name": "preserves placement order",
       "placements": [
-        { "key": "c", "type": "x", "versions": [1], "outcome": "ok" },
-        { "key": "a", "type": "y", "versions": [1], "outcome": "ok" },
-        { "key": "b", "type": "z", "versions": [1], "outcome": "ok" }
+        {
+          "key": "c",
+          "type": "x",
+          "versions": [
+            1
+          ],
+          "outcome": "ok"
+        },
+        {
+          "key": "a",
+          "type": "y",
+          "versions": [
+            1
+          ],
+          "outcome": "ok"
+        },
+        {
+          "key": "b",
+          "type": "z",
+          "versions": [
+            1
+          ],
+          "outcome": "ok"
+        }
       ],
-      "capabilities": { "x": [1], "y": [1], "z": [1] },
+      "capabilities": {
+        "x": [
+          1
+        ],
+        "y": [
+          1
+        ],
+        "z": [
+          1
+        ]
+      },
       "expect": {
         "status": 200,
         "body": {
           "islands": [
-            { "key": "c", "type": "x", "version": 1, "status": "ok", "props": { "v": 1 } },
-            { "key": "a", "type": "y", "version": 1, "status": "ok", "props": { "v": 1 } },
-            { "key": "b", "type": "z", "version": 1, "status": "ok", "props": { "v": 1 } }
+            {
+              "key": "c",
+              "type": "x",
+              "version": 1,
+              "status": "ok",
+              "props": {
+                "v": 1
+              }
+            },
+            {
+              "key": "a",
+              "type": "y",
+              "version": 1,
+              "status": "ok",
+              "props": {
+                "v": 1
+              }
+            },
+            {
+              "key": "b",
+              "type": "z",
+              "version": 1,
+              "status": "ok",
+              "props": {
+                "v": 1
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "islands that load the same key share one call",
+      "placements": [
+        {
+          "key": "header",
+          "type": "profile-header",
+          "versions": [
+            1
+          ],
+          "outcome": "ok",
+          "load": "user:1",
+          "loadDelayMs": 20
+        },
+        {
+          "key": "follow",
+          "type": "follow-button",
+          "versions": [
+            1
+          ],
+          "outcome": "ok",
+          "load": "user:1",
+          "loadDelayMs": 20
+        },
+        {
+          "key": "other",
+          "type": "post-grid",
+          "versions": [
+            1
+          ],
+          "outcome": "ok",
+          "load": "user:2",
+          "loadDelayMs": 20
+        }
+      ],
+      "capabilities": {
+        "profile-header": [
+          1
+        ],
+        "follow-button": [
+          1
+        ],
+        "post-grid": [
+          1
+        ]
+      },
+      "expect": {
+        "status": 200,
+        "body": {
+          "islands": [
+            {
+              "key": "header",
+              "status": "ok",
+              "props": {
+                "v": 1,
+                "calls": 1
+              }
+            },
+            {
+              "key": "follow",
+              "status": "ok",
+              "props": {
+                "v": 1,
+                "calls": 1
+              }
+            },
+            {
+              "key": "other",
+              "status": "ok",
+              "props": {
+                "v": 1,
+                "calls": 1
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "an island timing out doesn't cancel a load other islands share",
+      "placements": [
+        {
+          "key": "impatient",
+          "type": "profile-header",
+          "versions": [
+            1
+          ],
+          "outcome": "ok",
+          "load": "slow",
+          "loadDelayMs": 150,
+          "timeoutMs": 30
+        },
+        {
+          "key": "patient",
+          "type": "post-grid",
+          "versions": [
+            1
+          ],
+          "outcome": "ok",
+          "load": "slow",
+          "loadDelayMs": 150,
+          "timeoutMs": 2000,
+          "startDelayMs": 15
+        }
+      ],
+      "capabilities": {
+        "profile-header": [
+          1
+        ],
+        "post-grid": [
+          1
+        ]
+      },
+      "expect": {
+        "status": 200,
+        "body": {
+          "islands": [
+            {
+              "key": "impatient",
+              "status": "error",
+              "error": {
+                "code": "timeout",
+                "retryable": true
+              }
+            },
+            {
+              "key": "patient",
+              "status": "ok",
+              "props": {
+                "v": 1,
+                "calls": 1
+              }
+            }
           ]
         }
       }
     },
     {
       "name": "ignores unknown request fields",
-      "placements": [{ "key": "header", "type": "profile-header", "versions": [1], "outcome": "ok" }],
-      "capabilities": { "profile-header": [1] },
-      "request": { "futureField": { "anything": true } },
+      "placements": [
+        {
+          "key": "header",
+          "type": "profile-header",
+          "versions": [
+            1
+          ],
+          "outcome": "ok"
+        }
+      ],
+      "capabilities": {
+        "profile-header": [
+          1
+        ]
+      },
+      "request": {
+        "futureField": {
+          "anything": true
+        }
+      },
       "expect": {
         "status": 200,
-        "body": { "islands": [{ "key": "header", "status": "ok" }] }
+        "body": {
+          "islands": [
+            {
+              "key": "header",
+              "status": "ok"
+            }
+          ]
+        }
       }
     },
     {
       "name": "rejects an unknown screen",
       "placements": [],
       "capabilities": {},
-      "request": { "screen": "no-such-screen" },
-      "expect": { "status": 404, "body": { "protocol": 0, "error": { "code": "unknown_screen" } } }
+      "request": {
+        "screen": "no-such-screen"
+      },
+      "expect": {
+        "status": 404,
+        "body": {
+          "protocol": 0,
+          "error": {
+            "code": "unknown_screen"
+          }
+        }
+      }
     },
     {
       "name": "returns layout_failed when the screen layout fails",
       "$comment": "Conformance servers fail the layout when params.placements is not valid JSON.",
       "placements": [],
       "capabilities": {},
-      "request": { "params": { "placements": "{oops" } },
-      "expect": { "status": 500, "body": { "protocol": 0, "error": { "code": "layout_failed" } } }
+      "request": {
+        "params": {
+          "placements": "{oops"
+        }
+      },
+      "expect": {
+        "status": 500,
+        "body": {
+          "protocol": 0,
+          "error": {
+            "code": "layout_failed"
+          }
+        }
+      }
     },
     {
       "name": "rejects an unsupported protocol version",
       "placements": [],
       "capabilities": {},
-      "request": { "protocol": 99 },
-      "expect": { "status": 400, "body": { "error": { "code": "unsupported_protocol" } } }
+      "request": {
+        "protocol": 99
+      },
+      "expect": {
+        "status": 400,
+        "body": {
+          "error": {
+            "code": "unsupported_protocol"
+          }
+        }
+      }
     },
     {
       "name": "rejects a body screen that differs from the path",
       "placements": [],
       "capabilities": {},
       "path": "something-else",
-      "expect": { "status": 400, "body": { "error": { "code": "screen_mismatch" } } }
+      "expect": {
+        "status": 400,
+        "body": {
+          "error": {
+            "code": "screen_mismatch"
+          }
+        }
+      }
     },
     {
       "name": "rejects malformed JSON",
       "placements": [],
       "capabilities": {},
       "rawBody": "{not json",
-      "expect": { "status": 400, "body": { "error": { "code": "bad_request" } } }
+      "expect": {
+        "status": 400,
+        "body": {
+          "error": {
+            "code": "bad_request"
+          }
+        }
+      }
     }
   ]
 }

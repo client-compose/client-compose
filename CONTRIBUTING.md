@@ -48,16 +48,19 @@ re-implementing negotiation or error codes in an adapter, it belongs in the core
 2. **Follow the layout above.** Use the existing implementations in the same role as a reference:
    - composers: `composers/go/core`, `composers/typescript/core`
    - clients: `clients/swift`, `clients/kotlin/core`, `clients/typescript/core`
-3. **Pass conformance.**
+3. **Provide request-scoped loading** (spec §9): a `load(key, fn)` shared by the layout and
+   islands within one request, running under the request's lifetime rather than an island's, and
+   ideally a batch loader. Follow the existing cores' APIs (`rc.load` / `cc.Load`).
+4. **Pass conformance.**
    - *Composer*: ship a test-only conformance server exposing the `__conformance` screen
      (spec §8.1) and run `conformance/run-against.sh <port> <command>`.
    - *Client*: load `conformance/client/cases.json` in your unit tests (spec §8.2). Typed clients
      must also pass the `typedOnly` cases.
-4. **Add CI** in `.github/workflows/<language>.yml`. It must trigger on changes to `spec/**`
+5. **Add CI** in `.github/workflows/<language>.yml`. It must trigger on changes to `spec/**`
    and `conformance/**` as well as your own folder.
-5. **Add a README** in your folder covering: install, minimal usage, which protocol versions it
+6. **Add a README** in your folder covering: install, minimal usage, which protocol versions it
    supports, and how to run its tests.
-6. **Add yourself to `.github/CODEOWNERS`** for your folder, and add a row to the
+7. **Add yourself to `.github/CODEOWNERS`** for your folder, and add a row to the
    implementations table in the root README.
 
 Keep dependencies minimal. A core should depend on the language's standard library plus,

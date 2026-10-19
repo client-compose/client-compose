@@ -11,6 +11,8 @@ struct FollowButtonV1: IslandProps, Equatable, Sendable {
 
     let userId: String
     let isFollowing: Bool
+    /// Who the button follows, for its label. Added in v1 as optional, so older apps ignore it.
+    let displayName: String?
 }
 
 /// Grid of a user's recent post thumbnails.

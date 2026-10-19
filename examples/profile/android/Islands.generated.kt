@@ -12,6 +12,8 @@ import kotlinx.serialization.Serializable
 data class FollowButtonV1(
     val userId: String,
     val isFollowing: Boolean,
+    /** Who the button follows, for its label. Added in v1 as optional, so older apps ignore it. */
+    val displayName: String? = null,
 ) {
     companion object : IslandDescriptor<FollowButtonV1> {
         override val type: String = "follow-button"

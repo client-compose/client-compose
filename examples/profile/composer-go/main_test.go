@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -65,6 +66,23 @@ func TestNoFollowButtonOnOwnProfile(t *testing.T) {
 		`{"profile-header":[1,2],"follow-button":[1],"post-grid":[1]}`)
 	if keys(got) != "header,posts" {
 		t.Fatalf("unexpected %+v", got)
+	}
+}
+
+func TestHeaderAndFollowButtonShareOneUserLookup(t *testing.T) {
+	s := fakeServices()
+	var calls atomic.Int32
+	getUser := s.GetUser
+	s.GetUser = func(ctx context.Context, id string) (User, error) {
+		calls.Add(1)
+		return getUser(ctx, id)
+	}
+	got := fetchProfile(t, newHandler(s), "u_2", `{"profile-header":[2],"follow-button":[1],"post-grid":[1]}`)
+	if keys(got) != "header,follow,posts" || got[1].Props["displayName"] != "Ada Lovelace" {
+		t.Fatalf("unexpected %+v", got)
+	}
+	if calls.Load() != 1 {
+		t.Fatalf("GetUser called %d times, want 1", calls.Load())
 	}
 }
 

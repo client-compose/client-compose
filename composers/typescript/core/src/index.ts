@@ -11,15 +11,39 @@ import {
   type ScreenResponse,
 } from "@client-compose/protocol";
 
-export { conformanceScreen } from "./conformance.ts";
+import { attachScope, RequestScope, type LoadContext } from "./loading.ts";
 
-export interface ResolveContext<Ctx> {
+export { conformanceScreen } from "./conformance.ts";
+export {
+  defineBatchLoader,
+  LoadNotFoundError,
+  type BatchLoader,
+  type BatchLoaderOptions,
+  type LoadContext,
+} from "./loading.ts";
+
+export interface ResolveContext<Ctx> extends LoadContext {
   params: Record<string, string>;
   client: ClientContext;
-  /** Whatever the adapter injects: auth, loaders, service clients, tracing. */
+  /** Whatever the adapter injects: auth, service clients, tracing. */
   ctx: Ctx;
+  /** Aborted when this island times out. */
   signal: AbortSignal;
+  /**
+   * Run `fn` once per `key` for this screen request, sharing the result with every island (and the
+   * layout) that asks for the same key. `fn` gets the request's signal, not this island's, so an
+   * island timing out never cancels work other islands are waiting on.
+   *
+   *     const user = await rc.load(`user:${id}`, (signal) => users.get(id, { signal }));
+   */
+  load: <T>(key: string, fn: (signal: AbortSignal) => Promise<T> | T) => Promise<T>;
 }
+
+/**
+ * What a screen's layout receives. A resolver's ResolveContext is one too, so data helpers typed
+ * with it work in both: `const user = (rc: LayoutContext<Ctx>, id: string) => rc.load(...)`.
+ */
+export type LayoutContext<Ctx> = Omit<ResolveContext<Ctx>, "signal">;
 
 /** One resolvable version of an island: how to produce its props. */
 export interface IslandResolver<Ctx, P = Record<string, unknown>> {
@@ -55,7 +79,7 @@ export interface Placement<Ctx> {
 export interface ScreenDefinition<Ctx> {
   id: string;
   /** Decide which islands appear. Can branch on client, params, flags, experiments. */
-  layout: (rc: Omit<ResolveContext<Ctx>, "signal">) => Placement<Ctx>[] | Promise<Placement<Ctx>[]>;
+  layout: (rc: LayoutContext<Ctx>) => Placement<Ctx>[] | Promise<Placement<Ctx>[]>;
   cacheMaxAge?: number;
 }
 
@@ -95,17 +119,33 @@ export function createComposer<Ctx>(
   const byId = new Map(screens.map((s) => [s.id, s]));
   const defaultTimeoutMs = options.defaultTimeoutMs ?? 2000;
 
-  return async function compose(req: ScreenRequest, ctx: Ctx): Promise<ComposeResult> {
+  async function compose(req: ScreenRequest, ctx: Ctx): Promise<ComposeResult> {
     if (req.protocol !== PROTOCOL_VERSION) {
       return fail(400, "unsupported_protocol", `Composer speaks protocol ${PROTOCOL_VERSION}`);
     }
     const screen = byId.get(req.screen);
     if (!screen) return fail(404, "unknown_screen", req.screen);
 
+    // Shared loads live as long as this request; whatever is still running when it's done is cancelled.
+    const request = new AbortController();
+    try {
+      return await composeScreen(screen, req, ctx, new RequestScope(request.signal));
+    } finally {
+      request.abort();
+    }
+  };
+
+  async function composeScreen(
+    screen: ScreenDefinition<Ctx>,
+    req: ScreenRequest,
+    ctx: Ctx,
+    scope: RequestScope,
+  ): Promise<ComposeResult> {
     const params = req.params ?? {};
+    const load = scope.load.bind(scope);
     let placements: Placement<Ctx>[];
     try {
-      placements = await screen.layout({ params, client: req.client, ctx });
+      placements = await screen.layout(attachScope({ params, client: req.client, ctx, load }, scope));
     } catch {
       return fail(500, "layout_failed");
     }
@@ -124,7 +164,7 @@ export function createComposer<Ctx>(
           const base = { key: p.key, type: r.type, version: r.version };
           try {
             const props = await withTimeout(p.timeoutMs ?? defaultTimeoutMs, (signal) =>
-              r.resolve({ params, client: req.client, ctx, signal }),
+              r.resolve(attachScope({ params, client: req.client, ctx, signal, load }, scope)),
             );
             return { ...base, status: "ok", props: props as Record<string, unknown> };
           } catch (err) {
@@ -152,7 +192,9 @@ export function createComposer<Ctx>(
         ...(screen.cacheMaxAge !== undefined && { cache: { maxAge: screen.cacheMaxAge } }),
       },
     };
-  };
+  }
+
+  return compose;
 }
 
 /** Parse, validate and compose an HTTP request body (spec §8.1 error codes). */
