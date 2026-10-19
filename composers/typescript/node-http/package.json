@@ -1,6 +1,6 @@
 {
   "name": "@client-compose/node-http",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "node:http adapter for the Client Compose composer.",
   "keywords": [
     "client-compose",
