@@ -51,6 +51,8 @@ or write one for your framework: route `POST /screens/:screen`, read the raw bod
 `composeHttp`, which parses and validates the request and returns the protocol's status codes.
 
 ```ts
+import { composeHttp } from "@client-compose/composer";
+
 app.post("/screens/:screen", async (req, res) => {
   const result = await composeHttp(compose, req.params.screen, await readBody(req), { users, posts });
   res.status(result.status).json(result.body);
