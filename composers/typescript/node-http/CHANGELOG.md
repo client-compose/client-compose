@@ -1,5 +1,12 @@
 # @client-compose/node-http
 
+## 0.1.2
+
+### Patch Changes
+
+- Updated dependencies [[`55613c9`](https://github.com/client-compose/client-compose/commit/55613c91f661064f9856b1654c08c47a697a64f4)]:
+  - @client-compose/composer@0.2.0
+
 ## 0.1.1
 
 ### Patch Changes

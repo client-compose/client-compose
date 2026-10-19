@@ -1,5 +1,13 @@
 # @client-compose/conformance
 
+## 0.2.0
+
+### Minor Changes
+
+- [`55613c9`](https://github.com/client-compose/client-compose/commit/55613c91f661064f9856b1654c08c47a697a64f4) Thanks [@LewisYearsley](https://github.com/LewisYearsley)! - New composer cases for request-scoped loading (spec §9): islands that load the same key share one
+  call, and an island timing out doesn't cancel a load other islands share. Conformance servers need
+  to support the mock `load`, `loadDelayMs` and `startDelayMs` placement fields.
+
 ## 0.1.0
 
 ### Minor Changes
