@@ -1,6 +1,6 @@
 {
   "name": "@client-compose/client",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Framework-agnostic Client Compose client: island registry, screen requests and render planning.",
   "keywords": [
     "client-compose",
