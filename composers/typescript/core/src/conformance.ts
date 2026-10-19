@@ -1,6 +1,7 @@
 // The test-only `__conformance` screen (spec §8.1). Never register this in production.
 
 import type { IslandResolver, ScreenDefinition } from "./index.ts";
+import { NotFoundError } from "./loading.ts";
 
 interface MockPlacement {
   key: string;
@@ -19,7 +20,9 @@ interface MockPlacement {
 export function conformanceScreen<Ctx = unknown>(): ScreenDefinition<Ctx> {
   return {
     id: "__conformance",
+    meta: ({ params }) => (params.meta ? JSON.parse(params.meta) : {}),
     layout: ({ params }) => {
+      if (params.notFound === "true") throw new NotFoundError("no such thing");
       // How many times each load key's work actually ran during this request.
       const calls = new Map<string, number>();
       return (JSON.parse(params.placements ?? "[]") as MockPlacement[]).map((p) => ({

@@ -51,6 +51,15 @@ final class ConformanceTests: XCTestCase {
         }
     }
 
+    func testDecodesScreenMeta() throws {
+        let json = #"{"protocol":0,"screen":"s","islands":[],"meta":{"title":"Ada","future":1}}"#
+        let response = try JSONDecoder().decode(ScreenResponse.self, from: Data(json.utf8))
+        XCTAssertEqual(response.meta?.title, "Ada")
+        XCTAssertNil(response.meta?.description)
+        let withoutMeta = try JSONDecoder().decode(ScreenResponse.self, from: Data(#"{"protocol":0,"screen":"s","islands":[]}"#.utf8))
+        XCTAssertNil(withoutMeta.meta)
+    }
+
     func testClientContextEncodesExtraFieldsFlat() throws {
         let context = ClientContext(appVersion: "4.2.0", extra: ["osVersion": "18.1"])
         let json = try JSONDecoder().decode([String: String].self, from: JSONEncoder().encode(context))

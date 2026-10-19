@@ -65,9 +65,18 @@ public struct CacheHint: Decodable, Sendable {
     public let maxAge: Int
 }
 
+/// Describes the screen as a whole: e.g. the navigation title (spec §4).
+public struct ScreenMeta: Decodable, Sendable, Equatable {
+    public let title: String?
+    public let description: String?
+    /// Absolute URL.
+    public let image: String?
+}
+
 public struct ScreenResponse: Decodable, Sendable {
     public let `protocol`: Int
     public let screen: String
     public let islands: [IslandEntry]
+    public let meta: ScreenMeta?
     public let cache: CacheHint?
 }

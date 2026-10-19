@@ -25,3 +25,9 @@ for (const c of clientCases().filter((c) => !c.typedOnly)) {
     assert.deepEqual(skipped, c.expectSkipped);
   });
 }
+
+test("ScreenFetchError exposes the protocol error code", async () => {
+  const { ScreenFetchError } = await import("../src/index.ts");
+  assert.equal(new ScreenFetchError(404, '{"protocol":0,"error":{"code":"not_found"}}').code, "not_found");
+  assert.equal(new ScreenFetchError(502, "<html>bad gateway</html>").code, undefined);
+});

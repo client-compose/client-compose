@@ -27,6 +27,10 @@ composer := cc.New([]cc.Screen{profile}, cc.WithDefaultTimeout(time.Second))
 http.ListenAndServe(":8080", composer.Handler())
 ```
 
+- Return an error wrapping `cc.ErrNotFound` from a layout when what the params refer to doesn't
+  exist (a batch loader's missing key already does); the screen responds 404 `not_found`.
+- `Screen.Meta` optionally describes the screen as a whole (title, description, image). It runs
+  alongside the islands and shares their `cc.Load`s; if it fails, the response just has no meta.
 - Auth and other per-request values travel on `context.Context`: wrap `Handler()` in your middleware.
 - To share data between islands and batch lookups, see [Loading data efficiently](#loading-data-efficiently).
 - For other routers (chi, gin, echo), call `composer.ComposeHTTP(ctx, screenID, body)` and

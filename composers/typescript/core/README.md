@@ -40,6 +40,18 @@ export const compose = createComposer([profile], {
 });
 ```
 
+Throw `NotFoundError` from a layout when what the params refer to doesn't exist (a batch loader's
+missing key counts too); the screen responds 404 `not_found` and clients show their not-found UI.
+Add an optional `meta` function to describe the screen as a whole (page title, description, sharing
+image); it runs alongside the islands and shares their `rc.load`s:
+
+```ts
+meta: async (rc) => {
+  const recipe = await recipeById(rc, rc.params.recipeId);
+  return { title: recipe.title, description: recipe.summary };
+},
+```
+
 Each placement lists the versions the composer can resolve; the highest version the client also
 supports is used. Islands resolve in parallel, each with its own timeout, and a failing island is
 returned as an error for that island only, unless it's `required`.

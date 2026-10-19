@@ -7,16 +7,18 @@ import {
   type IslandDescriptor,
   type IslandEntry,
   type ScreenErrorResponse,
+  type ScreenMeta,
   type ScreenRequest,
   type ScreenResponse,
 } from "@client-compose/protocol";
 
-import { attachScope, RequestScope, type LoadContext } from "./loading.ts";
+import { attachScope, NotFoundError, RequestScope, type LoadContext } from "./loading.ts";
 
 export { conformanceScreen } from "./conformance.ts";
 export {
   defineBatchLoader,
   LoadNotFoundError,
+  NotFoundError,
   type BatchLoader,
   type BatchLoaderOptions,
   type LoadContext,
@@ -78,8 +80,16 @@ export interface Placement<Ctx> {
 
 export interface ScreenDefinition<Ctx> {
   id: string;
-  /** Decide which islands appear. Can branch on client, params, flags, experiments. */
+  /**
+   * Decide which islands appear. Can branch on client, params, flags, experiments. Throw
+   * `NotFoundError` when what the params refer to doesn't exist.
+   */
   layout: (rc: LayoutContext<Ctx>) => Placement<Ctx>[] | Promise<Placement<Ctx>[]>;
+  /**
+   * Describe the screen as a whole (title, description, image). Runs alongside the islands and
+   * shares their `load`s. If it fails, the response has no meta; the islands are unaffected.
+   */
+  meta?: (rc: LayoutContext<Ctx>) => ScreenMeta | Promise<ScreenMeta>;
   cacheMaxAge?: number;
 }
 
@@ -94,6 +104,10 @@ export type ComposeResult =
 export interface ComposerOptions {
   defaultTimeoutMs?: number;
   onIslandError?: (key: string, type: string, err: unknown) => void;
+  /** A screen's layout failed (other than NotFoundError). */
+  onLayoutError?: (screen: string, err: unknown) => void;
+  /** A screen's meta function failed; the response is sent without meta. */
+  onMetaError?: (screen: string, err: unknown) => void;
 }
 
 /** Highest version both sides support, or undefined (spec §4.2). */
@@ -143,12 +157,24 @@ export function createComposer<Ctx>(
   ): Promise<ComposeResult> {
     const params = req.params ?? {};
     const load = scope.load.bind(scope);
+    const layoutContext = attachScope({ params, client: req.client, ctx, load }, scope);
     let placements: Placement<Ctx>[];
     try {
-      placements = await screen.layout(attachScope({ params, client: req.client, ctx, load }, scope));
-    } catch {
+      placements = await screen.layout(layoutContext);
+    } catch (err) {
+      if (err instanceof NotFoundError) return fail(404, "not_found");
+      options.onLayoutError?.(screen.id, err);
       return fail(500, "layout_failed");
     }
+    // Started now so it runs alongside the islands (and can share their loads).
+    const meta = screen.meta
+      ? Promise.resolve()
+          .then(() => screen.meta!(layoutContext))
+          .catch((err) => {
+            options.onMetaError?.(screen.id, err);
+            return undefined;
+          })
+      : undefined;
 
     const negotiated = placements.map((p) => ({ p, resolver: negotiate(p.island, req.islands[p.island[0]?.type]) }));
     const unplaceable = negotiated.find((n) => !n.resolver && n.p.required);
@@ -182,6 +208,7 @@ export function createComposer<Ctx>(
 
     const failedRequired = entries.find((e) => e.status === "error" && e.required);
     if (failedRequired) return fail(502, "required_island_failed", failedRequired.key);
+    const screenMeta = await meta;
 
     return {
       status: 200,
@@ -189,6 +216,7 @@ export function createComposer<Ctx>(
         protocol: PROTOCOL_VERSION,
         screen: screen.id,
         islands: entries.map(({ required: _, ...e }) => e as IslandEntry),
+        ...(screenMeta && Object.values(screenMeta).some((v) => v !== undefined) && { meta: screenMeta }),
         ...(screen.cacheMaxAge !== undefined && { cache: { maxAge: screen.cacheMaxAge } }),
       },
     };

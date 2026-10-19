@@ -126,9 +126,21 @@ Clients SHOULD send identity/auth via transport headers, not the body.
       "error": { "code": "upstream_timeout", "retryable": true }
     }
   ],
+  "meta": { "title": "Ada Lovelace", "description": "Recipes by Ada" },
   "cache": { "maxAge": 30 }
 }
 ```
+
+`meta` is optional. It describes the screen as a whole, for things no single island owns: a web
+page's `<title>`, description and sharing image, or a native navigation header's title.
+
+| Field         | Meaning                                                   |
+| ------------- | --------------------------------------------------------- |
+| `title`       | Short screen title.                                       |
+| `description` | One or two sentences describing the screen's content.     |
+| `image`       | Absolute URL of an image representing the screen.         |
+
+All three are optional strings. Clients use what applies to them and ignore the rest.
 
 ### 4.1 Island entries
 
@@ -157,6 +169,9 @@ For each island the composer wants to place:
 - A screen definition MAY mark an island `required`. If a required island cannot be
   placed or fails, the whole screen fails with a non-2xx response and body
   `{ "protocol": 0, "error": { "code": "...", "message": "..." } }`.
+- If the screen exists but what its params refer to doesn't (a deleted recipe, a mistyped
+  id), the composer responds `404` with error code `not_found`, distinct from
+  `unknown_screen`. Clients show their own not-found UI.
 - Unknown fields in any payload MUST be ignored by both sides (forward compatibility).
 
 ### 4.4 Client rendering rules
@@ -234,6 +249,9 @@ The mock resolver for version `n`:
 `params.placements` is not valid JSON, the screen's layout fails. The runner then
 sends each case in `conformance/composer/cases.json` and checks status codes and bodies.
 
+The `__conformance` screen also reads two optional params: `meta` (JSON, returned as the
+response's `meta`) and `notFound` (`"true"` makes the screen respond `not_found`).
+
 If a mock has `load` (a key), its resolver first waits `startDelayMs`, then calls the composer's
 request-scoped load (§9) with that key and work that counts how often it runs, takes `loadDelayMs`,
 and fails if its cancellation signal fires. It then resolves to `{ "v": n, "calls": <runs of that
@@ -249,6 +267,7 @@ Error codes the suite checks, for composers to use consistently:
 | `protocol` not supported                   | 400    | `unsupported_protocol`        |
 | Body `screen` differs from path            | 400    | `screen_mismatch`             |
 | Unknown screen                             | 404    | `unknown_screen`              |
+| Screen's params refer to nothing           | 404    | `not_found`                   |
 | Screen layout itself failed                | 500    | `layout_failed`               |
 | Required island has no common version      | 502    | `required_island_unsupported` |
 | Required island failed                     | 502    | `required_island_failed`      |

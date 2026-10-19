@@ -191,3 +191,33 @@ func TestBatchLoaderOutsideARequestFetchesDirectly(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+func TestLayoutNotFoundAndMetaFailure(t *testing.T) {
+	users := NewBatchLoader(func(_ context.Context, ids []string) (map[string]string, error) { return map[string]string{}, nil })
+	protocol := ProtocolVersion
+	req := ScreenRequest{Protocol: &protocol, Screen: "s", Client: &ClientContext{}, Islands: map[string][]int{"x": {1}}}
+
+	// A batch loader's missing key in the layout is a 404 not_found.
+	notFound := New([]Screen{{ID: "s", Layout: func(ctx context.Context, r Request) ([]Placement, error) {
+		_, err := users.Load(ctx, "missing")
+		return nil, err
+	}}})
+	if res := notFound.Compose(context.Background(), req); res.Status != 404 || res.Body.(ErrorResponse).Error.Code != "not_found" {
+		t.Fatalf("got %+v", res)
+	}
+
+	// A failing Meta drops the meta, not the islands.
+	var metaErr error
+	c := New([]Screen{{
+		ID:   "s",
+		Meta: func(context.Context, Request) (ScreenMeta, error) { return ScreenMeta{}, errors.New("meta broke") },
+		Layout: func(context.Context, Request) ([]Placement, error) {
+			return []Placement{{Key: "k", Versions: []Island{NewIsland("x", 1, func(context.Context, Request) (int, error) { return 1, nil })}}}, nil
+		},
+	}}, WithMetaErrorHandler(func(_ context.Context, _ string, err error) { metaErr = err }))
+	res := c.Compose(context.Background(), req)
+	body := res.Body.(ScreenResponse)
+	if res.Status != 200 || body.Meta != nil || len(body.Islands) != 1 || metaErr == nil {
+		t.Fatalf("got %+v (meta error %v)", res, metaErr)
+	}
+}

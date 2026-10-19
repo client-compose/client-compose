@@ -100,11 +100,23 @@ export function plan<R>(
 export class ScreenFetchError extends Error {
   readonly status: number;
   readonly body: string;
+  /** The protocol error code from the response body (e.g. "not_found"), if there was one. */
+  readonly code: string | undefined;
 
   constructor(status: number, body: string) {
     super(`Screen request failed with status ${status}`);
     this.status = status;
     this.body = body;
+    this.code = errorCode(body);
+  }
+}
+
+function errorCode(body: string): string | undefined {
+  try {
+    const code = (JSON.parse(body) as { error?: { code?: unknown } }).error?.code;
+    return typeof code === "string" ? code : undefined;
+  } catch {
+    return undefined;
   }
 }
 

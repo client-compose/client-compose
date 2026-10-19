@@ -53,8 +53,14 @@ function scopeOf(context: LoadContext): RequestScope {
   return scope;
 }
 
-/** A batch loader returned no value for a key. */
-export class LoadNotFoundError extends Error {
+/**
+ * Something a screen's params refer to doesn't exist. Thrown from a layout (or a load it awaits),
+ * the composer responds 404 `not_found` (spec §4.3).
+ */
+export class NotFoundError extends Error {}
+
+/** A batch loader returned no value for a key. Thrown from a layout, it makes the screen 404. */
+export class LoadNotFoundError extends NotFoundError {
   readonly key: unknown;
 
   constructor(key: unknown) {

@@ -61,11 +61,20 @@ type CacheHint struct {
 	MaxAge int `json:"maxAge"`
 }
 
+// ScreenMeta describes the screen as a whole: page title, description, sharing image (spec §4).
+type ScreenMeta struct {
+	Title       string `json:"title,omitempty"`
+	Description string `json:"description,omitempty"`
+	// Image is an absolute URL.
+	Image string `json:"image,omitempty"`
+}
+
 // ScreenResponse is the successful response body.
 type ScreenResponse struct {
 	Protocol int           `json:"protocol"`
 	Screen   string        `json:"screen"`
 	Islands  []IslandEntry `json:"islands"`
+	Meta     *ScreenMeta   `json:"meta,omitempty"`
 	Cache    *CacheHint    `json:"cache,omitempty"`
 }
 

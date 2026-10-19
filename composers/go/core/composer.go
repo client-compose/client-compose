@@ -61,8 +61,13 @@ type Placement struct {
 
 // Screen decides which islands make up a screen.
 type Screen struct {
-	ID          string
-	Layout      func(ctx context.Context, r Request) ([]Placement, error)
+	ID string
+	// Layout decides which islands appear. Return an error wrapping ErrNotFound when what the
+	// params refer to doesn't exist; the screen then responds 404 not_found.
+	Layout func(ctx context.Context, r Request) ([]Placement, error)
+	// Meta optionally describes the screen as a whole. It runs alongside the islands and shares
+	// their Loads; if it fails, the response has no meta and the islands are unaffected.
+	Meta        func(ctx context.Context, r Request) (ScreenMeta, error)
 	CacheMaxAge time.Duration
 }
 
@@ -76,6 +81,8 @@ type Composer struct {
 	screens        map[string]Screen
 	defaultTimeout time.Duration
 	onIslandError  func(ctx context.Context, key, typ string, err error)
+	onLayoutError  func(ctx context.Context, screen string, err error)
+	onMetaError    func(ctx context.Context, screen string, err error)
 }
 
 type Option func(*Composer)
@@ -83,6 +90,22 @@ type Option func(*Composer)
 // WithDefaultTimeout sets the per-island timeout used when a Placement doesn't set one.
 func WithDefaultTimeout(d time.Duration) Option {
 	return func(c *Composer) { c.defaultTimeout = d }
+}
+
+// WithLayoutErrorHandler is called when a screen's layout fails (other than ErrNotFound).
+func WithLayoutErrorHandler(fn func(ctx context.Context, screen string, err error)) Option {
+	return func(c *Composer) { c.onLayoutError = fn }
+}
+
+// WithMetaErrorHandler is called when a screen's Meta fails; the response is sent without meta.
+func WithMetaErrorHandler(fn func(ctx context.Context, screen string, err error)) Option {
+	return func(c *Composer) { c.onMetaError = fn }
+}
+
+func (c *Composer) reportMetaError(ctx context.Context, screen string, err error) {
+	if c.onMetaError != nil {
+		c.onMetaError(ctx, screen, err)
+	}
 }
 
 // WithIslandErrorHandler is called whenever an island fails or times out.
@@ -140,7 +163,39 @@ func (c *Composer) Compose(ctx context.Context, req ScreenRequest) Result {
 	}
 	placements, err := screen.Layout(ctx, r)
 	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return fail(http.StatusNotFound, "not_found", "")
+		}
+		if c.onLayoutError != nil {
+			c.onLayoutError(ctx, screen.ID, err)
+		}
 		return fail(http.StatusInternalServerError, "layout_failed", "")
+	}
+
+	// Started now so it runs alongside the islands (and can share their Loads).
+	metaDone := make(chan *ScreenMeta, 1)
+	if screen.Meta == nil {
+		metaDone <- nil
+	} else {
+		go func() {
+			defer func() {
+				if rec := recover(); rec != nil {
+					c.reportMetaError(ctx, screen.ID, fmt.Errorf("meta panicked: %v", rec))
+					metaDone <- nil
+				}
+			}()
+			meta, err := screen.Meta(ctx, r)
+			if err != nil {
+				c.reportMetaError(ctx, screen.ID, err)
+				metaDone <- nil
+				return
+			}
+			if meta == (ScreenMeta{}) {
+				metaDone <- nil // nothing to say: omit meta, as the TS composer does
+				return
+			}
+			metaDone <- &meta
+		}()
 	}
 
 	type placed struct {
@@ -179,7 +234,7 @@ func (c *Composer) Compose(ctx context.Context, req ScreenRequest) Result {
 		}
 	}
 
-	resp := ScreenResponse{Protocol: ProtocolVersion, Screen: screen.ID, Islands: entries}
+	resp := ScreenResponse{Protocol: ProtocolVersion, Screen: screen.ID, Islands: entries, Meta: <-metaDone}
 	if screen.CacheMaxAge > 0 {
 		resp.Cache = &CacheHint{MaxAge: int(screen.CacheMaxAge.Seconds())}
 	}

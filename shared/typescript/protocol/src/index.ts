@@ -36,10 +36,19 @@ export type IslandEntry<P = Record<string, unknown>> =
   | (IslandBase & { status: "ok"; props: P })
   | (IslandBase & { status: "error"; error: IslandError });
 
+/** Describes the screen as a whole: page title, description, sharing image (spec §4). */
+export interface ScreenMeta {
+  title?: string;
+  description?: string;
+  /** Absolute URL. */
+  image?: string;
+}
+
 export interface ScreenResponse {
   protocol: typeof PROTOCOL_VERSION;
   screen: string;
   islands: IslandEntry[];
+  meta?: ScreenMeta;
   cache?: { maxAge: number };
 }
 

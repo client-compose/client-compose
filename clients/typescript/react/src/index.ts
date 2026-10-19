@@ -9,7 +9,7 @@ export { ReactIslandRegistry } from "./registry.ts";
 export { loadScreen } from "./load.ts";
 export type { ClientComposeConfig, ErrorEntry, ScreenConfig } from "./config.ts";
 // Re-exported so React apps (including codegen output) only need this one package.
-export type { IslandDescriptor, ScreenResponse } from "@client-compose/protocol";
+export type { IslandDescriptor, ScreenMeta, ScreenResponse } from "@client-compose/protocol";
 export {
   ClientComposeProvider,
   ComposedScreen,

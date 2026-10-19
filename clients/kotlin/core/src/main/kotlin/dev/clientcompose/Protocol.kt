@@ -56,11 +56,21 @@ public data class IslandEntry(
 @Serializable
 public data class CacheHint(val maxAge: Int)
 
+/** Describes the screen as a whole: e.g. the toolbar title (spec §4). */
+@Serializable
+public data class ScreenMeta(
+    val title: String? = null,
+    val description: String? = null,
+    /** Absolute URL. */
+    val image: String? = null,
+)
+
 @Serializable
 public data class ScreenResponse(
     @SerialName("protocol") val protocolVersion: Int,
     val screen: String,
     val islands: List<IslandEntry>,
+    val meta: ScreenMeta? = null,
     val cache: CacheHint? = null,
 )
 

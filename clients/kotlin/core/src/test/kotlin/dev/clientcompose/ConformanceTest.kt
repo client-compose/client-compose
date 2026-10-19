@@ -55,6 +55,17 @@ class ConformanceTest {
     }
 
     @Test
+    fun decodesScreenMeta() {
+        val response = ClientComposeJson.decodeFromString(
+            ScreenResponse.serializer(),
+            """{"protocol":0,"screen":"s","islands":[],"meta":{"title":"Ada","future":1}}""",
+        )
+        assertEquals(ScreenMeta(title = "Ada"), response.meta)
+        val withoutMeta = ClientComposeJson.decodeFromString(ScreenResponse.serializer(), """{"protocol":0,"screen":"s","islands":[]}""")
+        assertEquals(null, withoutMeta.meta)
+    }
+
+    @Test
     fun clientContextEncodesExtraFieldsFlat() {
         val json = ClientContext(appVersion = "4.2.0", extra = mapOf("osVersion" to "15")).toJson()
         assertEquals(

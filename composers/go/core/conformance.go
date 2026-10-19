@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 )
@@ -27,7 +28,18 @@ type mockPlacement struct {
 func ConformanceScreen() Screen {
 	return Screen{
 		ID: "__conformance",
+		Meta: func(_ context.Context, r Request) (ScreenMeta, error) {
+			var meta ScreenMeta
+			if r.Params["meta"] != "" {
+				err := json.Unmarshal([]byte(r.Params["meta"]), &meta)
+				return meta, err
+			}
+			return meta, nil
+		},
 		Layout: func(_ context.Context, r Request) ([]Placement, error) {
+			if r.Params["notFound"] == "true" {
+				return nil, fmt.Errorf("conformance: %w", ErrNotFound)
+			}
 			var mocks []mockPlacement
 			if err := json.Unmarshal([]byte(r.Params["placements"]), &mocks); err != nil {
 				return nil, err

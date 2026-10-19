@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import type { ScreenRequest } from "@client-compose/protocol";
 import {
   createComposer,
+  NotFoundError,
   defineBatchLoader,
   defineScreen,
   LoadNotFoundError,
@@ -141,4 +142,27 @@ test("batch loaders never share results between requests", async () => {
 test("batch loaders need a composer context", () => {
   const loader = defineBatchLoader(async (ids: string[]) => ids);
   assert.throws(() => loader.load({} as never, "1"), /Batch loaders need the context/);
+});
+
+test("NotFoundError (or a batch loader's missing key) in a layout is a 404, and a failing meta is dropped", async () => {
+  const userById = defineBatchLoader(async (ids: string[]) => ids.map(() => undefined));
+  const request: ScreenRequest = { protocol: 0, screen: "s", client: { platform: "test", appVersion: "1" }, islands: { t: [1] } };
+  for (const layout of [() => { throw new NotFoundError(); }, async (rc: LayoutContext<null>) => [await userById.load(rc, "x")]]) {
+    const result = await createComposer([defineScreen<null>({ id: "s", layout: layout as never })])(request, null);
+    assert.equal(result.status, 404);
+    assert.equal((result.body as { error: { code: string } }).error.code, "not_found");
+  }
+
+  const metaErrors: unknown[] = [];
+  const screen = defineScreen<null>({
+    id: "s",
+    meta: () => {
+      throw new Error("meta broke");
+    },
+    layout: () => [{ key: "k", island: [{ type: "t", version: 1, resolve: () => ({ ok: true }) }] }],
+  });
+  const result = await createComposer([screen], { onMetaError: (_, e) => metaErrors.push(e) })(request, null);
+  assert.equal(result.status, 200);
+  assert.equal("meta" in result.body, false);
+  assert.equal(metaErrors.length, 1);
 });
