@@ -1,5 +1,17 @@
 # @client-compose/react
 
+## 0.4.0
+
+### Minor Changes
+
+- [`8bd6c78`](https://github.com/client-compose/client-compose/commit/8bd6c78c377b4f5dd048d784145475adfcdb2b5d) Thanks [@LewisYearsley](https://github.com/LewisYearsley)! - `useAction` performs actions (spec §5) and applies their effects: invalidated screens shown with `useScreen` / `ComposedScreen` reload and their cached responses are dropped, and the new `onInvalidate` / `onNavigate` config callbacks let apps refresh Server Components and route. `performAction` in the config sends action requests another way (e.g. through a Next.js Server Action).
+
+### Patch Changes
+
+- Updated dependencies [[`8bd6c78`](https://github.com/client-compose/client-compose/commit/8bd6c78c377b4f5dd048d784145475adfcdb2b5d), [`8bd6c78`](https://github.com/client-compose/client-compose/commit/8bd6c78c377b4f5dd048d784145475adfcdb2b5d)]:
+  - @client-compose/client@0.3.0
+  - @client-compose/protocol@0.3.0
+
 ## 0.3.0
 
 ### Minor Changes

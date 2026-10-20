@@ -1,5 +1,11 @@
 # @client-compose/codegen
 
+## 0.3.0
+
+### Minor Changes
+
+- [`8bd6c78`](https://github.com/client-compose/client-compose/commit/8bd6c78c377b4f5dd048d784145475adfcdb2b5d) Thanks [@LewisYearsley](https://github.com/LewisYearsley)! - Action manifests (spec §5): set `actions` in the config to generate input, result and declared-error types for Go and TypeScript, and `compat` checks action changes too. `manifests` is now optional, for configs that only generate actions.
+
 ## 0.2.0
 
 ### Minor Changes

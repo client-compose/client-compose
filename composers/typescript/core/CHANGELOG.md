@@ -1,5 +1,16 @@
 # @client-compose/composer
 
+## 0.4.0
+
+### Minor Changes
+
+- [`8bd6c78`](https://github.com/client-compose/client-compose/commit/8bd6c78c377b4f5dd048d784145475adfcdb2b5d) Thanks [@LewisYearsley](https://github.com/LewisYearsley)! - Actions (spec §5): `defineAction`, `createActions` and `performHttp`. Input is validated against the action's manifest, declared errors are typed outcomes, and effects tell clients which screens changed. `UnauthenticatedError` and `ForbiddenError` respond 401 / 403 from layouts and actions. `conformanceActions()` for conformance servers.
+
+### Patch Changes
+
+- Updated dependencies [[`8bd6c78`](https://github.com/client-compose/client-compose/commit/8bd6c78c377b4f5dd048d784145475adfcdb2b5d)]:
+  - @client-compose/protocol@0.3.0
+
 ## 0.3.0
 
 ### Minor Changes

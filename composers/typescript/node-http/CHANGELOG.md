@@ -1,5 +1,16 @@
 # @client-compose/node-http
 
+## 0.2.0
+
+### Minor Changes
+
+- [`8bd6c78`](https://github.com/client-compose/client-compose/commit/8bd6c78c377b4f5dd048d784145475adfcdb2b5d) Thanks [@LewisYearsley](https://github.com/LewisYearsley)! - `createRequestListener(compose, context, { actions })` also serves `POST /actions/{action}`.
+
+### Patch Changes
+
+- Updated dependencies [[`8bd6c78`](https://github.com/client-compose/client-compose/commit/8bd6c78c377b4f5dd048d784145475adfcdb2b5d)]:
+  - @client-compose/composer@0.4.0
+
 ## 0.1.3
 
 ### Patch Changes

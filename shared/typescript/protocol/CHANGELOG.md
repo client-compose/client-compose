@@ -1,5 +1,11 @@
 # @client-compose/protocol
 
+## 0.3.0
+
+### Minor Changes
+
+- [`8bd6c78`](https://github.com/client-compose/client-compose/commit/8bd6c78c377b4f5dd048d784145475adfcdb2b5d) Thanks [@LewisYearsley](https://github.com/LewisYearsley)! - Actions (spec §5): wire types for action requests and responses (`ActionRequest`, `ActionResponse`, `ActionEffects`, `ScreenRef`, `DeclaredError`), the generated `ActionDescriptor`, and `screenRefMatches`.
+
 ## 0.2.0
 
 ### Minor Changes
