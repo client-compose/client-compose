@@ -18,26 +18,59 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { plan, type PlannedIsland } from "@client-compose/client";
-import type { ScreenResponse } from "@client-compose/protocol";
+import { buildActionRequest, fetchAction, newIdempotencyKey, plan, type PlannedIsland } from "@client-compose/client";
+import {
+  screenRefMatches,
+  type ActionDescriptor,
+  type ActionEffects,
+  type ActionResponse,
+  type DeclaredError,
+  type ScreenResponse,
+} from "@client-compose/protocol";
 import type { ClientComposeConfig } from "./config.ts";
 import { loadScreen } from "./load.ts";
 
 interface CacheEntry {
+  screen: string;
+  params: Record<string, string>;
   response: ScreenResponse;
   expiresAt: number;
+}
+
+/** A screen currently shown with useScreen, so that actions can reload it. */
+interface MountedScreen {
+  screen: string;
+  params: Record<string, string>;
+  reload: () => void;
 }
 
 interface ContextValue {
   config: ClientComposeConfig;
   cache: Map<string, CacheEntry>;
+  mounted: Set<MountedScreen>;
+  applyEffects: (effects: ActionEffects) => void;
 }
 
 const ClientComposeContext = createContext<ContextValue | null>(null);
 
 export function ClientComposeProvider(props: { config: ClientComposeConfig; children?: ReactNode }): ReactNode {
   const cache = useMemo(() => new Map<string, CacheEntry>(), []);
-  const value = useMemo(() => ({ config: props.config, cache }), [props.config, cache]);
+  const mounted = useMemo(() => new Set<MountedScreen>(), []);
+  const value = useMemo((): ContextValue => {
+    const config = props.config;
+    const applyEffects = (effects: ActionEffects) => {
+      const refs = effects.invalidate ?? [];
+      if (refs.length) {
+        const matches = (screen: string, params: Record<string, string>) =>
+          refs.some((ref) => screenRefMatches(ref, screen, params));
+        for (const [key, entry] of cache) if (matches(entry.screen, entry.params)) cache.delete(key);
+        for (const m of mounted) if (matches(m.screen, m.params)) m.reload();
+        config.onInvalidate?.(refs);
+      }
+      if (effects.navigate) config.onNavigate?.(effects.navigate);
+    };
+    return { config, cache, mounted, applyEffects };
+  }, [props.config, cache, mounted]);
   return createElement(ClientComposeContext.Provider, { value }, props.children);
 }
 
@@ -83,12 +116,14 @@ export function useScreen(
   params: Record<string, string> = {},
   options: UseScreenOptions = {},
 ): ScreenState {
-  const { config, cache } = useClientCompose();
+  const { config, cache, mounted } = useClientCompose();
   const key = `${screen}?${stableKey(params)}`;
   const latestParams = useRef(params);
   latestParams.current = params;
   const force = useRef(false);
   const [reloads, setReloads] = useState(0);
+  const store = (response: ScreenResponse) =>
+    cache.set(key, { screen, params: latestParams.current, response, expiresAt: Date.now() + response.cache!.maxAge * 1000 });
 
   // The latest server-provided response, and the screen key it was provided for.
   const [seed, setSeed] = useState(() => ({
@@ -116,9 +151,7 @@ export function useScreen(
     if (!forced && seed.key === key && seed.response) {
       // Use the server's response without a request (StrictMode remounts land here too).
       const response = seed.response;
-      if (response.cache && response.cache.maxAge > 0 && config.cache !== false) {
-        cache.set(key, { response, expiresAt: Date.now() + response.cache.maxAge * 1000 });
-      }
+      if (response.cache && response.cache.maxAge > 0 && config.cache !== false) store(response);
       setState((prev) => (prev.key === key && prev.response === response ? prev : { key, response, refreshing: false }));
       return;
     }
@@ -134,9 +167,7 @@ export function useScreen(
     (async () => {
       try {
         const response = await loadScreen(config, screen, latestParams.current, { signal: controller.signal });
-        if (response.cache && response.cache.maxAge > 0) {
-          cache.set(key, { response, expiresAt: Date.now() + response.cache.maxAge * 1000 });
-        }
+        if (response.cache && response.cache.maxAge > 0) store(response);
         if (!controller.signal.aborted) setState({ key, response, refreshing: false });
       } catch (error) {
         if (controller.signal.aborted) return;
@@ -167,6 +198,17 @@ export function useScreen(
     force.current = true;
     setReloads((n) => n + 1);
   }, []);
+
+  // Let actions that change this screen reload it (spec §5.3).
+  useEffect(() => {
+    const entry: MountedScreen = { screen, params: latestParams.current, reload };
+    mounted.add(entry);
+    return () => {
+      mounted.delete(entry);
+    };
+    // `key` covers screen and params.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, mounted, reload]);
 
   return {
     status: response ? "ready" : current.error !== undefined ? "error" : "loading",
@@ -252,4 +294,68 @@ export function ComposedScreen(props: ComposedScreenProps): ReactNode {
 
 function stableKey(params: Record<string, string>): string {
   return JSON.stringify(Object.keys(params).sort().map((k) => [k, params[k]]));
+}
+
+/** How an action call ended: its result, one of its declared errors, or a failed call. */
+export type ActionResult<R, E extends DeclaredError> =
+  | ActionResponse<R, E>
+  | {
+      status: "failed";
+      /** e.g. an `ActionFetchError` (`invalid_input`, `unauthenticated`, `action_failed`...) or a network error. */
+      error: unknown;
+    };
+
+export interface ActionState<I, R, E extends DeclaredError> {
+  /**
+   * Perform the action. Never rejects: resolves with the result, a declared error, or
+   * `{ status: "failed" }`. On success the action's effects are applied first: matching screens
+   * reload, and `onInvalidate` / `onNavigate` are called.
+   *
+   * Each call uses a new idempotency key unless you pass one (do, when retrying the same intent).
+   */
+  run: (input: I, options?: { idempotencyKey?: string }) => Promise<ActionResult<R, E>>;
+  /** A call is in flight. */
+  pending: boolean;
+  /** How the last call ended. */
+  last?: ActionResult<R, E>;
+  /** Forget `last`, e.g. when the user edits a form after an error. */
+  reset: () => void;
+}
+
+/**
+ * Perform an action from a component, with its generated descriptor:
+ *
+ *     const follow = useAction(FollowUserV1);
+ *     const res = await follow.run({ userId });
+ *     if (res.status === "error" && res.error.code === "blocked") ...
+ */
+export function useAction<I, R, E extends DeclaredError>(action: ActionDescriptor<I, R, E>): ActionState<I, R, E> {
+  const { config, applyEffects } = useClientCompose();
+  const [inFlight, setInFlight] = useState(0);
+  const [last, setLast] = useState<ActionResult<R, E> | undefined>(undefined);
+
+  const run = useCallback(
+    async (input: I, options: { idempotencyKey?: string } = {}): Promise<ActionResult<R, E>> => {
+      setInFlight((n) => n + 1);
+      let outcome: ActionResult<R, E>;
+      try {
+        const request = buildActionRequest(action, input, config.client, options.idempotencyKey ?? newIdempotencyKey());
+        const response = config.performAction
+          ? await config.performAction(request)
+          : await fetchAction(config.baseUrl, request, { headers: await config.headers?.() }, config.fetch);
+        outcome = response as ActionResponse<R, E>;
+        if (outcome.status === "ok" && outcome.effects) applyEffects(outcome.effects);
+      } catch (error) {
+        outcome = { status: "failed", error };
+      } finally {
+        setInFlight((n) => n - 1);
+      }
+      setLast(outcome);
+      return outcome;
+    },
+    [action, config, applyEffects],
+  );
+
+  const reset = useCallback(() => setLast(undefined), []);
+  return { run, pending: inFlight > 0, last, reset };
 }

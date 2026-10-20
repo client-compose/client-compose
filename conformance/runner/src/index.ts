@@ -17,6 +17,17 @@ export interface ComposerCase {
   expect: { status: number; body?: unknown };
 }
 
+export interface ActionCase {
+  name: string;
+  /** The conformance action's input. Default: { "outcome": "ok", "echo": "hi" }. */
+  input?: unknown;
+  /** Overrides for the request body (protocol, action, version, client, idempotencyKey...). */
+  request?: Record<string, unknown>;
+  path?: string;
+  rawBody?: string;
+  expect: { status: number; body?: unknown };
+}
+
 export interface ClientCase {
   name: string;
   typedOnly?: boolean;
@@ -34,18 +45,25 @@ export interface CaseResult {
   message?: string;
 }
 
+const SUITES = {
+  composer: "composer/cases.json",
+  actions: "composer/action-cases.json",
+  client: "client/cases.json",
+} as const;
+
 /**
  * The published package carries the cases in dist/cases/ (copied at build time); in this repo
- * they're read from conformance/{composer,client}/cases.json.
+ * they're read from conformance/.
  */
-function load<T>(suite: "composer" | "client"): T {
+function load<T>(suite: keyof typeof SUITES): T {
   const bundled = new URL(`./cases/${suite}.json`, import.meta.url);
-  const inRepo = new URL(`../../${suite}/cases.json`, import.meta.url);
+  const inRepo = new URL(`../../${SUITES[suite]}`, import.meta.url);
   const file = existsSync(bundled) ? bundled : inRepo;
   return (JSON.parse(readFileSync(file, "utf8")) as { cases: T }).cases;
 }
 
 export const composerCases = (): ComposerCase[] => load("composer");
+export const actionCases = (): ActionCase[] => load("actions");
 export const clientCases = (): ClientCase[] => load("client");
 
 export async function runComposerCase(baseUrl: string, c: ComposerCase): Promise<CaseResult> {
@@ -58,12 +76,25 @@ export async function runComposerCase(baseUrl: string, c: ComposerCase): Promise
     ...c.request,
   };
   const path = c.path ?? String(request.screen);
+  return post(`${baseUrl.replace(/\/$/, "")}/screens/${encodeURIComponent(path)}`, c.rawBody ?? JSON.stringify(request), c);
+}
+
+export async function runActionCase(baseUrl: string, c: ActionCase): Promise<CaseResult> {
+  const request = {
+    protocol: 0,
+    action: "conformance",
+    version: 1,
+    input: c.input ?? { outcome: "ok", echo: "hi" },
+    client: { platform: "conformance", appVersion: "0.0.0" },
+    ...c.request,
+  };
+  const path = c.path ?? String(request.action);
+  return post(`${baseUrl.replace(/\/$/, "")}/actions/${encodeURIComponent(path)}`, c.rawBody ?? JSON.stringify(request), c);
+}
+
+async function post(url: string, body: string, c: { name: string; expect: { status: number; body?: unknown } }): Promise<CaseResult> {
   try {
-    const res = await fetch(`${baseUrl.replace(/\/$/, "")}/screens/${encodeURIComponent(path)}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: c.rawBody ?? JSON.stringify(request),
-    });
+    const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body });
     const text = await res.text();
     if (res.status !== c.expect.status) {
       return { name: c.name, passed: false, message: `expected status ${c.expect.status}, got ${res.status}: ${text}` };
@@ -84,17 +115,21 @@ export async function runComposerCase(baseUrl: string, c: ComposerCase): Promise
   }
 }
 
+/** Runs the screen cases, then the action cases (spec §8.1). */
 export async function runComposerConformance(baseUrl: string): Promise<CaseResult[]> {
   const results: CaseResult[] = [];
   for (const c of composerCases()) results.push(await runComposerCase(baseUrl, c));
+  for (const c of actionCases()) results.push(await runActionCase(baseUrl, { ...c, name: `action: ${c.name}` }));
   return results;
 }
 
 /**
  * Objects in `expected` are subsets of `actual`; arrays must match in length and order;
- * everything else must be strictly equal. Returns a description of the first mismatch.
+ * everything else must be strictly equal, except `"$absent"`, which requires the value to be
+ * missing. Returns a description of the first mismatch.
  */
 export function subsetMismatch(expected: unknown, actual: unknown, path: string): string | undefined {
+  if (expected === "$absent") return actual === undefined ? undefined : `${path}: expected no value, got ${JSON.stringify(actual)}`;
   if (Array.isArray(expected)) {
     if (!Array.isArray(actual)) return `${path}: expected array, got ${JSON.stringify(actual)}`;
     if (expected.length !== actual.length) {

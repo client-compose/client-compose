@@ -1,0 +1,36 @@
+{
+  "action": "rename-thing",
+  "version": 1,
+  "description": "Renames a thing.",
+  "input": {
+    "type": "object",
+    "required": ["thingId", "name"],
+    "properties": {
+      "thingId": { "type": "string" },
+      "name": { "type": "string", "description": "The new name." },
+      "visibility": { "type": "string", "enum": ["public", "private"] }
+    }
+  },
+  "result": {
+    "type": "object",
+    "required": ["thing"],
+    "properties": {
+      "thing": {
+        "type": "object",
+        "required": ["id", "name"],
+        "properties": { "id": { "type": "string" }, "name": { "type": "string" } }
+      }
+    }
+  },
+  "errors": {
+    "name_taken": {
+      "description": "Another thing already has that name.",
+      "details": {
+        "type": "object",
+        "required": ["suggestions"],
+        "properties": { "suggestions": { "type": "array", "items": { "type": "string" } } }
+      }
+    },
+    "locked": { "description": "The thing can't be renamed right now." }
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "action": "conformance",
+  "version": 2,
+  "description": "Test-only action for the composer conformance suite (spec §8.1). Never serve it in production.",
+  "input": {
+    "type": "object",
+    "required": ["outcome", "echo"],
+    "properties": {
+      "outcome": {
+        "type": "string",
+        "enum": ["ok", "rejected", "unavailable", "undeclared", "fail", "not_found", "unauthenticated", "forbidden"]
+      },
+      "echo": { "type": "string" },
+      "count": { "type": "integer" },
+      "effects": {
+        "type": "object",
+        "title": "MockEffects",
+        "properties": {
+          "invalidate": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "title": "MockScreenRef",
+              "required": ["screen"],
+              "properties": {
+                "screen": { "type": "string" },
+                "params": { "type": "object", "additionalProperties": { "type": "string" } }
+              }
+            }
+          },
+          "navigate": {
+            "type": "object",
+            "title": "MockNavigate",
+            "required": ["screen"],
+            "properties": {
+              "screen": { "type": "string" },
+              "params": { "type": "object", "additionalProperties": { "type": "string" } }
+            }
+          }
+        }
+      }
+    }
+  },
+  "result": {
+    "type": "object",
+    "required": ["echo", "version"],
+    "properties": {
+      "echo": { "type": "string" },
+      "version": { "type": "integer" },
+      "idempotencyKey": { "type": "string" }
+    }
+  },
+  "errors": {
+    "rejected": {
+      "description": "Declared error with details.",
+      "details": {
+        "type": "object",
+        "required": ["echo"],
+        "properties": { "echo": { "type": "string" } }
+      }
+    },
+    "unavailable": { "description": "Declared error without details." }
+  }
+}

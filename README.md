@@ -26,6 +26,10 @@ schema ends up as a second, worse UI framework. Client Compose sits in between:
 You can move, add, remove, A/B test, or re-source islands without shipping an app
 update, as long as the app already has a renderer for that island.
 
+Changes go the other way through **actions** (`POST /actions/follow-user`): typed calls described
+by manifests like islands, so every platform gets generated input, result and error types. An
+action's result says which screens it changed, and the client bindings reload them.
+
 **Start with [`examples/profile`](examples/profile)**: one Go composer serving native iOS (SwiftUI),
 native Android (Compose), React web, Next.js (Server Components) and React Native apps.
 
@@ -93,5 +97,8 @@ Releases are managed with Changesets; see [RELEASING.md](RELEASING.md).
 - [ ] Jetpack Compose binding (`ComposedScreen`) and Kotlin Multiplatform targets
 - [x] React / React Native binding ([clients/typescript/react](clients/typescript/react))
 - [x] TypeScript packages ready for npm (see [RELEASING.md](RELEASING.md))
+- [x] Actions: typed mutations with declared errors and screen invalidation (spec §5), in the Go and
+      TypeScript composers, the TypeScript client and the React binding
+- [ ] Actions in the Swift and Kotlin clients and codegen targets
 - [ ] More composer adapters: chi/gin/echo (Go), Express/Fastify/Hono/Lambda (TS)
 - [ ] v1 candidates in `spec/PROTOCOL.md` §7 (streaming, single-island refresh)

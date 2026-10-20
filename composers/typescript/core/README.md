@@ -42,6 +42,7 @@ export const compose = createComposer([profile], {
 
 Throw `NotFoundError` from a layout when what the params refer to doesn't exist (a batch loader's
 missing key counts too); the screen responds 404 `not_found` and clients show their not-found UI.
+`UnauthenticatedError` and `ForbiddenError` respond 401 and 403.
 Add an optional `meta` function to describe the screen as a whole (page title, description, sharing
 image); it runs alongside the islands and shares their `rc.load`s:
 
@@ -113,6 +114,37 @@ Rules of thumb:
 - A failed load fails every island that awaited it (each as its own island error); it isn't retried
   within the request.
 
+## Actions
+
+Actions (spec §5) change things. Define each version with its generated descriptor. Return a
+result (and optionally the screens it changed) or one of the declared errors:
+
+```ts
+import { createActions, defineAction, UnauthenticatedError } from "@client-compose/composer";
+import { FollowUserV1 } from "./actions.generated"; // from @client-compose/codegen
+
+const follow = defineAction<FollowUserV1Input, FollowUserV1Result, FollowUserV1Error, Ctx>(
+  FollowUserV1,
+  async ({ userId }, { ctx, idempotencyKey }) => {
+    if (!ctx.user) throw new UnauthenticatedError(); // 401
+    if (await ctx.blocks.has(userId, ctx.user)) return { error: { code: "blocked" } }; // typed
+    const followers = await ctx.follows.add(ctx.user, userId, idempotencyKey);
+    return { result: { followers }, effects: { invalidate: [{ screen: "profile", params: { userId } }] } };
+  },
+);
+
+export const perform = createActions([follow], {
+  onActionError: (action, version, error) => logger.error({ action, version, error }, "action failed"),
+});
+```
+
+- Input is validated against the manifest first (400 `invalid_input`). Null optional properties
+  are removed, so handlers see what their types say.
+- A thrown error (other than `NotFoundError`, `UnauthenticatedError` or `ForbiddenError`), or an
+  error code the action doesn't declare, is a failure: 500 `action_failed`, reported to
+  `onActionError`.
+- `load` and batch loaders work as in resolvers, scoped to the action request.
+
 ## Serving it
 
 Use an adapter such as [`@client-compose/node-http`](https://www.npmjs.com/package/@client-compose/node-http),
@@ -120,18 +152,23 @@ or write one for your framework: route `POST /screens/:screen`, read the raw bod
 `composeHttp`, which parses and validates the request and returns the protocol's status codes.
 
 ```ts
-import { composeHttp } from "@client-compose/composer";
+import { composeHttp, performHttp } from "@client-compose/composer";
 
 app.post("/screens/:screen", async (req, res) => {
   const result = await composeHttp(compose, req.params.screen, await readBody(req), { users, posts });
+  res.status(result.status).json(result.body);
+});
+
+app.post("/actions/:action", async (req, res) => {
+  const result = await performHttp(perform, req.params.action, await readBody(req), { users, posts });
   res.status(result.status).json(result.body);
 });
 ```
 
 ## Conformance
 
-`conformanceScreen()` is the test-only screen used by the shared conformance suite; register it
-only in a test server. See [`@client-compose/conformance`](https://www.npmjs.com/package/@client-compose/conformance).
+`conformanceScreen()` and `conformanceActions()` are the test-only screen and actions used by the
+shared conformance suite; register them only in a test server. See [`@client-compose/conformance`](https://www.npmjs.com/package/@client-compose/conformance).
 
 ## Links
 

@@ -1,0 +1,564 @@
+{
+  "$comment": "Action conformance cases (spec §8.1). The runner POSTs to {base}/actions/{path ?? request.action} with the `conformance` action, version 1, input `input` (default {outcome: ok, echo: hi}), merged with any `request` overrides; `rawBody` replaces the body entirely. Expected bodies are subset matches; arrays must match in length and order, and \"$absent\" requires a value to be missing.",
+  "cases": [
+    {
+      "name": "performs an action and returns its result",
+      "expect": {
+        "status": 200,
+        "body": {
+          "protocol": 0,
+          "action": "conformance",
+          "version": 1,
+          "status": "ok",
+          "result": {
+            "echo": "hi",
+            "version": 1,
+            "idempotencyKey": "$absent"
+          },
+          "effects": "$absent",
+          "error": "$absent"
+        }
+      }
+    },
+    {
+      "name": "performs the version the client asks for",
+      "request": {
+        "version": 2
+      },
+      "expect": {
+        "status": 200,
+        "body": {
+          "version": 2,
+          "status": "ok",
+          "result": {
+            "version": 2
+          }
+        }
+      }
+    },
+    {
+      "name": "passes the idempotency key to the action",
+      "request": {
+        "idempotencyKey": "k-123"
+      },
+      "expect": {
+        "status": 200,
+        "body": {
+          "status": "ok",
+          "result": {
+            "idempotencyKey": "k-123"
+          }
+        }
+      }
+    },
+    {
+      "name": "returns the action's effects",
+      "input": {
+        "outcome": "ok",
+        "echo": "hi",
+        "effects": {
+          "invalidate": [
+            {
+              "screen": "feed"
+            },
+            {
+              "screen": "profile",
+              "params": {
+                "userId": "u1"
+              }
+            }
+          ],
+          "navigate": {
+            "screen": "profile",
+            "params": {
+              "userId": "u1"
+            }
+          }
+        }
+      },
+      "expect": {
+        "status": 200,
+        "body": {
+          "status": "ok",
+          "effects": {
+            "invalidate": [
+              {
+                "screen": "feed",
+                "params": "$absent"
+              },
+              {
+                "screen": "profile",
+                "params": {
+                  "userId": "u1"
+                }
+              }
+            ],
+            "navigate": {
+              "screen": "profile",
+              "params": {
+                "userId": "u1"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "omits empty effects",
+      "input": {
+        "outcome": "ok",
+        "echo": "hi",
+        "effects": {
+          "invalidate": []
+        }
+      },
+      "expect": {
+        "status": 200,
+        "body": {
+          "status": "ok",
+          "effects": "$absent"
+        }
+      }
+    },
+    {
+      "name": "returns a declared error with details",
+      "input": {
+        "outcome": "rejected",
+        "echo": "hi"
+      },
+      "expect": {
+        "status": 200,
+        "body": {
+          "protocol": 0,
+          "action": "conformance",
+          "version": 1,
+          "status": "error",
+          "error": {
+            "code": "rejected",
+            "details": {
+              "echo": "hi"
+            }
+          },
+          "result": "$absent",
+          "effects": "$absent"
+        }
+      }
+    },
+    {
+      "name": "returns a declared error without details",
+      "input": {
+        "outcome": "unavailable",
+        "echo": "hi"
+      },
+      "expect": {
+        "status": 200,
+        "body": {
+          "status": "error",
+          "error": {
+            "code": "unavailable",
+            "details": "$absent"
+          }
+        }
+      }
+    },
+    {
+      "name": "treats an undeclared error code as a failure",
+      "input": {
+        "outcome": "undeclared",
+        "echo": "hi"
+      },
+      "expect": {
+        "status": 500,
+        "body": {
+          "protocol": 0,
+          "error": {
+            "code": "action_failed"
+          }
+        }
+      }
+    },
+    {
+      "name": "responds action_failed when the action fails",
+      "input": {
+        "outcome": "fail",
+        "echo": "hi"
+      },
+      "expect": {
+        "status": 500,
+        "body": {
+          "protocol": 0,
+          "error": {
+            "code": "action_failed"
+          }
+        }
+      }
+    },
+    {
+      "name": "responds not_found",
+      "input": {
+        "outcome": "not_found",
+        "echo": "hi"
+      },
+      "expect": {
+        "status": 404,
+        "body": {
+          "protocol": 0,
+          "error": {
+            "code": "not_found"
+          }
+        }
+      }
+    },
+    {
+      "name": "responds unauthenticated",
+      "input": {
+        "outcome": "unauthenticated",
+        "echo": "hi"
+      },
+      "expect": {
+        "status": 401,
+        "body": {
+          "protocol": 0,
+          "error": {
+            "code": "unauthenticated"
+          }
+        }
+      }
+    },
+    {
+      "name": "responds forbidden",
+      "input": {
+        "outcome": "forbidden",
+        "echo": "hi"
+      },
+      "expect": {
+        "status": 403,
+        "body": {
+          "protocol": 0,
+          "error": {
+            "code": "forbidden"
+          }
+        }
+      }
+    },
+    {
+      "name": "rejects input missing a required property",
+      "input": {
+        "outcome": "ok"
+      },
+      "expect": {
+        "status": 400,
+        "body": {
+          "protocol": 0,
+          "error": {
+            "code": "invalid_input"
+          }
+        }
+      }
+    },
+    {
+      "name": "rejects a null required property",
+      "input": {
+        "outcome": "ok",
+        "echo": null
+      },
+      "expect": {
+        "status": 400,
+        "body": {
+          "protocol": 0,
+          "error": {
+            "code": "invalid_input"
+          }
+        }
+      }
+    },
+    {
+      "name": "rejects a value outside an enum",
+      "input": {
+        "outcome": "maybe",
+        "echo": "hi"
+      },
+      "expect": {
+        "status": 400,
+        "body": {
+          "protocol": 0,
+          "error": {
+            "code": "invalid_input"
+          }
+        }
+      }
+    },
+    {
+      "name": "rejects a string where an integer is expected",
+      "input": {
+        "outcome": "ok",
+        "echo": "hi",
+        "count": "3"
+      },
+      "expect": {
+        "status": 400,
+        "body": {
+          "protocol": 0,
+          "error": {
+            "code": "invalid_input"
+          }
+        }
+      }
+    },
+    {
+      "name": "rejects a fraction where an integer is expected",
+      "input": {
+        "outcome": "ok",
+        "echo": "hi",
+        "count": 3.5
+      },
+      "expect": {
+        "status": 400,
+        "body": {
+          "protocol": 0,
+          "error": {
+            "code": "invalid_input"
+          }
+        }
+      }
+    },
+    {
+      "name": "rejects an integer outside int32",
+      "input": {
+        "outcome": "ok",
+        "echo": "hi",
+        "count": 2147483648
+      },
+      "expect": {
+        "status": 400,
+        "body": {
+          "protocol": 0,
+          "error": {
+            "code": "invalid_input"
+          }
+        }
+      }
+    },
+    {
+      "name": "rejects invalid nested input",
+      "input": {
+        "outcome": "ok",
+        "echo": "hi",
+        "effects": {
+          "invalidate": [
+            {
+              "params": {}
+            }
+          ]
+        }
+      },
+      "expect": {
+        "status": 400,
+        "body": {
+          "protocol": 0,
+          "error": {
+            "code": "invalid_input"
+          }
+        }
+      }
+    },
+    {
+      "name": "rejects a map value of the wrong type",
+      "input": {
+        "outcome": "ok",
+        "echo": "hi",
+        "effects": {
+          "navigate": {
+            "screen": "s",
+            "params": {
+              "a": 1
+            }
+          }
+        }
+      },
+      "expect": {
+        "status": 400,
+        "body": {
+          "protocol": 0,
+          "error": {
+            "code": "invalid_input"
+          }
+        }
+      }
+    },
+    {
+      "name": "rejects input that isn't an object",
+      "input": "hi",
+      "expect": {
+        "status": 400,
+        "body": {
+          "protocol": 0,
+          "error": {
+            "code": "invalid_input"
+          }
+        }
+      }
+    },
+    {
+      "name": "ignores unknown input properties",
+      "input": {
+        "outcome": "ok",
+        "echo": "hi",
+        "later": {
+          "anything": true
+        }
+      },
+      "expect": {
+        "status": 200,
+        "body": {
+          "status": "ok",
+          "result": {
+            "echo": "hi"
+          }
+        }
+      }
+    },
+    {
+      "name": "treats a null optional property as absent",
+      "input": {
+        "outcome": "ok",
+        "echo": "hi",
+        "count": null,
+        "effects": null
+      },
+      "expect": {
+        "status": 200,
+        "body": {
+          "status": "ok",
+          "effects": "$absent"
+        }
+      }
+    },
+    {
+      "name": "accepts an integer at the int32 limit",
+      "input": {
+        "outcome": "ok",
+        "echo": "hi",
+        "count": 2147483647
+      },
+      "expect": {
+        "status": 200,
+        "body": {
+          "status": "ok"
+        }
+      }
+    },
+    {
+      "name": "responds unknown_action",
+      "request": {
+        "action": "no-such-action"
+      },
+      "expect": {
+        "status": 404,
+        "body": {
+          "protocol": 0,
+          "error": {
+            "code": "unknown_action"
+          }
+        }
+      }
+    },
+    {
+      "name": "responds unsupported_action_version",
+      "request": {
+        "version": 3
+      },
+      "expect": {
+        "status": 404,
+        "body": {
+          "protocol": 0,
+          "error": {
+            "code": "unsupported_action_version"
+          }
+        }
+      }
+    },
+    {
+      "name": "rejects a body whose action differs from the path",
+      "path": "other-action",
+      "expect": {
+        "status": 400,
+        "body": {
+          "protocol": 0,
+          "error": {
+            "code": "action_mismatch"
+          }
+        }
+      }
+    },
+    {
+      "name": "rejects an unsupported protocol",
+      "request": {
+        "protocol": 99
+      },
+      "expect": {
+        "status": 400,
+        "body": {
+          "protocol": 0,
+          "error": {
+            "code": "unsupported_protocol"
+          }
+        }
+      }
+    },
+    {
+      "name": "rejects a body that isn't JSON",
+      "rawBody": "{",
+      "expect": {
+        "status": 400,
+        "body": {
+          "protocol": 0,
+          "error": {
+            "code": "bad_request"
+          }
+        }
+      }
+    },
+    {
+      "name": "rejects a body without input",
+      "rawBody": "{\"protocol\":0,\"action\":\"conformance\",\"version\":1,\"client\":{\"platform\":\"conformance\",\"appVersion\":\"0.0.0\"}}",
+      "expect": {
+        "status": 400,
+        "body": {
+          "protocol": 0,
+          "error": {
+            "code": "bad_request"
+          }
+        }
+      }
+    },
+    {
+      "name": "rejects a body with null input",
+      "request": {
+        "input": null
+      },
+      "expect": {
+        "status": 400,
+        "body": {
+          "protocol": 0,
+          "error": {
+            "code": "bad_request"
+          }
+        }
+      }
+    },
+    {
+      "name": "rejects a body without a version",
+      "rawBody": "{\"protocol\":0,\"action\":\"conformance\",\"input\":{},\"client\":{\"platform\":\"conformance\",\"appVersion\":\"0.0.0\"}}",
+      "expect": {
+        "status": 400,
+        "body": {
+          "protocol": 0,
+          "error": {
+            "code": "bad_request"
+          }
+        }
+      }
+    }
+  ]
+}

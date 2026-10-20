@@ -1,9 +1,15 @@
 // Type-checks the published declaration files under both nodenext and bundler resolution.
 import type { ReactNode } from "react";
-import { buildRequest, IslandRegistry, plan, ScreenFetchError, type PlannedIsland } from "@client-compose/client";
+import { buildRequest, callAction, IslandRegistry, plan, ScreenFetchError, type PlannedIsland } from "@client-compose/client";
 import {
   composeHttp,
+  createActions,
   createComposer,
+  defineAction,
+  ForbiddenError,
+  performHttp,
+  UnauthenticatedError,
+  type PerformResult,
   defineBatchLoader,
   defineIsland,
   defineScreen,
@@ -14,12 +20,15 @@ import {
 import { composerCases, type ClientCase } from "@client-compose/conformance";
 import { generate, type CodegenConfig } from "@client-compose/codegen";
 import { createRequestListener } from "@client-compose/node-http";
-import type { IslandDescriptor, ScreenRequest } from "@client-compose/protocol";
+import type { ActionDescriptor, IslandDescriptor, ScreenRequest } from "@client-compose/protocol";
 import {
+  ActionFetchError,
   ComposedScreen,
   loadScreen,
   ReactIslandRegistry,
+  useAction,
   useScreen,
+  type ActionResult,
   type ClientComposeConfig,
   type ScreenResponse,
   type ScreenState,
@@ -64,3 +73,28 @@ export const loadingIsland = defineIsland<GreetingV1, Ctx>(GreetingV1, async (rc
   name: `${await greeting(rc, rc.params.id)} / ${await nameById.load(rc, rc.params.id)}`,
 }));
 export const notFound = (e: unknown): boolean => e instanceof LoadNotFoundError;
+
+// Actions.
+type RenameError = { code: "taken"; details: { suggestion: string } };
+const RenameV1: ActionDescriptor<{ name: string }, { id: string }, RenameError> = {
+  action: "rename",
+  version: 1,
+  errors: ["taken"],
+  input: { type: "object" },
+};
+export const renameAction = defineAction<{ name: string }, { id: string }, RenameError, Ctx>(RenameV1, async ({ name }, { ctx }) =>
+  name === "taken" ? { error: { code: "taken", details: { suggestion: await ctx.greet(name) } } } : { result: { id: name } },
+);
+export const perform = createActions<Ctx>([renameAction]);
+export const performed: Promise<PerformResult> = performHttp(perform, "rename", "{}", { greet: async (id: string) => id });
+export const listenerWithActions = createRequestListener(compose, () => ({ greet: async (id: string) => id }), { actions: perform });
+export const called = async (): Promise<string | undefined> => {
+  const res = await callAction("", RenameV1, { name: "x" }, { client: { platform: "web", appVersion: "1" } });
+  return res.status === "ok" ? res.result.id : res.error.details.suggestion;
+};
+export const useRename = (): ((name: string) => Promise<ActionResult<{ id: string }, RenameError>>) => {
+  const rename = useAction(RenameV1);
+  return (name) => rename.run({ name });
+};
+export const unauthenticated = (e: unknown): boolean => e instanceof ActionFetchError && e.code === "unauthenticated";
+export const notAllowed = () => new ForbiddenError() instanceof Error && new UnauthenticatedError() instanceof Error;

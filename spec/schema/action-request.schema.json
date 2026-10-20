@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://client-compose.dev/schema/v0/action-request.json",
+  "title": "Action request",
+  "type": "object",
+  "required": ["protocol", "action", "version", "input", "client"],
+  "properties": {
+    "protocol": { "const": 0 },
+    "action": { "type": "string" },
+    "version": { "type": "integer", "minimum": 1 },
+    "input": { "type": "object" },
+    "client": {
+      "type": "object",
+      "required": ["platform", "appVersion"],
+      "properties": {
+        "platform": { "type": "string" },
+        "appVersion": { "type": "string" },
+        "locale": { "type": "string" }
+      }
+    },
+    "idempotencyKey": { "type": "string", "minLength": 1 }
+  }
+}

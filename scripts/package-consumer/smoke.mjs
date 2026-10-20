@@ -4,8 +4,16 @@ import { once } from "node:events";
 import { createServer } from "node:http";
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
-import { buildRequest, fetchScreen, IslandRegistry, plan } from "@client-compose/client";
-import { conformanceScreen, createComposer, defineIsland, defineScreen } from "@client-compose/composer";
+import { buildRequest, callAction, fetchScreen, IslandRegistry, plan } from "@client-compose/client";
+import {
+  conformanceActions,
+  conformanceScreen,
+  createActions,
+  createComposer,
+  defineAction,
+  defineIsland,
+  defineScreen,
+} from "@client-compose/composer";
 import { clientCases, runComposerConformance } from "@client-compose/conformance";
 import { generateTypeScript, parseManifest } from "@client-compose/codegen";
 import { createRequestListener } from "@client-compose/node-http";
@@ -20,12 +28,18 @@ const screens = [
   conformanceScreen(),
   defineScreen({ id: "home", layout: () => [{ key: "hello", island: [defineIsland(greeting, () => ({ name: "Ada" }))] }] }),
 ];
-const server = createServer(createRequestListener(createComposer(screens), () => null)).listen(0, "127.0.0.1");
+const Greet = { action: "greet", version: 1, errors: [], input: { type: "object", required: ["name"], properties: { name: { type: "string" } } } };
+const actions = createActions([...conformanceActions(), defineAction(Greet, ({ name }) => ({ result: { text: `Hi ${name}` } }))]);
+const server = createServer(createRequestListener(createComposer(screens), () => null, { actions })).listen(0, "127.0.0.1");
 await once(server, "listening");
 const baseUrl = `http://127.0.0.1:${server.address().port}`;
 const results = await runComposerConformance(baseUrl);
 assert.deepEqual(results.filter((r) => !r.passed), [], "composer conformance");
-console.log(`composer conformance: ${results.length}/${results.length}`);
+console.log(`composer conformance (screens and actions): ${results.length}/${results.length}`);
+
+// Actions, through @client-compose/client.
+const greeted = await callAction(baseUrl, Greet, { name: "Ada" }, { client: { platform: "node", appVersion: "0" } });
+assert.deepEqual(greeted.result, { text: "Hi Ada" });
 
 // Client conformance fixtures, through @client-compose/client.
 const cases = clientCases().filter((c) => !c.typedOnly);

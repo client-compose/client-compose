@@ -1,14 +1,14 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, relative, resolve } from "node:path";
-import { compareIslands, loadManifestsAtRef, type CompatIssue } from "./compat.ts";
-import { loadManifests, ManifestError, type EnumDef, type Island, type ObjectDef } from "./manifest.ts";
+import { compareActions, compareIslands, loadActionManifestsAtRef, loadManifestsAtRef, type CompatIssue } from "./compat.ts";
+import { loadActionManifests, loadManifests, ManifestError, type Action, type EnumDef, type Island, type ObjectDef } from "./manifest.ts";
 import { generateGo, type GoOptions } from "./targets/go.ts";
 import { generateKotlin, type KotlinOptions } from "./targets/kotlin.ts";
 import { generateSwift, type SwiftOptions } from "./targets/swift.ts";
 import { generateTypeScript, type TypeScriptOptions } from "./targets/typescript.ts";
 
-export { loadManifests, parseManifest, ManifestError } from "./manifest.ts";
-export { compareIslands, loadManifestsAtRef, type CompatIssue } from "./compat.ts";
+export { loadActionManifests, loadManifests, parseActionManifest, parseManifest, ManifestError } from "./manifest.ts";
+export { compareActions, compareIslands, loadActionManifestsAtRef, loadManifestsAtRef, type CompatIssue } from "./compat.ts";
 export { generateGo, generateKotlin, generateSwift, generateTypeScript };
 
 type OneOrMany<T> = T | T[];
@@ -18,7 +18,10 @@ type OneOrMany<T> = T | T[];
  * e.g. to generate TypeScript into both a web app and a React Native app.
  */
 export interface CodegenConfig {
-  manifests: string;
+  /** Directory of island manifests. Optional when the config only generates actions. */
+  manifests?: string;
+  /** Directory of action manifests (spec §5). Generated for the Go and TypeScript targets. */
+  actions?: string;
   targets: {
     go?: OneOrMany<GoOptions & { out: string }>;
     swift?: OneOrMany<SwiftOptions & { out: string }>;
@@ -34,45 +37,79 @@ export interface GeneratedFile {
   contents: string;
 }
 
-function manifestsDirOf(configPath: string): { config: CodegenConfig; base: string; manifestsDir: string } {
+function manifestsDirOf(configPath: string): {
+  config: CodegenConfig;
+  base: string;
+  manifestsDir?: string;
+  actionsDir?: string;
+} {
   const config = JSON.parse(readFileSync(configPath, "utf8")) as CodegenConfig;
   const base = dirname(resolve(configPath));
-  return { config, base, manifestsDir: resolve(base, config.manifests) };
+  const dir = (d: string | undefined) => (d === undefined ? undefined : resolve(base, d));
+  if (config.manifests === undefined && config.actions === undefined) {
+    throw new ManifestError(`${configPath}: set "manifests" (islands), "actions", or both`);
+  }
+  return { config, base, manifestsDir: dir(config.manifests), actionsDir: dir(config.actions) };
 }
 
 /**
  * Compares a config's manifests with an earlier state, either a git ref (e.g. "origin/main") or a
  * directory of manifests, and reports changes that break apps without an island version bump.
  */
-export function checkCompat(configPath: string, against: { ref: string } | { dir: string }): CompatIssue[] {
-  const { manifestsDir } = manifestsDirOf(configPath);
-  const head = loadManifests(manifestsDir);
-  if ("dir" in against) return compareIslands(loadManifests(against.dir), head);
-  const base = loadManifestsAtRef(manifestsDir, against.ref);
-  return [...base.issues, ...compareIslands(base.islands, head)];
+export function checkCompat(
+  configPath: string,
+  against: { ref: string } | { dir: string; actionsDir?: string },
+): CompatIssue[] {
+  const { manifestsDir, actionsDir } = manifestsDirOf(configPath);
+  const head = manifestsDir ? loadManifests(manifestsDir) : [];
+  const headActions = actionsDir ? loadActionManifests(actionsDir) : [];
+  if ("dir" in against) {
+    const baseActions = against.actionsDir ? loadActionManifests(against.actionsDir) : [];
+    return [...compareIslands(loadManifests(against.dir), head), ...compareActions(baseActions, headActions)];
+  }
+  const issues: CompatIssue[] = [];
+  if (manifestsDir) {
+    const base = loadManifestsAtRef(manifestsDir, against.ref);
+    issues.push(...base.issues, ...compareIslands(base.islands, head));
+  }
+  if (actionsDir) {
+    const baseActions = loadActionManifestsAtRef(actionsDir, against.ref);
+    issues.push(...baseActions.issues, ...compareActions(baseActions.actions, headActions));
+  }
+  return issues;
 }
 
 export function generate(configPath: string): GeneratedFile[] {
-  const { config, base, manifestsDir } = manifestsDirOf(configPath);
-  const islands = loadManifests(manifestsDir);
-  checkFlatNames(islands);
+  const { config, base, manifestsDir, actionsDir } = manifestsDirOf(configPath);
+  const islands = manifestsDir ? loadManifests(manifestsDir) : [];
+  const actions = actionsDir ? loadActionManifests(actionsDir) : [];
+  checkFlatNames(islands, actions);
 
   // Must not depend on the working directory, so `--check` agrees wherever codegen ran.
   const header = [
     "Code generated by client-compose codegen. DO NOT EDIT.",
-    `Manifests: ${relative(base, manifestsDir) || "."}, config: ${basename(configPath)}`,
+    [
+      manifestsDir && `Manifests: ${relative(base, manifestsDir) || "."}`,
+      actionsDir && `actions: ${relative(base, actionsDir) || "."}`,
+      `config: ${basename(configPath)}`,
+    ]
+      .filter(Boolean)
+      .join(", "),
   ].join("\n");
 
   const { go, swift, kotlin, typescript } = config.targets;
   const files: GeneratedFile[] = [];
   for (const t of list(go)) {
-    files.push({ path: resolve(base, t.out), contents: generateGo(islands, header, required(t, "package", "go")) });
+    files.push({ path: resolve(base, t.out), contents: generateGo(islands, header, required(t, "package", "go"), actions) });
   }
   for (const t of list(swift)) files.push({ path: resolve(base, t.out), contents: generateSwift(islands, header, t) });
   for (const t of list(kotlin)) {
     files.push({ path: resolve(base, t.out), contents: generateKotlin(islands, header, required(t, "package", "kotlin")) });
   }
-  for (const t of list(typescript)) files.push({ path: resolve(base, t.out), contents: generateTypeScript(islands, header, t) });
+  // Swift and Kotlin get island types only, for now: actions are generated for Go and TypeScript.
+  for (const t of list(typescript)) {
+    files.push({ path: resolve(base, t.out), contents: generateTypeScript(islands, header, t, actions) });
+  }
   if (files.length === 0) throw new ManifestError(`${configPath}: no targets configured`);
   return files;
 }
@@ -95,7 +132,7 @@ function required<T extends object>(opts: T, key: keyof T & string, target: stri
 }
 
 /** Go and TypeScript put every type in one namespace, so nested names must not collide. */
-function checkFlatNames(islands: Island[]): void {
+function checkFlatNames(islands: Island[], actions: Action[]): void {
   const seen = new Map<string, string>();
   const visit = (def: ObjectDef | EnumDef, owner: string) => {
     const name = def.path.join("");
@@ -106,4 +143,15 @@ function checkFlatNames(islands: Island[]): void {
     if (def.kind === "object") for (const child of def.children) visit(child, owner);
   };
   for (const island of islands) visit(island.props, `${island.type}@${island.version}`);
+  for (const action of actions) {
+    const owner = `action ${action.action}@${action.version}`;
+    // The TypeScript descriptor and error union are named after the action itself.
+    for (const name of [action.input.path.slice(0, -1).join(""), `${action.input.path.slice(0, -1).join("")}Error`]) {
+      if (seen.has(name)) throw new ManifestError(`type name ${name} is generated by both ${seen.get(name)} and ${owner}`);
+      seen.set(name, owner);
+    }
+    visit(action.input, owner);
+    visit(action.result, owner);
+    for (const e of action.errors) visit(e.details ?? { kind: "object", path: e.path, fields: [], children: [] }, owner);
+  }
 }

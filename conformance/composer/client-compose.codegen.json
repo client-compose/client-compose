@@ -1,0 +1,10 @@
+{
+  "actions": "actions",
+  "targets": {
+    "go": { "out": "../../composers/go/core/internal/conformanceaction/actions_gen.go", "package": "conformanceaction" },
+    "typescript": {
+      "out": "../../composers/typescript/core/src/conformance-actions.generated.ts",
+      "protocolImport": "@client-compose/protocol"
+    }
+  }
+}

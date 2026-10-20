@@ -12,13 +12,25 @@ import {
   type ScreenResponse,
 } from "@client-compose/protocol";
 
-import { attachScope, NotFoundError, RequestScope, type LoadContext } from "./loading.ts";
+import { attachScope, ForbiddenError, NotFoundError, RequestScope, UnauthenticatedError, type LoadContext } from "./loading.ts";
 
-export { conformanceScreen } from "./conformance.ts";
+export { conformanceActions, conformanceScreen } from "./conformance.ts";
+export {
+  createActions,
+  defineAction,
+  performHttp,
+  type ActionContext,
+  type ActionHandler,
+  type ActionOutcome,
+  type ActionsOptions,
+  type PerformResult,
+} from "./actions.ts";
 export {
   defineBatchLoader,
+  ForbiddenError,
   LoadNotFoundError,
   NotFoundError,
+  UnauthenticatedError,
   type BatchLoader,
   type BatchLoaderOptions,
   type LoadContext,
@@ -82,7 +94,8 @@ export interface ScreenDefinition<Ctx> {
   id: string;
   /**
    * Decide which islands appear. Can branch on client, params, flags, experiments. Throw
-   * `NotFoundError` when what the params refer to doesn't exist.
+   * `NotFoundError` when what the params refer to doesn't exist, and `UnauthenticatedError` /
+   * `ForbiddenError` when the user must sign in / may not see it.
    */
   layout: (rc: LayoutContext<Ctx>) => Placement<Ctx>[] | Promise<Placement<Ctx>[]>;
   /**
@@ -99,12 +112,12 @@ export function defineScreen<Ctx>(screen: ScreenDefinition<Ctx>): ScreenDefiniti
 
 export type ComposeResult =
   | { status: 200; body: ScreenResponse }
-  | { status: 400 | 404 | 500 | 502; body: ScreenErrorResponse };
+  | { status: 400 | 401 | 403 | 404 | 500 | 502; body: ScreenErrorResponse };
 
 export interface ComposerOptions {
   defaultTimeoutMs?: number;
   onIslandError?: (key: string, type: string, err: unknown) => void;
-  /** A screen's layout failed (other than NotFoundError). */
+  /** A screen's layout failed (other than with NotFoundError, UnauthenticatedError or ForbiddenError). */
   onLayoutError?: (screen: string, err: unknown) => void;
   /** A screen's meta function failed; the response is sent without meta. */
   onMetaError?: (screen: string, err: unknown) => void;
@@ -121,7 +134,7 @@ export function negotiate<Ctx>(
     .sort((a, b) => b.version - a.version)[0];
 }
 
-const fail = (status: 400 | 404 | 500 | 502, code: string, message?: string): ComposeResult => ({
+const fail = (status: 400 | 401 | 403 | 404 | 500 | 502, code: string, message?: string): ComposeResult => ({
   status,
   body: { protocol: PROTOCOL_VERSION, error: { code, message } },
 });
@@ -163,6 +176,8 @@ export function createComposer<Ctx>(
       placements = await screen.layout(layoutContext);
     } catch (err) {
       if (err instanceof NotFoundError) return fail(404, "not_found");
+      if (err instanceof UnauthenticatedError) return fail(401, "unauthenticated");
+      if (err instanceof ForbiddenError) return fail(403, "forbidden");
       options.onLayoutError?.(screen.id, err);
       return fail(500, "layout_failed");
     }

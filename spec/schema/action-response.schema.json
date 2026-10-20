@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://client-compose.dev/schema/v0/action-response.json",
+  "title": "Action response (200)",
+  "type": "object",
+  "required": ["protocol", "action", "version", "status"],
+  "properties": {
+    "protocol": { "const": 0 },
+    "action": { "type": "string" },
+    "version": { "type": "integer", "minimum": 1 },
+    "status": { "enum": ["ok", "error"] },
+    "result": { "type": "object" },
+    "effects": {
+      "type": "object",
+      "properties": {
+        "invalidate": { "type": "array", "items": { "$ref": "#/$defs/screenRef" } },
+        "navigate": { "$ref": "#/$defs/screenRef" }
+      }
+    },
+    "error": {
+      "type": "object",
+      "required": ["code"],
+      "properties": {
+        "code": { "type": "string" },
+        "message": { "type": "string" },
+        "details": { "type": "object" }
+      }
+    }
+  },
+  "oneOf": [
+    { "properties": { "status": { "const": "ok" } }, "required": ["result"] },
+    { "properties": { "status": { "const": "error" } }, "required": ["error"] }
+  ],
+  "$defs": {
+    "screenRef": {
+      "type": "object",
+      "required": ["screen"],
+      "properties": {
+        "screen": { "type": "string" },
+        "params": { "type": "object", "additionalProperties": { "type": "string" } }
+      }
+    }
+  }
+}

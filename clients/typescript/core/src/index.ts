@@ -3,8 +3,12 @@
 
 import {
   PROTOCOL_VERSION,
+  type ActionDescriptor,
+  type ActionRequest,
+  type ActionResponse,
   type Capabilities,
   type ClientContext,
+  type DeclaredError,
   type IslandDescriptor,
   type IslandEntry,
   type ScreenRequest,
@@ -134,4 +138,94 @@ export async function fetchScreen(
   });
   if (!res.ok) throw new ScreenFetchError(res.status, await res.text());
   return (await res.json()) as ScreenResponse;
+}
+
+// ---- Actions (spec §5) ----
+
+/**
+ * The composer didn't perform the action: a non-2xx response such as `invalid_input`,
+ * `unauthenticated` or `action_failed`. Declared errors are not thrown; they're outcomes.
+ */
+export class ActionFetchError extends Error {
+  readonly status: number;
+  readonly body: string;
+  /** The protocol error code from the response body (e.g. "unauthenticated"), if there was one. */
+  readonly code: string | undefined;
+
+  constructor(status: number, body: string) {
+    super(`Action request failed with status ${status}`);
+    this.status = status;
+    this.body = body;
+    this.code = errorCode(body);
+  }
+}
+
+/** A fresh idempotency key: one per user intent, reused when retrying it (spec §5.2). */
+export function newIdempotencyKey(): string {
+  const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
+  if (c?.randomUUID) return c.randomUUID();
+  // React Native's Hermes has no crypto.randomUUID. Uniqueness, not secrecy, is what matters here.
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (ch) => {
+    const r = (Math.random() * 16) | 0;
+    return (ch === "x" ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
+export function buildActionRequest<I>(
+  action: ActionDescriptor<I, unknown, DeclaredError>,
+  input: I,
+  client: ClientContext,
+  idempotencyKey?: string,
+): ActionRequest<I> {
+  return {
+    protocol: PROTOCOL_VERSION,
+    action: action.action,
+    version: action.version,
+    input,
+    client,
+    ...(idempotencyKey !== undefined && { idempotencyKey }),
+  };
+}
+
+/** POST an action request. Resolves with the outcome (ok or a declared error); throws ActionFetchError otherwise. */
+export async function fetchAction(
+  baseUrl: string,
+  request: ActionRequest,
+  init: RequestInit = {},
+  fetchImpl: typeof fetch = fetch,
+): Promise<ActionResponse> {
+  const res = await fetchImpl(`${baseUrl}/actions/${encodeURIComponent(request.action)}`, {
+    ...init,
+    method: "POST",
+    headers: { "content-type": "application/json", ...init.headers },
+    body: JSON.stringify(request),
+  });
+  if (!res.ok) throw new ActionFetchError(res.status, await res.text());
+  return (await res.json()) as ActionResponse;
+}
+
+export interface CallActionOptions {
+  client: ClientContext;
+  /** Default: a new key. Pass the same key again to retry the same user intent. */
+  idempotencyKey?: string;
+  init?: RequestInit;
+  fetch?: typeof fetch;
+}
+
+/**
+ * Perform an action with its generated descriptor:
+ *
+ *     const res = await callAction(baseUrl, FollowUserV1, { userId }, { client });
+ *     if (res.status === "ok") show(res.result.followers);
+ *     else if (res.error.code === "blocked") showBlocked();
+ *     else showGenericError(); // codes added after this app was built
+ */
+export async function callAction<I, R, E extends DeclaredError>(
+  baseUrl: string,
+  action: ActionDescriptor<I, R, E>,
+  input: I,
+  options: CallActionOptions,
+): Promise<ActionResponse<R, E>> {
+  const request = buildActionRequest(action, input, options.client, options.idempotencyKey ?? newIdempotencyKey());
+  return (await fetchAction(baseUrl, request, options.init, options.fetch)) as ActionResponse<R, E>;
 }

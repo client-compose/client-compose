@@ -1,5 +1,6 @@
 {
   "manifests": "islands",
+  "actions": "actions",
   "targets": {
     "go": { "out": "../golden/go/islands_gen.go", "package": "golden" },
     "swift": { "out": "../golden/swift/Islands.generated.swift" },

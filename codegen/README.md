@@ -41,6 +41,7 @@ downloaded through a browser needs `xattr -d com.apple.quarantine <file>` before
 ```json
 {
   "manifests": "islands",
+  "actions": "actions",
   "targets": {
     "go": { "out": "composer-go/islands_gen.go", "package": "main" },
     "swift": { "out": "ios/Islands.generated.swift", "access": "internal" },
@@ -49,6 +50,10 @@ downloaded through a browser needs `xattr -d com.apple.quarantine <file>` before
   }
 }
 ```
+
+`actions` is optional: a directory of action manifests (spec §5). Actions are generated for the Go
+and TypeScript targets; Swift and Kotlin get island types only, for now. A config may also have
+only `actions`.
 
 In a Go project, a `//go:generate client-compose-codegen <config>` (or `npx @client-compose/codegen <config>`) line lets `go generate` run it
 (see [`examples/profile/composer-go/main.go`](https://github.com/client-compose/client-compose/blob/main/examples/profile/composer-go/main.go)).
@@ -64,6 +69,13 @@ island type and version, so the registration can't name the wrong island:
 | Swift      | `struct … : IslandProps` with nested types                    | `registry.register(ProfileHeaderV2.self) { props, _ in … }` |
 | Kotlin     | `@Serializable data class` + `IslandDescriptor` companion     | `registry.register(ProfileHeaderV2) { props, _ -> … }`     |
 | TypeScript | `interface` + descriptor `const` with the same name           | `registry.register(ProfileHeaderV2, (props) => …)`, `defineIsland(ProfileHeaderV2, resolve)` |
+
+For action `follow-user` v1 (spec §5.1):
+
+| Stack      | Generated | Used as |
+| ---------- | --------- | ------- |
+| Go         | `FollowUserV1Input` (tied to its action, version, input schema and result type), `FollowUserV1Result`, and one error type per declared error, e.g. `FollowUserV1Blocked` | `cc.DefineAction(func(ctx, call, in FollowUserV1Input) (FollowUserV1Result, cc.Effects, error) { … })`, returning `FollowUserV1Blocked{}` as the error |
+| TypeScript | `FollowUserV1Input`, `FollowUserV1Result`, the `FollowUserV1Error` union, and the `FollowUserV1` descriptor | `defineAction(FollowUserV1, perform)` in the composer, `callAction(…, FollowUserV1, input)` or `useAction(FollowUserV1)` in apps |
 
 ## Supported schema subset
 
@@ -115,6 +127,12 @@ islands whose props don't decode (spec §4.4), so a breaking change silently hid
 
 Make breaking changes in a **new island version** (a new `profile-header.v3.json`) and keep the old
 version for apps already released.
+
+Actions follow the same rules (spec §5.1). Released apps keep sending old inputs and decoding
+results and error details, so `input`, `result` and each error's `details` follow the table above.
+Declared error codes may be added or removed, because clients treat unknown codes as generic
+failures. Giving an existing error `details`, or taking them away, is breaking. Removing an action
+version only warns: apps still calling it get `unsupported_action_version`.
 
 ### Checking it in CI
 

@@ -1,0 +1,7 @@
+{
+  "action": "ping",
+  "version": 1,
+  "description": "An action with empty input and result, and no declared errors.",
+  "input": { "type": "object" },
+  "result": { "type": "object" }
+}

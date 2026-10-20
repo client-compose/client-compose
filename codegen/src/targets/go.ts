@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { words, type EnumDef, type Island, type ObjectDef, type TypeRef } from "../manifest.ts";
+import { words, type Action, type EnumDef, type Island, type ObjectDef, type TypeRef } from "../manifest.ts";
 
 export interface GoOptions {
   package: string;
@@ -19,7 +19,7 @@ const goName = (s: string) =>
 
 const typeIdent = (path: string[]) => path.map(goName).join("");
 
-export function generateGo(islands: Island[], header: string, opts: GoOptions): string {
+export function generateGo(islands: Island[], header: string, opts: GoOptions, actions: Action[] = []): string {
   const out: string[] = [header.replace(/^/gm, "// "), "", `package ${opts.package}`];
 
   const doc = (indent: string, text?: string) => {
@@ -55,10 +55,11 @@ export function generateGo(islands: Island[], header: string, opts: GoOptions): 
     out.push(")");
   };
 
-  const emitObject = (def: ObjectDef, island?: Island) => {
+  const emitObject = (def: ObjectDef, island?: Island, intro?: string) => {
     const name = typeIdent(def.path);
     out.push("");
     if (island) out.push(`// ${name} holds the props of island ${JSON.stringify(island.type)} v${island.version}.`);
+    if (intro) out.push(`// ${name} ${intro}`);
     doc("", island?.description ?? def.description);
     out.push(`type ${name} struct${def.fields.length ? " {" : "{}"}`);
     for (const f of def.fields) {
@@ -82,7 +83,50 @@ export function generateGo(islands: Island[], header: string, opts: GoOptions): 
     for (const child of def.children) child.kind === "enum" ? emitEnum(child) : emitObject(child);
   };
 
+  const emitAction = (action: Action) => {
+    const label = `action ${JSON.stringify(action.action)} v${action.version}`;
+    const input = typeIdent(action.input.path);
+    const result = typeIdent(action.result.path);
+    emitObject({ ...action.input, children: [], description: action.description }, undefined, `is the input of ${label}.`);
+    out.push(
+      "",
+      `func (${input}) ActionName() string { return ${JSON.stringify(action.action)} }`,
+      "",
+      `func (${input}) ActionVersion() int { return ${action.version} }`,
+      "",
+      "// ActionInputSchema is the JSON Schema the composer validates requests against.",
+      `func (${input}) ActionInputSchema() string { return ${JSON.stringify(JSON.stringify(action.inputSchema))} }`,
+      "",
+      "// ActionErrorCodes lists the action's declared errors.",
+      `func (${input}) ActionErrorCodes() []string { return []string{${action.errors.map((e) => JSON.stringify(e.code)).join(", ")}} }`,
+      "",
+      `// ActionResult ties the input to its result type, ${result}.`,
+      `func (${input}) ActionResult(${result}) {}`,
+    );
+    for (const child of action.input.children) child.kind === "enum" ? emitEnum(child) : emitObject(child);
+    emitObject(action.result, undefined, `is the result of ${label}.`);
+    for (const e of action.errors) {
+      const name = typeIdent(e.path);
+      const details: ObjectDef = e.details ?? { kind: "object", path: e.path, fields: [], children: [] };
+      emitObject({ ...details, description: e.description }, undefined, `is the declared error ${JSON.stringify(e.code)} of ${label}.`);
+      out.push(
+        "",
+        `func (${name}) ActionErrorCode() string { return ${JSON.stringify(e.code)} }`,
+        "",
+        `// ActionErrorOf names the action version that declares this error.`,
+        `func (${name}) ActionErrorOf() (string, int) { return ${JSON.stringify(action.action)}, ${action.version} }`,
+        "",
+        e.details
+          ? `func (e ${name}) ActionErrorDetails() any { return e }`
+          : `func (${name}) ActionErrorDetails() any { return nil }`,
+        "",
+        `func (${name}) Error() string { return ${JSON.stringify(`${action.action} v${action.version}: ${e.code}`)} }`,
+      );
+    }
+  };
+
   for (const island of islands) emitObject(island.props, island);
+  for (const action of actions) emitAction(action);
   return gofmt(out.join("\n") + "\n");
 }
 

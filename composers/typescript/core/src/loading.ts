@@ -59,6 +59,15 @@ function scopeOf(context: LoadContext): RequestScope {
  */
 export class NotFoundError extends Error {}
 
+/**
+ * There's no signed-in user, and the screen or action needs one. Thrown from a layout or action,
+ * the composer responds 401 `unauthenticated`.
+ */
+export class UnauthenticatedError extends Error {}
+
+/** The user may not see the screen or perform the action: the composer responds 403 `forbidden`. */
+export class ForbiddenError extends Error {}
+
 /** A batch loader returned no value for a key. Thrown from a layout, it makes the screen 404. */
 export class LoadNotFoundError extends NotFoundError {
   readonly key: unknown;

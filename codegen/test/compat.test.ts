@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { checkCompat, compareIslands, parseManifest } from "../src/index.ts";
+import { checkCompat, compareActions, compareIslands, parseActionManifest, parseManifest } from "../src/index.ts";
 
 const island = (properties: object, required: string[] = [], version = 1) =>
   parseManifest({ type: "card", version, props: { type: "object", required, properties } }, "card.json");
@@ -90,21 +90,64 @@ test("compares against a git ref", () => {
     git("config", "user.email", "test@example.com");
     git("config", "user.name", "Test");
     mkdirSync(join(repo, "islands"));
+    mkdirSync(join(repo, "actions"));
     const manifest = (props: object, required: string[]) =>
       JSON.stringify({ type: "card", version: 1, props: { type: "object", required, properties: props } });
-    writeFileSync(join(repo, "client-compose.codegen.json"), JSON.stringify({ manifests: "islands", targets: {} }));
+    const actionManifest = (required: string[]) =>
+      JSON.stringify({ action: "rename", version: 1, input: obj({ name: str }, required), result: obj() });
+    writeFileSync(join(repo, "client-compose.codegen.json"), JSON.stringify({ manifests: "islands", actions: "actions", targets: {} }));
     writeFileSync(join(repo, "islands", "card.v1.json"), manifest({ title: str }, ["title"]));
+    writeFileSync(join(repo, "actions", "rename.v1.json"), actionManifest([]));
     git("add", "-A");
     git("commit", "-q", "-m", "base");
 
     writeFileSync(join(repo, "islands", "card.v1.json"), manifest({ title: str, subtitle: str }, ["title", "subtitle"]));
+    writeFileSync(join(repo, "actions", "rename.v1.json"), actionManifest(["name"]));
     const config = join(repo, "client-compose.codegen.json");
     assert.deepEqual(
-      checkCompat(config, { ref: "main" }).map((i) => i.path),
-      ["props.subtitle"],
+      checkCompat(config, { ref: "main" }).map((i) => `${i.island} ${i.path}`),
+      ["card v1 props.subtitle", "action rename v1 input.name"],
     );
     assert.throws(() => checkCompat(config, { ref: "no-such-ref" }), /can't read git ref "no-such-ref"/);
   } finally {
     rmSync(repo, { recursive: true, force: true });
   }
+});
+
+const obj = (properties: object = {}, required: string[] = []) => ({ type: "object", required, properties });
+const action = (m: Record<string, unknown> = {}, version = 1) =>
+  parseActionManifest({ action: "rename", version, input: obj(), result: obj(), ...m }, "rename.json");
+const actionIssues = (before: ReturnType<typeof action>, after: ReturnType<typeof action>) =>
+  compareActions([before], [after]).map((i) => `${i.severity} ${i.island} ${i.path}: ${i.message.split(":")[0]}`);
+
+test("actions: input, result and error details follow the island rules", () => {
+  assert.deepEqual(actionIssues(action({ input: obj({ a: str }) }), action({ input: obj({ a: str, b: str }) })), []);
+  assert.deepEqual(actionIssues(action({ input: obj({ a: str }, ["a"]) }), action({ input: obj({ a: str }) })), [
+    "breaking action rename v1 input.a: became optional",
+  ]);
+  assert.deepEqual(actionIssues(action({ result: obj({ a: str }) }), action({ result: obj({ a: { type: "integer" } }) })), [
+    "breaking action rename v1 result.a: type changed from string to integer",
+  ]);
+  const details = (properties: object, required: string[] = []) => ({ errors: { taken: { details: obj(properties, required) } } });
+  assert.deepEqual(actionIssues(action(details({ a: str })), action(details({}, []))), []);
+  assert.deepEqual(actionIssues(action(details({})), action(details({ a: str }, ["a"]))), [
+    "breaking action rename v1 errors.taken.details.a: required property added",
+  ]);
+});
+
+test("actions: error codes may come and go, but details may not appear or disappear", () => {
+  assert.deepEqual(actionIssues(action({ errors: { a: {} } }), action({ errors: { b: {} } })), []);
+  assert.deepEqual(actionIssues(action({ errors: { a: {} } }), action({ errors: { a: { details: obj() } } })), [
+    "breaking action rename v1 errors.a.details: details added",
+  ]);
+  assert.deepEqual(actionIssues(action({ errors: { a: { details: obj() } } }), action({ errors: { a: {} } })), [
+    "breaking action rename v1 errors.a.details: details removed",
+  ]);
+});
+
+test("actions: removing a version warns", () => {
+  assert.deepEqual(
+    compareActions([action()], [action({}, 2)]).map((i) => `${i.severity} ${i.island}`),
+    ["warning action rename v1"],
+  );
 });

@@ -42,6 +42,26 @@ container.replaceChildren(...islands.map((island) => island.render()));
 - **`fetchScreen`** throws `ScreenFetchError` (with `status` and `body`) for non-2xx responses, and
   accepts a custom `fetch` as its fourth argument.
 
+## Actions
+
+```ts
+import { ActionFetchError, callAction } from "@client-compose/client";
+import { FollowUserV1 } from "./actions.generated"; // from @client-compose/codegen
+
+const res = await callAction("https://api.example.com/compose", FollowUserV1, { userId }, {
+  client: { platform: "web", appVersion: "1.4.0" },
+  init: { headers: { Authorization: `Bearer ${token}` } },
+});
+if (res.status === "ok") showFollowers(res.result.followers); // and reload res.effects?.invalidate
+else if (res.error.code === "blocked") showBlocked();
+else showGenericError(); // codes added after this app was built
+```
+
+- Declared errors are outcomes (`status: "error"`), typed per action. Anything else, such as
+  `invalid_input`, `unauthenticated` or `action_failed`, throws `ActionFetchError` with `status`
+  and `code`.
+- Each call sends a new idempotency key. Pass `idempotencyKey` yourself to retry the same intent.
+
 Props aren't validated at runtime; generate types with
 [`@client-compose/codegen`](https://www.npmjs.com/package/@client-compose/codegen) to keep them in
 sync with the composer.

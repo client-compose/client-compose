@@ -63,7 +63,8 @@ type Placement struct {
 type Screen struct {
 	ID string
 	// Layout decides which islands appear. Return an error wrapping ErrNotFound when what the
-	// params refer to doesn't exist; the screen then responds 404 not_found.
+	// params refer to doesn't exist (the screen responds 404 not_found), or ErrUnauthenticated /
+	// ErrForbidden when the user must sign in / may not see it (401 / 403).
 	Layout func(ctx context.Context, r Request) ([]Placement, error)
 	// Meta optionally describes the screen as a whole. It runs alongside the islands and shares
 	// their Loads; if it fails, the response has no meta and the islands are unaffected.
@@ -83,6 +84,8 @@ type Composer struct {
 	onIslandError  func(ctx context.Context, key, typ string, err error)
 	onLayoutError  func(ctx context.Context, screen string, err error)
 	onMetaError    func(ctx context.Context, screen string, err error)
+	actions        map[string]map[int]Action
+	onActionError  func(ctx context.Context, action string, version int, err error)
 }
 
 type Option func(*Composer)
@@ -92,7 +95,8 @@ func WithDefaultTimeout(d time.Duration) Option {
 	return func(c *Composer) { c.defaultTimeout = d }
 }
 
-// WithLayoutErrorHandler is called when a screen's layout fails (other than ErrNotFound).
+// WithLayoutErrorHandler is called when a screen's layout fails (other than with ErrNotFound,
+// ErrUnauthenticated or ErrForbidden).
 func WithLayoutErrorHandler(fn func(ctx context.Context, screen string, err error)) Option {
 	return func(c *Composer) { c.onLayoutError = fn }
 }
@@ -114,7 +118,7 @@ func WithIslandErrorHandler(fn func(ctx context.Context, key, typ string, err er
 }
 
 func New(screens []Screen, opts ...Option) *Composer {
-	c := &Composer{screens: map[string]Screen{}, defaultTimeout: 2 * time.Second}
+	c := &Composer{screens: map[string]Screen{}, actions: map[string]map[int]Action{}, defaultTimeout: 2 * time.Second}
 	for _, s := range screens {
 		c.screens[s.ID] = s
 	}
@@ -163,8 +167,13 @@ func (c *Composer) Compose(ctx context.Context, req ScreenRequest) Result {
 	}
 	placements, err := screen.Layout(ctx, r)
 	if err != nil {
-		if errors.Is(err, ErrNotFound) {
+		switch {
+		case errors.Is(err, ErrNotFound):
 			return fail(http.StatusNotFound, "not_found", "")
+		case errors.Is(err, ErrUnauthenticated):
+			return fail(http.StatusUnauthorized, "unauthenticated", "")
+		case errors.Is(err, ErrForbidden):
+			return fail(http.StatusForbidden, "forbidden", "")
 		}
 		if c.onLayoutError != nil {
 			c.onLayoutError(ctx, screen.ID, err)

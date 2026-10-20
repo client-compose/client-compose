@@ -8,6 +8,8 @@ Client Compose is a small protocol for **server-composed screens made of client-
 - A **screen** is a flat, ordered list of islands.
 - A **composer** (the middle layer) decides which islands make up a screen and resolves
   their props by calling backend services.
+- An **action** is a typed call that changes something (§5). Its result can tell clients which
+  screens to reload.
 
 The protocol deliberately does **not** describe layout trees, styling, or generic UI
 primitives. If you need those, the island is too small; make a new island.
@@ -172,6 +174,9 @@ For each island the composer wants to place:
 - If the screen exists but what its params refer to doesn't (a deleted recipe, a mistyped
   id), the composer responds `404` with error code `not_found`, distinct from
   `unknown_screen`. Clients show their own not-found UI.
+- If the screen needs a signed-in user and there isn't one, the composer responds `401`
+  `unauthenticated`. If the user may not see it, it responds `403` `forbidden`. Clients
+  typically send the user to sign in or show their own "no access" UI.
 - Unknown fields in any payload MUST be ignored by both sides (forward compatibility).
 
 ### 4.4 Client rendering rules
@@ -187,14 +192,150 @@ For each island the composer wants to place:
 
 ---
 
-## 5. Interactivity & actions
+## 5. Actions
 
-Out of scope for v0 by design: interactivity is the island's own business. An island
-that needs to navigate or mutate does so with its own client code, using data passed in
-props (e.g. `profileUrl`, `userId`).
+Screens read; **actions** change things (create a post, follow a user, sign in). An action is a
+typed request/response call to the composer, described by a manifest like an island, so every
+platform gets generated input, result and error types.
 
-If a pattern emerges (e.g. most islands carry a `deeplink` prop), we will standardise a
-small `Action` value type in a later version — **not** a scripting language.
+Interactivity that doesn't change server state (expanding a card, local form state) stays the
+island's own business. The protocol never ships behaviour to clients.
+
+### 5.1 Action manifests
+
+Each action version is described by a manifest (`schema/action-manifest.schema.json`):
+
+```json
+{
+  "action": "follow-user",
+  "version": 1,
+  "description": "Follow a user.",
+  "input": {
+    "type": "object",
+    "required": ["userId"],
+    "properties": { "userId": { "type": "string" } }
+  },
+  "result": {
+    "type": "object",
+    "required": ["followers"],
+    "properties": { "followers": { "type": "integer" } }
+  },
+  "errors": {
+    "blocked": { "description": "The user has blocked the caller." },
+    "limit_reached": {
+      "description": "The caller follows too many users.",
+      "details": {
+        "type": "object",
+        "required": ["limit"],
+        "properties": { "limit": { "type": "integer" } }
+      }
+    }
+  }
+}
+```
+
+- `action` is kebab-case and `version` a positive integer, as for islands.
+- `input` and `result` are object schemas in the codegen subset (§2). `result` may be an object
+  with no properties.
+- `errors` declares the **expected** failures, keyed by snake_case code. These are outcomes the
+  caller should handle, such as a name that's taken, not faults. Each may have a `details` object
+  schema. Without `errors`, the action declares no errors.
+
+Within a version, a change MUST keep released clients working in both directions:
+
+- `input`, `result` and each error's `details` follow the same rules as island props (§2).
+  Optional properties MAY be added or removed; anything else is a new version.
+- Error codes MAY be added or removed. A client receiving a code it doesn't know MUST treat it
+  as a generic failure.
+
+The `codegen compat` command checks these rules.
+
+### 5.2 Request
+
+`POST {base}/actions/{action}` with body (`schema/action-request.schema.json`):
+
+```json
+{
+  "protocol": 0,
+  "action": "follow-user",
+  "version": 1,
+  "input": { "userId": "u_123" },
+  "client": { "platform": "ios", "appVersion": "4.2.0" },
+  "idempotencyKey": "6f1c0f7e-0d8e-4c55-9d1a-3f1f0b6d1c2a"
+}
+```
+
+| Field            | Meaning                                                                   |
+| ---------------- | ------------------------------------------------------------------------- |
+| `protocol`       | Protocol major version the client speaks.                                 |
+| `action`         | Action identifier. Also in the path for routing.                          |
+| `version`        | The action version the client was built against.                         |
+| `input`          | MUST validate against that version's `input` schema.                      |
+| `client`         | As for screens (§3).                                                      |
+| `idempotencyKey` | Optional. One per user intent, reused when retrying it.                    |
+
+Clients call exactly one version; there is no negotiation. Composers keep serving old action
+versions for as long as released clients call them.
+
+The composer MUST validate `input` against the manifest before calling the action. Unknown
+properties are ignored, and a `null` optional property is treated as absent. Composers pass
+`idempotencyKey` through to the action. Honouring it (returning the first outcome again
+rather than repeating the change) is the action's job, because only the backend knows where
+the result was stored.
+
+Identity and auth travel in transport headers, as for screens.
+
+### 5.3 Response
+
+An action that ran responds `200` with an outcome (`schema/action-response.schema.json`).
+Success:
+
+```json
+{
+  "protocol": 0,
+  "action": "follow-user",
+  "version": 1,
+  "status": "ok",
+  "result": { "followers": 1043 },
+  "effects": {
+    "invalidate": [{ "screen": "profile", "params": { "userId": "u_123" } }, { "screen": "feed" }],
+    "navigate": { "screen": "profile", "params": { "userId": "u_123" } }
+  }
+}
+```
+
+A declared error:
+
+```json
+{
+  "protocol": 0,
+  "action": "follow-user",
+  "version": 1,
+  "status": "error",
+  "error": { "code": "limit_reached", "details": { "limit": 5000 } }
+}
+```
+
+- `result` MUST validate against the manifest's `result` schema.
+- `error.code` MUST be one of the version's declared errors. `details` is present exactly when
+  that error declares a `details` schema, and MUST validate against it. `message` is optional and
+  meant for logs. Clients show their own copy, chosen by `code`.
+- Anything else (an undeclared error, a crash, invalid input) is not an outcome: the composer
+  responds non-2xx with `{ "protocol": 0, "error": { "code": "...", "message": "..." } }` (§8.1).
+
+#### Effects
+
+`effects` is optional and only present on success. It tells clients what the action changed, so
+that every platform reacts the same way without hard-coding it:
+
+| Field        | Meaning                                                                     |
+| ------------ | --------------------------------------------------------------------------- |
+| `invalidate` | Screens whose content may have changed. Clients SHOULD drop cached responses for them and reload the ones currently shown. |
+| `navigate`   | A screen to show next. Clients map it to their own routes, and MAY ignore it. |
+
+Both use a **screen reference** `{ "screen": "...", "params": { ... } }`. A reference matches a
+screen with the same id whose params include every param in the reference. So
+`{ "screen": "feed" }` matches every `feed`, whatever its params.
 
 ---
 
@@ -249,8 +390,10 @@ The mock resolver for version `n`:
 `params.placements` is not valid JSON, the screen's layout fails. The runner then
 sends each case in `conformance/composer/cases.json` and checks status codes and bodies.
 
-The `__conformance` screen also reads two optional params: `meta` (JSON, returned as the
-response's `meta`) and `notFound` (`"true"` makes the screen respond `not_found`).
+The `__conformance` screen also reads three optional params:
+- `meta` (JSON) is returned as the response's `meta`.
+- `notFound`: `"true"` makes the screen respond `not_found`.
+- `auth`: `"unauthenticated"` or `"forbidden"` makes the screen respond with that error.
 
 If a mock has `load` (a key), its resolver first waits `startDelayMs`, then calls the composer's
 request-scoped load (§9) with that key and work that counts how often it runs, takes `loadDelayMs`,
@@ -268,11 +411,44 @@ Error codes the suite checks, for composers to use consistently:
 | Body `screen` differs from path            | 400    | `screen_mismatch`             |
 | Unknown screen                             | 404    | `unknown_screen`              |
 | Screen's params refer to nothing           | 404    | `not_found`                   |
+| No signed-in user, and the screen needs one | 401   | `unauthenticated`             |
+| The user may not see the screen            | 403    | `forbidden`                   |
 | Screen layout itself failed                | 500    | `layout_failed`               |
 | Required island has no common version      | 502    | `required_island_unsupported` |
 | Required island failed                     | 502    | `required_island_failed`      |
 | Island failed (in-body, status 200)        | —      | `resolve_failed`              |
 | Island timed out (in-body, status 200)     | —      | `timeout` (`retryable: true`) |
+
+#### Actions
+
+The conformance server also registers the test-only action `conformance`, versions 1 and 2. It
+is described by `conformance/composer/actions/conformance.v1.json`; v2 is the same with `version: 2`. The
+action's `input.outcome` decides what happens:
+
+| `outcome`          | Behaviour                                                                    |
+| ------------------ | ---------------------------------------------------------------------------- |
+| `ok`               | succeeds with result `{ "echo": input.echo, "version": n, "idempotencyKey": <the request's key, if any> }` and, if `input.effects` is set, those effects |
+| `rejected`         | fails with the declared error `rejected`, details `{ "echo": input.echo }`   |
+| `unavailable`      | fails with the declared error `unavailable` (no details)                    |
+| `undeclared`       | fails with an error code the manifest doesn't declare                       |
+| `fail`             | fails with an ordinary error                                                 |
+| `not_found`, `unauthenticated`, `forbidden` | fails with that protocol error                       |
+
+The runner POSTs each case in `conformance/composer/action-cases.json` to
+`{base}/actions/{action}`.
+
+| Situation                                   | Status | `error.code`                  |
+| ------------------------------------------- | ------ | ----------------------------- |
+| Body isn't valid JSON or misses fields      | 400    | `bad_request`                 |
+| `protocol` not supported                    | 400    | `unsupported_protocol`        |
+| Body `action` differs from path             | 400    | `action_mismatch`             |
+| `input` doesn't validate                    | 400    | `invalid_input`               |
+| Unknown action                              | 404    | `unknown_action`              |
+| Known action, version not served            | 404    | `unsupported_action_version`  |
+| What the input refers to doesn't exist      | 404    | `not_found`                   |
+| No signed-in user, and the action needs one | 401    | `unauthenticated`             |
+| The user may not perform the action         | 403    | `forbidden`                   |
+| The action failed, or returned an undeclared error | 500 | `action_failed`          |
 
 ### 8.2 Client conformance (fixtures)
 

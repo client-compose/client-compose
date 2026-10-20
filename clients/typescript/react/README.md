@@ -171,6 +171,37 @@ export default async function Page({ params }: { params: Promise<{ userId: strin
   server. Errors thrown inside a Server Component island are re-thrown in the browser and caught
   there; to report those, put a `<ClientComposeProvider>` with `onRenderError` above the page.
 
+## Actions
+
+**`useAction`** performs an action (spec §5) with its generated descriptor. `run` never rejects:
+it resolves with the result, one of the action's declared errors, or `{ status: "failed" }`.
+
+```tsx
+import { useAction } from "@client-compose/react";
+import { FollowUserV1 } from "./actions.generated";
+
+function FollowButton({ userId }: { userId: string }) {
+  const follow = useAction(FollowUserV1);
+  const onPress = async () => {
+    const res = await follow.run({ userId });
+    if (res.status === "error" && res.error.code === "blocked") showToast("You can't follow this user");
+    else if (res.status === "failed") showToast("Something went wrong");
+  };
+  return <button disabled={follow.pending} onClick={onPress}>Follow</button>;
+}
+```
+
+When an action succeeds, its effects are applied before `run` resolves:
+
+- **`invalidate`**: cached responses for matching screens are dropped. Screens shown with
+  `useScreen` / `<ComposedScreen>` reload, and `onInvalidate(refs)` is called. In Next.js, call
+  `router.refresh()` there to re-render Server Components.
+- **`navigate`**: `onNavigate(ref)` is called. Map the screen to a route in your router.
+
+Actions are POSTed to `${baseUrl}/actions/{action}` with your `headers()`. To send them another
+way, set `performAction(request)` in the config. For example, a Next.js Server Action can forward
+the request with a session cookie that browser code can't read.
+
 ## Behaviour
 
 - **Per-island crash isolation.** Each island renders inside its own error boundary and its own

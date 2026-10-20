@@ -3,7 +3,7 @@
 
 import type { ReactNode } from "react";
 import type { IslandRegistry, SkipReason } from "@client-compose/client";
-import type { ClientContext, IslandEntry } from "@client-compose/protocol";
+import type { ActionRequest, ActionResponse, ClientContext, IslandEntry, ScreenRef } from "@client-compose/protocol";
 
 export type ErrorEntry = IslandEntry & { status: "error" };
 
@@ -32,4 +32,18 @@ export interface ScreenConfig {
 export interface ClientComposeConfig extends ScreenConfig {
   /** Reuse responses for `cache.maxAge` seconds, as the composer allows. Default: true. */
   cache?: boolean;
+  /**
+   * Send action requests some other way than POSTing them to `${baseUrl}/actions/{action}`, e.g.
+   * through a Next.js Server Action so that session cookies stay on the server. Resolve with the
+   * composer's 200 response; throw (e.g. `ActionFetchError`) for anything else.
+   */
+  performAction?: (request: ActionRequest) => Promise<ActionResponse>;
+  /** An action suggested a screen to show next (spec §5.3). Map it to your router. */
+  onNavigate?: (ref: ScreenRef) => void;
+  /**
+   * An action changed these screens (spec §5.3). Screens shown with `useScreen`/`<ComposedScreen>`
+   * reload by themselves; use this for anything else, e.g. `router.refresh()` to re-render Server
+   * Components.
+   */
+  onInvalidate?: (refs: ScreenRef[]) => void;
 }

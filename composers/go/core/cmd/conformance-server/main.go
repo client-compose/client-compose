@@ -1,4 +1,4 @@
-// Test-only server exposing the `__conformance` screen (spec §8.1).
+// Test-only server exposing the `__conformance` screen and `conformance` action (spec §8.1).
 //
 //	go run ./cmd/conformance-server -addr :4100
 //	node ../../../conformance/runner/cli.ts composer http://localhost:4100
@@ -15,7 +15,10 @@ import (
 func main() {
 	addr := flag.String("addr", ":4100", "listen address")
 	flag.Parse()
-	c := clientcompose.New([]clientcompose.Screen{clientcompose.ConformanceScreen()})
+	c := clientcompose.New(
+		[]clientcompose.Screen{clientcompose.ConformanceScreen()},
+		clientcompose.WithActions(clientcompose.ConformanceActions()...),
+	)
 	log.Printf("conformance server on %s", *addr)
 	log.Fatal(http.ListenAndServe(*addr, c.Handler()))
 }

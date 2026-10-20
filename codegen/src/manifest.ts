@@ -47,6 +47,27 @@ export interface Island {
   props: ObjectDef;
 }
 
+export interface ActionErrorDef {
+  /** snake_case, e.g. "name_taken". */
+  code: string;
+  description?: string;
+  /** Path ends in the error's own name, e.g. ["FollowUser", "V1", "LimitReached"]. */
+  path: string[];
+  details?: ObjectDef;
+}
+
+export interface Action {
+  action: string;
+  version: number;
+  description?: string;
+  source: string;
+  input: ObjectDef;
+  result: ObjectDef;
+  errors: ActionErrorDef[];
+  /** The input schema without annotations, for composers to validate requests against. */
+  inputSchema: Record<string, unknown>;
+}
+
 export class ManifestError extends Error {}
 
 type Schema = Record<string, unknown>;
@@ -61,19 +82,26 @@ const ALLOWED: Record<string, Set<string>> = {
   boolean: new Set(["type"]),
 };
 const ISLAND_TYPE = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
+const ERROR_CODE = /^[a-z][a-z0-9]*(_[a-z0-9]+)*$/;
+
+function readJsonFiles<T>(dir: string, parse: (raw: unknown, source: string) => T): T[] {
+  return readdirSync(dir)
+    .filter((f) => f.endsWith(".json"))
+    .sort()
+    .map((f) => {
+      const source = join(dir, f);
+      let raw: unknown;
+      try {
+        raw = JSON.parse(readFileSync(source, "utf8"));
+      } catch (err) {
+        throw new ManifestError(`${source}: invalid JSON (${(err as Error).message})`);
+      }
+      return parse(raw, source);
+    });
+}
 
 export function loadManifests(dir: string): Island[] {
-  const files = readdirSync(dir).filter((f) => f.endsWith(".json")).sort();
-  const islands = files.map((f) => {
-    const source = join(dir, f);
-    let raw: unknown;
-    try {
-      raw = JSON.parse(readFileSync(source, "utf8"));
-    } catch (err) {
-      throw new ManifestError(`${source}: invalid JSON (${(err as Error).message})`);
-    }
-    return parseManifest(raw, source);
-  });
+  const islands = readJsonFiles(dir, parseManifest);
 
   const seen = new Map<string, string>();
   for (const i of islands) {
@@ -98,6 +126,88 @@ export function parseManifest(raw: unknown, source: string): Island {
   const path = [pascal(m.type), `V${m.version}`];
   const props = lowerObject(m.props as Schema, path, (p, msg) => at(`props${p}: ${msg}`), "");
   return { type: m.type, version: m.version as number, description: str(m.description), source, props };
+}
+
+export function loadActionManifests(dir: string): Action[] {
+  const actions = readJsonFiles(dir, parseActionManifest);
+  const seen = new Map<string, string>();
+  for (const a of actions) {
+    const id = `${a.action}@${a.version}`;
+    if (seen.has(id)) throw new ManifestError(`${a.source}: action ${id} is also defined in ${seen.get(id)}`);
+    seen.set(id, a.source);
+  }
+  return actions.sort((a, b) => a.action.localeCompare(b.action) || a.version - b.version);
+}
+
+export function parseActionManifest(raw: unknown, source: string): Action {
+  const m = raw as Schema;
+  const at = (msg: string) => new ManifestError(`${source}: ${msg}`);
+  if (typeof m !== "object" || m === null) throw at("manifest must be an object");
+  if (typeof m.action !== "string" || !ISLAND_TYPE.test(m.action)) {
+    throw at(`"action" must be kebab-case, got ${JSON.stringify(m.action)}`);
+  }
+  if (!Number.isInteger(m.version) || (m.version as number) < 1) throw at(`"version" must be a positive integer`);
+  for (const key of Object.keys(m)) {
+    if (!["action", "version", "description", "input", "result", "errors", "$schema", "$comment"].includes(key)) {
+      throw at(`unknown field ${JSON.stringify(key)}`);
+    }
+  }
+  const base = [pascal(m.action), `V${m.version}`];
+  const object = (field: string, schema: unknown, path: string[]): ObjectDef => {
+    if (typeof schema !== "object" || schema === null || (schema as Schema).type !== "object") {
+      throw at(`"${field}" must be a JSON Schema with "type": "object"`);
+    }
+    if ((schema as Schema).additionalProperties !== undefined) throw at(`"${field}" can't use additionalProperties`);
+    return lowerObject(schema as Schema, path, (p, msg) => at(`${field}${p}: ${msg}`), "");
+  };
+
+  const input = object("input", m.input, [...base, "Input"]);
+  const result = object("result", m.result, [...base, "Result"]);
+  const errors: ActionErrorDef[] = [];
+  if (m.errors !== undefined) {
+    if (typeof m.errors !== "object" || m.errors === null || Array.isArray(m.errors)) {
+      throw at(`"errors" must be an object keyed by error code`);
+    }
+    for (const [code, def] of Object.entries(m.errors as Record<string, Schema>)) {
+      if (!ERROR_CODE.test(code)) throw at(`error code ${JSON.stringify(code)} must be snake_case`);
+      if (typeof def !== "object" || def === null) throw at(`errors.${code} must be an object`);
+      for (const key of Object.keys(def)) {
+        if (key !== "description" && key !== "details") throw at(`errors.${code}: unknown field ${JSON.stringify(key)}`);
+      }
+      const path = [...base, pascal(code)];
+      errors.push({
+        code,
+        description: str(def.description),
+        path,
+        details: def.details === undefined ? undefined : object(`errors.${code}.details`, def.details, path),
+      });
+    }
+  }
+  return {
+    action: m.action,
+    version: m.version as number,
+    description: str(m.description),
+    source,
+    input,
+    result,
+    errors,
+    inputSchema: stripAnnotations(m.input) as Record<string, unknown>,
+  };
+}
+
+function stripAnnotations(schema: unknown): unknown {
+  if (Array.isArray(schema)) return schema.map(stripAnnotations);
+  if (typeof schema !== "object" || schema === null) return schema;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(schema)) {
+    if (ANNOTATIONS.has(k)) continue;
+    // "properties" maps names to schemas: its keys are property names, not keywords.
+    out[k] =
+      k === "properties"
+        ? Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([n, s]) => [n, stripAnnotations(s)]))
+        : stripAnnotations(v);
+  }
+  return out;
 }
 
 function lowerObject(

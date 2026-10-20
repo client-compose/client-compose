@@ -9,11 +9,19 @@
 import { execFileSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { dirname, relative, sep } from "node:path";
-import { ManifestError, parseManifest, type Island, type ObjectDef, type TypeRef } from "./manifest.ts";
+import {
+  ManifestError,
+  parseActionManifest,
+  parseManifest,
+  type Action,
+  type Island,
+  type ObjectDef,
+  type TypeRef,
+} from "./manifest.ts";
 
 export interface CompatIssue {
   severity: "breaking" | "warning";
-  /** e.g. "profile-header v2" */
+  /** What changed, e.g. "profile-header v2", or "action follow-user v1" for actions. */
   island: string;
   /** JSON path within the props, e.g. "props.author.role" */
   path: string;
@@ -39,6 +47,44 @@ export function compareIslands(base: Island[], head: Island[]): CompatIssue[] {
     }
     const report = (path: string, message: string) => issues.push({ severity: "breaking", island: label, path, message });
     compareObject(old.props, current.props, "props", report);
+  }
+  return issues;
+}
+
+/**
+ * Actions follow the same rules (spec §5.1): released apps send old inputs and decode results and
+ * error details, so input, result and details evolve like island props. Error codes may come and
+ * go, since clients must treat unknown codes as generic failures.
+ */
+export function compareActions(base: Action[], head: Action[]): CompatIssue[] {
+  const id = (a: Action) => `${a.action}@${a.version}`;
+  const headById = new Map(head.map((a) => [id(a), a]));
+  const issues: CompatIssue[] = [];
+
+  for (const old of base) {
+    const label = `action ${old.action} v${old.version}`;
+    const current = headById.get(id(old));
+    if (!current) {
+      issues.push({
+        severity: "warning",
+        island: label,
+        path: "",
+        message: `action version removed: apps that call ${old.action} v${old.version} will get unsupported_action_version`,
+      });
+      continue;
+    }
+    const report = (path: string, message: string) => issues.push({ severity: "breaking", island: label, path, message });
+    compareObject(old.input, current.input, "input", report);
+    compareObject(old.result, current.result, "result", report);
+    const currentErrors = new Map(current.errors.map((e) => [e.code, e]));
+    for (const before of old.errors) {
+      const after = currentErrors.get(before.code);
+      if (!after) continue;
+      const path = `errors.${before.code}.details`;
+      if (before.details && after.details) compareObject(before.details, after.details, path, report);
+      else if (before.details) report(path, "details removed: old apps expect them");
+      else if (after.details) report(path, "details added: new apps would expect them from a composer that doesn't send them");
+    }
   }
   return issues;
 }
@@ -136,6 +182,21 @@ const quote = (values: string[]) => values.map((v) => JSON.stringify(v)).join(",
  * Returns no islands if the directory didn't exist at that ref.
  */
 export function loadManifestsAtRef(manifestsDir: string, ref: string): { islands: Island[]; issues: CompatIssue[] } {
+  const { items, issues } = loadAtRef(manifestsDir, ref, parseManifest);
+  return { islands: items, issues };
+}
+
+/** loadManifestsAtRef for action manifests. */
+export function loadActionManifestsAtRef(actionsDir: string, ref: string): { actions: Action[]; issues: CompatIssue[] } {
+  const { items, issues } = loadAtRef(actionsDir, ref, parseActionManifest);
+  return { actions: items, issues };
+}
+
+function loadAtRef<T>(
+  manifestsDir: string,
+  ref: string,
+  parse: (raw: unknown, source: string) => T,
+): { items: T[]; issues: CompatIssue[] } {
   const git = (args: string[]) => execFileSync("git", args, { cwd: manifestsDir, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
   let top: string;
   try {
@@ -152,16 +213,16 @@ export function loadManifestsAtRef(manifestsDir: string, ref: string): { islands
     .split("\n")
     .filter((f) => f.endsWith(".json") && dirname(f) === (dir === "" ? "." : dir));
 
-  const islands: Island[] = [];
+  const items: T[] = [];
   const issues: CompatIssue[] = [];
   for (const file of files) {
     const source = `${ref}:${file}`;
     try {
-      islands.push(parseManifest(JSON.parse(gitAtTop(["show", source])), source));
+      items.push(parse(JSON.parse(gitAtTop(["show", source])), source));
     } catch (err) {
       // A base manifest the current codegen can't read can't be compared; say so rather than fail.
       issues.push({ severity: "warning", island: file, path: "", message: `skipped: ${(err as Error).message}` });
     }
   }
-  return { islands, issues };
+  return { items, issues };
 }

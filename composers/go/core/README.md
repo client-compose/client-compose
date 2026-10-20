@@ -28,16 +28,52 @@ http.ListenAndServe(":8080", composer.Handler())
 ```
 
 - Return an error wrapping `cc.ErrNotFound` from a layout when what the params refer to doesn't
-  exist (a batch loader's missing key already does); the screen responds 404 `not_found`.
+  exist (a batch loader's missing key already does); the screen responds 404 `not_found`. Wrap
+  `cc.ErrUnauthenticated` or `cc.ErrForbidden` for 401 / 403.
 - `Screen.Meta` optionally describes the screen as a whole (title, description, image). It runs
   alongside the islands and shares their `cc.Load`s; if it fails, the response just has no meta.
 - Auth and other per-request values travel on `context.Context`: wrap `Handler()` in your middleware.
 - To share data between islands and batch lookups, see [Loading data efficiently](#loading-data-efficiently).
-- For other routers (chi, gin, echo), call `composer.ComposeHTTP(ctx, screenID, body)` and
-  `cc.WriteResult(w, result)` from your own route.
+- For other routers (chi, gin, echo), call `composer.ComposeHTTP(ctx, screenID, body)` (and
+  `composer.PerformHTTP(ctx, action, body)` for actions) and `cc.WriteResult(w, result)` from your
+  own routes.
 - A panicking island is treated like a failing one; it doesn't take the screen down.
 
 See `examples/profile/composer-go` for a full example with tests.
+
+## Actions
+
+Actions (spec §5) change things. Define each version with its generated types and register them
+with `cc.WithActions`; `Handler()` then also serves `POST /actions/{action}`:
+
+```go
+follow := cc.DefineAction(func(ctx context.Context, call cc.Call, in FollowUserV1Input) (FollowUserV1Result, cc.Effects, error) {
+	me, err := auth.User(ctx)
+	if err != nil {
+		return FollowUserV1Result{}, cc.Effects{}, cc.ErrUnauthenticated // 401
+	}
+	if blocked(ctx, in.UserID, me) {
+		return FollowUserV1Result{}, cc.Effects{}, FollowUserV1Blocked{} // a declared error: 200, status "error"
+	}
+	n, err := follows.Add(ctx, me, in.UserID, call.IdempotencyKey)
+	if err != nil {
+		return FollowUserV1Result{}, cc.Effects{}, err // 500 action_failed, reported to WithActionErrorHandler
+	}
+	profile := cc.ScreenRef{Screen: "profile", Params: map[string]string{"userId": in.UserID}}
+	return FollowUserV1Result{Followers: n}, cc.Effects{Invalidate: []cc.ScreenRef{profile}}, nil
+})
+
+composer := cc.New(screens, cc.WithActions(follow))
+```
+
+- Input is validated against the manifest before your handler runs (400 `invalid_input`).
+- Declared errors are the generated error types, possibly wrapped. Only this action version's
+  own errors count; anything else is a failure.
+- `cc.Effects` tells clients which screens to reload (`Invalidate`) and, optionally, which to show
+  next (`Navigate`).
+- `cc.Load` and batch loaders work in actions too, scoped to the action request.
+- `call.IdempotencyKey` is the client's key for this intent. Store it with the change if retries
+  must not repeat it.
 
 ## Loading data efficiently
 

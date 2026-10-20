@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://client-compose.dev/schema/v0/action-manifest.json",
+  "title": "Action manifest",
+  "type": "object",
+  "required": ["action", "version", "input", "result"],
+  "properties": {
+    "action": { "type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$" },
+    "version": { "type": "integer", "minimum": 1 },
+    "description": { "type": "string" },
+    "input": {
+      "description": "JSON Schema (2020-12, codegen subset) describing the input object.",
+      "type": "object"
+    },
+    "result": {
+      "description": "JSON Schema (2020-12, codegen subset) describing the result object.",
+      "type": "object"
+    },
+    "errors": {
+      "description": "Declared errors, keyed by snake_case code.",
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z][a-z0-9]*(_[a-z0-9]+)*$" },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "description": { "type": "string" },
+          "details": {
+            "description": "JSON Schema (2020-12, codegen subset) describing the error's details object.",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}

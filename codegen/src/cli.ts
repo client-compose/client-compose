@@ -11,12 +11,13 @@ declare const __CLIENT_COMPOSE_CODEGEN_VERSION__: string | undefined;
 
 const USAGE = `Usage:
   client-compose-codegen <config.json>... [--check]
-      Generate island props types for every target in each config.
+      Generate island props and action types for every target in each config.
       --check   write nothing; exit 1 if any generated file is out of date (for CI)
 
   client-compose-codegen compat <config.json>... (--base <git-ref> | --base-dir <dir>)
-      Report manifest changes that break apps without an island version bump, compared with a
-      git ref (e.g. origin/main) or a directory of manifests. Exits 1 on breaking changes.
+      Report island and action manifest changes that break apps without a version bump, compared
+      with a git ref (e.g. origin/main) or a directory of island manifests. Exits 1 on breaking
+      changes.
 
   client-compose-codegen --version | --help`;
 
@@ -95,10 +96,10 @@ function runCompat(args: string[]): boolean {
     const breaking = issues.filter((i) => i.severity === "breaking");
     if (breaking.length) {
       ok = false;
-      const islands = [...new Set(breaking.map((i) => i.island))];
+      const changed = [...new Set(breaking.map((i) => i.island))];
       console.log(
         `\n${breaking.length} breaking change(s) in ${config} compared with ${baseLabel}.\n` +
-          `Put them in a new island version instead (${islands.map(nextVersion).join(", ")}), and keep the old ` +
+          `Put them in a new version instead (${changed.map(nextVersion).join(", ")}), and keep the old ` +
           `version for apps already released.`,
       );
     } else {

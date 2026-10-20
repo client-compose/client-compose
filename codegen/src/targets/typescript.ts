@@ -1,18 +1,24 @@
-import type { EnumDef, Island, ObjectDef, TypeRef } from "../manifest.ts";
+import type { Action, EnumDef, Island, ObjectDef, TypeRef } from "../manifest.ts";
 
 export interface TypeScriptOptions {
-  /** Module that exports `IslandDescriptor`. */
+  /** Module that exports `IslandDescriptor` (and `ActionDescriptor`, if there are actions). */
   protocolImport?: string;
 }
 
 const flat = (path: string[]) => path.join("");
 const key = (name: string) => (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name) ? name : JSON.stringify(name));
 
-export function generateTypeScript(islands: Island[], header: string, opts: TypeScriptOptions = {}): string {
+export function generateTypeScript(
+  islands: Island[],
+  header: string,
+  opts: TypeScriptOptions = {},
+  actions: Action[] = [],
+): string {
+  const imports = [...(islands.length || !actions.length ? ["IslandDescriptor"] : []), ...(actions.length ? ["ActionDescriptor"] : [])];
   const out: string[] = [
     header.replace(/^/gm, "// "),
     "",
-    `import type { IslandDescriptor } from ${JSON.stringify(opts.protocolImport ?? "@client-compose/protocol")};`,
+    `import type { ${imports.join(", ")} } from ${JSON.stringify(opts.protocolImport ?? "@client-compose/protocol")};`,
   ];
 
   const doc = (indent: string, text?: string) => {
@@ -67,6 +73,41 @@ export function generateTypeScript(islands: Island[], header: string, opts: Type
     for (const child of def.children) child.kind === "enum" ? emitEnum(child) : emitObject(child);
   };
 
+  const emitAction = (action: Action) => {
+    const name = flat(action.input.path.slice(0, -1));
+    const [input, result, error] = [flat(action.input.path), flat(action.result.path), `${name}Error`];
+    emitObject(action.input);
+    emitObject(action.result);
+    for (const e of action.errors) if (e.details) emitObject({ ...e.details, description: e.description ?? e.details.description });
+    out.push("");
+    if (action.errors.length === 0) {
+      out.push(`/** Declared errors of action ${JSON.stringify(action.action)} v${action.version}: none. */`, `export type ${error} = never;`);
+    } else {
+      out.push(
+        `/**`,
+        ` * Declared errors of action ${JSON.stringify(action.action)} v${action.version}. A newer composer may send codes`,
+        ` * that aren't listed yet: handle unknown codes as a generic failure.`,
+        ` */`,
+        `export type ${error} =`,
+        ...action.errors.map(
+          (e, i) =>
+            `  | { code: ${JSON.stringify(e.code)}; message?: string${e.details ? `; details: ${flat(e.details.path)}` : ""} }${i === action.errors.length - 1 ? ";" : ""}`,
+        ),
+      );
+    }
+    out.push("");
+    doc("", action.description);
+    out.push(
+      `export const ${name}: ActionDescriptor<${input}, ${result}, ${error}> = {`,
+      `  action: ${JSON.stringify(action.action)},`,
+      `  version: ${action.version},`,
+      `  errors: [${action.errors.map((e) => JSON.stringify(e.code)).join(", ")}],`,
+      `  input: ${JSON.stringify(action.inputSchema, null, 2).replace(/\n/g, "\n  ")},`,
+      `};`,
+    );
+  };
+
   for (const island of islands) emitObject(island.props, island);
+  for (const action of actions) emitAction(action);
   return out.join("\n") + "\n";
 }

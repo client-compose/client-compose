@@ -1,5 +1,5 @@
 {
-  "$comment": "Composer conformance cases (spec \u00a78.1). The runner POSTs to {base}/screens/{path ?? request.screen} with a request built from `placements` and `capabilities`, merged with any `request` overrides; `rawBody` replaces the body entirely. Expected bodies are subset matches, except arrays, which must match in length and order.",
+  "$comment": "Composer conformance cases (spec §8.1). The runner POSTs to {base}/screens/{path ?? request.screen} with a request built from `placements` and `capabilities`, merged with any `request` overrides; `rawBody` replaces the body entirely. Expected bodies are subset matches, except arrays, which must match in length and order.",
   "cases": [
     {
       "name": "picks highest mutually supported version",
@@ -619,6 +619,46 @@
         "body": {
           "error": {
             "code": "bad_request"
+          }
+        }
+      }
+    },
+    {
+      "name": "responds unauthenticated when the screen needs a signed-in user",
+      "placements": [],
+      "capabilities": {},
+      "request": {
+        "params": {
+          "placements": "[]",
+          "auth": "unauthenticated"
+        }
+      },
+      "expect": {
+        "status": 401,
+        "body": {
+          "protocol": 0,
+          "error": {
+            "code": "unauthenticated"
+          }
+        }
+      }
+    },
+    {
+      "name": "responds forbidden when the user may not see the screen",
+      "placements": [],
+      "capabilities": {},
+      "request": {
+        "params": {
+          "placements": "[]",
+          "auth": "forbidden"
+        }
+      },
+      "expect": {
+        "status": 403,
+        "body": {
+          "protocol": 0,
+          "error": {
+            "code": "forbidden"
           }
         }
       }
