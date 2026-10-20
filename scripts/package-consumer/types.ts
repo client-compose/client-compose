@@ -24,6 +24,7 @@ import type { ActionDescriptor, IslandDescriptor, ScreenRequest } from "@client-
 import {
   ActionFetchError,
   ComposedScreen,
+  type ActionRequest as ReactActionRequest,
   loadScreen,
   ReactIslandRegistry,
   useAction,
@@ -97,4 +98,7 @@ export const useRename = (): ((name: string) => Promise<ActionResult<{ id: strin
   return (name) => rename.run({ name });
 };
 export const unauthenticated = (e: unknown): boolean => e instanceof ActionFetchError && e.code === "unauthenticated";
+export const viaServer: ClientComposeConfig["performAction"] = async (request: ReactActionRequest) => {
+  throw new Error(request.action);
+};
 export const notAllowed = () => new ForbiddenError() instanceof Error && new UnauthenticatedError() instanceof Error;

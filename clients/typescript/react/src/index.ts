@@ -12,6 +12,7 @@ export type { ClientComposeConfig, ErrorEntry, ScreenConfig } from "./config.ts"
 export type {
   ActionDescriptor,
   ActionEffects,
+  ActionRequest,
   ActionResponse,
   DeclaredError,
   IslandDescriptor,
