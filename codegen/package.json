@@ -1,6 +1,6 @@
 {
   "name": "@client-compose/codegen",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Generate island props types for Go, Swift, Kotlin and TypeScript from Client Compose island manifests.",
   "keywords": [
     "client-compose",

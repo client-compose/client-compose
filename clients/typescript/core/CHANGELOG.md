@@ -1,5 +1,16 @@
 # @client-compose/client
 
+## 0.3.0
+
+### Minor Changes
+
+- [`8bd6c78`](https://github.com/client-compose/client-compose/commit/8bd6c78c377b4f5dd048d784145475adfcdb2b5d) Thanks [@LewisYearsley](https://github.com/LewisYearsley)! - Actions (spec §5): `callAction` performs an action with its generated descriptor and resolves with its typed outcome; `ActionFetchError` for non-2xx responses; `buildActionRequest`, `fetchAction` and `newIdempotencyKey`.
+
+### Patch Changes
+
+- Updated dependencies [[`8bd6c78`](https://github.com/client-compose/client-compose/commit/8bd6c78c377b4f5dd048d784145475adfcdb2b5d)]:
+  - @client-compose/protocol@0.3.0
+
 ## 0.2.0
 
 ### Minor Changes
