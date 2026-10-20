@@ -1,5 +1,11 @@
 # @client-compose/react
 
+## 0.4.1
+
+### Patch Changes
+
+- [`739da6b`](https://github.com/client-compose/client-compose/commit/739da6b50ca722acdbc84abb525e5bd3ceef533c) Thanks [@LewisYearsley](https://github.com/LewisYearsley)! - Re-export `ActionRequest`, the type a custom `performAction` receives.
+
 ## 0.4.0
 
 ### Minor Changes
