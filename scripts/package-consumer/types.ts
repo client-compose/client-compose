@@ -38,7 +38,9 @@ import {
 } from "@client-compose/react";
 import { ComposedScreen as ServerComposedScreen } from "@client-compose/react/server";
 import { actionError, createTestConfig, type TestConfig } from "@client-compose/react/testing";
-import { createFakeGateway, type FakeGateway } from "@client-compose/client/testing";
+import { createFakeGateway, installFakeGateway, type FakeGateway } from "@client-compose/client/testing";
+import { createComposerProxy, type ComposerProxy } from "@client-compose/client/proxy";
+import { viaProxy, type ProxyTransport } from "@client-compose/react";
 
 interface GreetingV1 {
   name: string;
@@ -113,3 +115,7 @@ export const testConfig: TestConfig = createTestConfig({
 export const fakeGateway: FakeGateway = createFakeGateway();
 export const unexpectedRename = (last: ActionResult<{ id: string }, RenameError> | undefined): boolean =>
   isUnexpected(last, ["taken"]) && declaredError(last)?.code !== "taken";
+
+export const installed: () => FakeGateway & { restore(): void } = () => installFakeGateway();
+export const proxy: ComposerProxy = createComposerProxy({ baseUrl: "", client: () => ({ platform: "web", appVersion: "1" }) });
+export const transport: ProxyTransport = viaProxy({ performAction: proxy.performAction, loadScreen: proxy.loadScreen });

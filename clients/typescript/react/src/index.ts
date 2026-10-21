@@ -22,6 +22,7 @@ export type {
 } from "@client-compose/protocol";
 export { ActionFetchError } from "@client-compose/client";
 export { declaredError, isUnexpected } from "./results.ts";
+export { viaProxy, type ProxyFunctions, type ProxyTransport } from "./proxy.ts";
 export {
   ClientComposeProvider,
   ComposedScreen,

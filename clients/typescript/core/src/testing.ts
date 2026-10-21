@@ -7,6 +7,8 @@
 //       actions: { follow: () => actionOk(FollowUserV1, { followers: 8 }) },
 //     });
 //     // pass gateway.fetch as the client's fetch, then assert on gateway.actionRequests()
+//
+// For code that uses the global fetch itself, `installFakeGateway` puts one in its place.
 
 import {
   PROTOCOL_VERSION,
@@ -172,6 +174,27 @@ export function createFakeGateway(handlers: FakeGatewayHandlers = {}): FakeGatew
     requests,
     screenRequests: () => requests.flatMap((r) => asScreenRequest(r) ?? []),
     actionRequests: () => requests.flatMap((r) => asActionRequest(r) ?? []),
+  };
+}
+
+export interface InstalledFakeGateway extends FakeGateway {
+  /** Puts back the `fetch` that was there before. */
+  restore(): void;
+}
+
+/**
+ * A fake composer installed as the global `fetch`, for code that fetches by itself (e.g. a whole
+ * app rendered in a test). Call `restore()` after the test.
+ */
+export function installFakeGateway(handlers: FakeGatewayHandlers = {}): InstalledFakeGateway {
+  const gateway = createFakeGateway(handlers);
+  const original = globalThis.fetch;
+  globalThis.fetch = gateway.fetch;
+  return {
+    ...gateway,
+    restore: () => {
+      globalThis.fetch = original;
+    },
   };
 }
 

@@ -83,7 +83,19 @@ const res = await callAction(baseUrl, FollowUserV1, { userId }, { client, fetch:
 assert.equal(gateway.actionRequests()[0].input.userId, userId);
 ```
 
+For code that calls the global `fetch` itself, such as a whole app rendered in a test,
+`installFakeGateway(handlers)` puts the fake composer in its place; call `restore()` afterwards.
+
 For React, `@client-compose/react/testing` adds a provider config built around it.
+
+## Through your own server
+
+`@client-compose/client/proxy` passes a browser's screen and action requests to the composer
+through your server, so it can add what the browser mustn't hold, such as a session kept in an
+httpOnly cookie. `createComposerProxy({ baseUrl, client, headers, onActionResponse })` checks each
+request (anyone can call a server endpoint with anything), sets the client context and headers,
+and returns the composer's failures as data. `@client-compose/react`'s `viaProxy` is the browser
+half.
 
 ## Links
 

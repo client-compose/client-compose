@@ -9,6 +9,7 @@ const config = getDefaultConfig(__dirname);
 const aliases = {
   "@client-compose/react": path.join(repo, "clients/typescript/react/src/index.ts"),
   "@client-compose/client": path.join(repo, "clients/typescript/core/src/index.ts"),
+  "@client-compose/client/proxy": path.join(repo, "clients/typescript/core/src/proxy.ts"),
   "@client-compose/protocol": path.join(repo, "shared/typescript/protocol/src/index.ts"),
 };
 

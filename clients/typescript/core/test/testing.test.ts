@@ -7,6 +7,7 @@ import {
   actionFailure,
   actionOk,
   createFakeGateway,
+  installFakeGateway,
   island,
   islandError,
   screen,
@@ -106,4 +107,17 @@ test("other requests go to `other` first; unhandled requests reject", async () =
   assert.ok(gateway.requests[0]?.body instanceof FormData);
   await assert.rejects(gateway.fetch("https://composer.test/screens/missing", { method: "POST", body: "{}" }), /no handler/);
   assert.equal(gateway.requests.length, 2);
+});
+
+test("installFakeGateway answers the global fetch until restored", async () => {
+  const original = globalThis.fetch;
+  const gateway = installFakeGateway({ screens: { home: () => screen("home", []) } });
+  try {
+    const res = await fetchScreen("https://composer.test", { protocol: 0, screen: "home", client, islands: {} });
+    assert.equal(res.screen, "home");
+    assert.equal(gateway.screenRequests().length, 1);
+  } finally {
+    gateway.restore();
+  }
+  assert.equal(globalThis.fetch, original);
 });

@@ -199,8 +199,35 @@ When an action succeeds, its effects are applied before `run` resolves:
 - **`navigate`**: `onNavigate(ref)` is called. Map the screen to a route in your router.
 
 Actions are POSTed to `${baseUrl}/actions/{action}` with your `headers()`. To send them another
-way, set `performAction(request)` in the config. For example, a Next.js Server Action can forward
-the request with a session cookie that browser code can't read.
+way, set `performAction(request)` in the config.
+
+### Through your server
+
+To keep a session in an httpOnly cookie, send screens and actions through your own server, which
+adds it. `createComposerProxy` (from `@client-compose/client/proxy`) is the server half: it checks
+what the browser sent, sets the client context and headers, and returns failures as data.
+`viaProxy` is the browser half: it turns the server's functions into the config's `fetch` and
+`performAction`. With Next.js Server Actions:
+
+```ts
+// actions.ts
+"use server";
+const proxy = createComposerProxy({
+  baseUrl: COMPOSER_URL,
+  client: async () => ({ platform: "web", appVersion, locale: await getLocale() }),
+  headers: async () => ({ Authorization: `Bearer ${await getSessionToken()}` }),
+  // e.g. keep a new session in a cookie, and take its token out of the response
+  onActionResponse: keepSession,
+});
+export async function performComposerAction(body: unknown) { return proxy.performAction(body); }
+export async function loadComposerScreen(body: unknown) { return proxy.loadScreen(body); }
+```
+
+```tsx
+// in a client component
+const transport = viaProxy({ performAction: performComposerAction, loadScreen: loadComposerScreen });
+const config = { registry, baseUrl: "", client, fetch: transport.fetch, performAction: transport.performAction };
+```
 
 To show an action's errors, `declaredError(follow.last)` gives the declared error the last call
 ended with, and `isUnexpected(follow.last, ["blocked"])` says whether it ended any other way: the

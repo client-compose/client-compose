@@ -10,6 +10,7 @@ export default defineConfig({
     // Use the Client Compose packages straight from this repo. In your own app, install them from npm instead.
     alias: {
       "@client-compose/react": repo("clients/typescript/react/src/index.ts"),
+      "@client-compose/client/proxy": repo("clients/typescript/core/src/proxy.ts"),
       "@client-compose/client": repo("clients/typescript/core/src/index.ts"),
       "@client-compose/protocol": repo("shared/typescript/protocol/src/index.ts"),
     },
