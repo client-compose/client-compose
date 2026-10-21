@@ -1,6 +1,6 @@
 {
   "name": "@client-compose/react",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "React and React Native bindings for Client Compose.",
   "keywords": [
     "client-compose",
