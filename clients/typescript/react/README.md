@@ -202,6 +202,52 @@ Actions are POSTed to `${baseUrl}/actions/{action}` with your `headers()`. To se
 way, set `performAction(request)` in the config. For example, a Next.js Server Action can forward
 the request with a session cookie that browser code can't read.
 
+To show an action's errors, `declaredError(follow.last)` gives the declared error the last call
+ended with, and `isUnexpected(follow.last, ["blocked"])` says whether it ended any other way: the
+call failed, or with a declared error the app doesn't handle (such as a code added after it was
+built). Show a generic message for those.
+
+```tsx
+const error = declaredError(follow.last);
+{error?.code === "blocked" && <Notice>You can't follow this user</Notice>}
+{isUnexpected(follow.last, ["blocked"]) && <Notice>Something went wrong</Notice>}
+```
+
+## Testing
+
+`@client-compose/react/testing` renders islands in tests the way the app does, against a fake
+composer. It has no test framework or renderer of its own, so it works with React Testing Library,
+React Native Testing Library and others.
+
+```tsx
+import { ClientComposeProvider } from "@client-compose/react";
+import { actionOk, createTestConfig, island, screen } from "@client-compose/react/testing";
+
+const { config, gateway, navigations } = createTestConfig({
+  registry,
+  handlers: {
+    screens: { profile: () => screen("profile", [island("header", ProfileHeaderV2, { name: "Ada" })]) },
+    actions: { follow: () => actionOk(FollowUserV1, { followers: 8 }, { navigate: { screen: "feed" } }) },
+  },
+});
+render(<ClientComposeProvider config={config}><FollowButton userId="u1" /></ClientComposeProvider>);
+// ...click Follow, then:
+expect(gateway.actionRequests()[0].input).toEqual({ userId: "u1" });
+expect(navigations).toEqual([{ screen: "feed" }]);
+```
+
+- `createTestConfig` gives a provider config whose `fetch` is the fake composer's, with caching off.
+  It records `navigate` and `invalidate` effects; pass `onNavigate` or `onInvalidate` to run your
+  own too, and any other config (e.g. `client`) to override the defaults.
+- The response builders are typed by the generated descriptors: `island`, `islandError`, `screen`,
+  `screenError`, `actionOk`, `actionError` and `actionFailure`.
+- Requests without a handler reject, which fails the test. Answer anything else (such as uploads to
+  storage) with `other`.
+- Wrap the provider in your app's own providers (theme, translations, session) in a `renderIsland`
+  helper of your own.
+
+The fake composer itself (no React) is `@client-compose/client/testing`.
+
 ## Behaviour
 
 - **Per-island crash isolation.** Each island renders inside its own error boundary and its own
