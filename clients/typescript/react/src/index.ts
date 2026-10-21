@@ -3,7 +3,7 @@
 //
 // This entry is safe to import from React Server Components: the registry and loadScreen run
 // anywhere, and the hooks and components come from a "use client" module. For rendering a screen
-// in a Server Component, use "@client-compose/react/server".
+// in a Server Component, use "@client-compose/react/server". For tests, "@client-compose/react/testing".
 
 export { ReactIslandRegistry } from "./registry.ts";
 export { loadScreen } from "./load.ts";
@@ -21,6 +21,7 @@ export type {
   ScreenResponse,
 } from "@client-compose/protocol";
 export { ActionFetchError } from "@client-compose/client";
+export { declaredError, isUnexpected } from "./results.ts";
 export {
   ClientComposeProvider,
   ComposedScreen,

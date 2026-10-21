@@ -66,6 +66,25 @@ Props aren't validated at runtime; generate types with
 [`@client-compose/codegen`](https://www.npmjs.com/package/@client-compose/codegen) to keep them in
 sync with the composer.
 
+## Testing
+
+`@client-compose/client/testing` is a fake composer for tests, with no test framework of its own.
+`createFakeGateway` answers screen and action requests from handlers and records them; pass its
+`fetch` to the client. Build responses with `island`, `islandError`, `screen`, `screenError`,
+`actionOk`, `actionError` and `actionFailure`, typed by the generated descriptors.
+
+```ts
+import { actionError, createFakeGateway } from "@client-compose/client/testing";
+
+const gateway = createFakeGateway({
+  actions: { follow: () => actionError(FollowUserV1, { code: "blocked" }) },
+});
+const res = await callAction(baseUrl, FollowUserV1, { userId }, { client, fetch: gateway.fetch });
+assert.equal(gateway.actionRequests()[0].input.userId, userId);
+```
+
+For React, `@client-compose/react/testing` adds a provider config built around it.
+
 ## Links
 
 - [Protocol spec](https://github.com/client-compose/client-compose/blob/main/spec/PROTOCOL.md)

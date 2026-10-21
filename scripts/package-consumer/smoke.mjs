@@ -18,7 +18,8 @@ import { clientCases, runComposerConformance } from "@client-compose/conformance
 import { generateTypeScript, parseManifest } from "@client-compose/codegen";
 import { createRequestListener } from "@client-compose/node-http";
 import { PROTOCOL_VERSION } from "@client-compose/protocol";
-import { ClientComposeProvider, Island, ReactIslandRegistry } from "@client-compose/react";
+import { ClientComposeProvider, declaredError, Island, isUnexpected, ReactIslandRegistry } from "@client-compose/react";
+import { actionError, createTestConfig } from "@client-compose/react/testing";
 
 assert.equal(PROTOCOL_VERSION, 0);
 
@@ -74,6 +75,14 @@ const html = renderToString(
 assert.equal(html, "<!--$--><h1>Hello Ada</h1><!--/$-->");
 console.log("react render:", html);
 server.close();
+
+// Testing helpers: a fake composer behind a test config.
+const tested = createTestConfig({ registry, handlers: { actions: { greet: () => actionError(Greet, { code: "nope" }) } } });
+const tried = await callAction(tested.config.baseUrl, Greet, { name: "Ada" }, { client: tested.config.client, fetch: tested.config.fetch });
+assert.deepEqual(declaredError(tried), { code: "nope" });
+assert.equal(isUnexpected(tried), true);
+assert.equal(tested.gateway.actionRequests()[0].input.name, "Ada");
+console.log("testing helpers: ok");
 
 // Codegen as a library.
 const island = parseManifest({ type: "greeting", version: 1, props: { type: "object", required: ["name"], properties: { name: { type: "string" } } } }, "greeting.json");

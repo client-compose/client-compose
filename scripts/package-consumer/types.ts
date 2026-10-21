@@ -33,8 +33,12 @@ import {
   type ClientComposeConfig,
   type ScreenResponse,
   type ScreenState,
+  declaredError,
+  isUnexpected,
 } from "@client-compose/react";
 import { ComposedScreen as ServerComposedScreen } from "@client-compose/react/server";
+import { actionError, createTestConfig, type TestConfig } from "@client-compose/react/testing";
+import { createFakeGateway, type FakeGateway } from "@client-compose/client/testing";
 
 interface GreetingV1 {
   name: string;
@@ -102,3 +106,10 @@ export const viaServer: ClientComposeConfig["performAction"] = async (request: R
   throw new Error(request.action);
 };
 export const notAllowed = () => new ForbiddenError() instanceof Error && new UnauthenticatedError() instanceof Error;
+export const testConfig: TestConfig = createTestConfig({
+  registry: new ReactIslandRegistry(),
+  handlers: { actions: { rename: () => actionError(RenameV1, { code: "taken", details: { suggestion: "y" } }) } },
+});
+export const fakeGateway: FakeGateway = createFakeGateway();
+export const unexpectedRename = (last: ActionResult<{ id: string }, RenameError> | undefined): boolean =>
+  isUnexpected(last, ["taken"]) && declaredError(last)?.code !== "taken";
