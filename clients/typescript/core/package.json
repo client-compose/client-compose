@@ -23,6 +23,7 @@
   "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
+    "./proxy": "./src/proxy.ts",
     "./testing": "./src/testing.ts",
     "./package.json": "./package.json"
   },
@@ -47,6 +48,10 @@
       ".": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
+      },
+      "./proxy": {
+        "types": "./dist/proxy.d.ts",
+        "default": "./dist/proxy.js"
       },
       "./testing": {
         "types": "./dist/testing.d.ts",

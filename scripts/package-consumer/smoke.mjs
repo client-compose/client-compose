@@ -18,7 +18,8 @@ import { clientCases, runComposerConformance } from "@client-compose/conformance
 import { generateTypeScript, parseManifest } from "@client-compose/codegen";
 import { createRequestListener } from "@client-compose/node-http";
 import { PROTOCOL_VERSION } from "@client-compose/protocol";
-import { ClientComposeProvider, declaredError, Island, isUnexpected, ReactIslandRegistry } from "@client-compose/react";
+import { ClientComposeProvider, declaredError, Island, isUnexpected, ReactIslandRegistry, viaProxy } from "@client-compose/react";
+import { createComposerProxy } from "@client-compose/client/proxy";
 import { actionError, createTestConfig } from "@client-compose/react/testing";
 
 assert.equal(PROTOCOL_VERSION, 0);
@@ -83,6 +84,14 @@ assert.deepEqual(declaredError(tried), { code: "nope" });
 assert.equal(isUnexpected(tried), true);
 assert.equal(tested.gateway.actionRequests()[0].input.name, "Ada");
 console.log("testing helpers: ok");
+
+// Proxying through a server, and back in the browser.
+const proxy = createComposerProxy({ baseUrl: tested.config.baseUrl, client: () => tested.config.client, fetch: tested.config.fetch });
+const transport = viaProxy({ performAction: proxy.performAction });
+const proxied = await transport.performAction({ protocol: 0, action: "greet", version: 1, input: { name: "Grace" }, client: { platform: "x", appVersion: "0" } });
+assert.deepEqual(declaredError(proxied), { code: "nope" });
+assert.deepEqual(tested.gateway.actionRequests()[1].client, tested.config.client);
+console.log("proxy: ok");
 
 // Codegen as a library.
 const island = parseManifest({ type: "greeting", version: 1, props: { type: "object", required: ["name"], properties: { name: { type: "string" } } } }, "greeting.json");
