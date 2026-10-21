@@ -1,5 +1,13 @@
 # @client-compose/client
 
+## 0.5.0
+
+### Minor Changes
+
+- [#12](https://github.com/client-compose/client-compose/pull/12) [`f07f193`](https://github.com/client-compose/client-compose/commit/f07f193938f4862a7354da8c4d40d7ed5d8ade7e) Thanks [@LewisYearsley](https://github.com/LewisYearsley)! - Send screens and actions through your own server. `@client-compose/client/proxy`'s `createComposerProxy` is the server half (e.g. inside Next.js Server Actions): it checks what the browser sent, sets the client context and headers (such as a session from an httpOnly cookie), lets you see and change each action's response, and returns failures as data. `viaProxy` in `@client-compose/react` is the browser half: it turns those functions into the config's `fetch` and `performAction`.
+  
+  `installFakeGateway(handlers)` in `@client-compose/client/testing` (and `@client-compose/react/testing`) installs the fake composer as the global `fetch`, for code that fetches by itself; `restore()` puts the original back.
+
 ## 0.4.0
 
 ### Minor Changes
