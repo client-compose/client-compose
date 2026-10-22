@@ -7,7 +7,9 @@ Your server decides which islands make up each screen, in what order, and with w
 the server, and every app that's already installed picks it up, as long as it knows how to draw the
 islands you send.
 
-It works the same across web, iOS and Android, from a Go or TypeScript backend.
+The protocol is language-neutral. This repo has composers in Go and TypeScript and clients for
+React, React Native, SwiftUI and Jetpack Compose, and new ones for other languages and UI frameworks
+are welcome.
 
 ```
  app                              composer (your backend-for-frontend)         services
@@ -160,6 +162,25 @@ Pick a composer and a client. Each has a README covering setup, testing and the 
 | Client | [Kotlin and Jetpack Compose](clients/kotlin) | from source, for now |
 | Client | [Plain TypeScript](clients/typescript/core), for anything else that renders | `npm install @client-compose/client` |
 | Codegen | [Types for every language](codegen), from your manifests | `npm install -D @client-compose/codegen`, or a [standalone binary](codegen#install) |
+
+### Your stack isn't listed?
+
+Contribute it. The protocol is a short [spec](spec/PROTOCOL.md), and nothing in it depends on Go,
+TypeScript or any UI framework. Anything that can make an HTTP request and render a list can be a
+client, and anything that can serve one can be a composer. What a new implementation has to do is
+spelled out:
+
+- **A composer** in another language (Python, Ruby, Kotlin on the server, Rust, .NET…) passes the
+  [composer conformance suite](conformance), which runs over HTTP against your server, so it needs
+  nothing from your language.
+- **A client** for another platform loads the shared fixtures in its own tests: rendering, actions
+  and effects.
+- **A UI binding** for another framework (Vue, Svelte, Solid, UIKit, Flutter…) usually sits on an
+  existing client core. The React, SwiftUI and Compose bindings show the shape.
+- **A framework adapter** for an existing composer (Hono, Koa, Lambda, Gin…) is usually a few lines.
+
+[`spec/CAPABILITIES.md`](spec/CAPABILITIES.md) lists what each layer should provide, and
+[CONTRIBUTING.md](CONTRIBUTING.md) walks through adding one.
 
 ## Status
 
