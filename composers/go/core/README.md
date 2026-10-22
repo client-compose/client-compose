@@ -130,8 +130,9 @@ followUser := cc.DefineAction(func(ctx context.Context, call cc.Call, in FollowU
   errors count; anything else is a failure.
 - `cc.Effects` tells apps which screens to reload (`Invalidate`) and, optionally, which to show next
   (`Navigate`).
-- `call.IdempotencyKey` is the app's key for this intent. Store it with the change if retries must
-  not repeat it.
+- `call.IdempotencyKey` is the app's key for this intent. To have the composer honour it for every
+  action, give it an idempotency store (below); otherwise store it with the change yourself if
+  retries must not repeat it.
 
 ## Plugins
 
@@ -191,6 +192,35 @@ composer := cc.New(cc.Config{Screens: screens, Cache: redisCache{rdb}})
 - If the cache errors, the island resolves anyway and the error reaches plugins as a `CacheFailed`
   failure, so a cache outage never breaks a screen.
 - In tests, `cctest.NewMemoryCache()` is an in-memory `cc.Cache`.
+
+## Retried actions (optional)
+
+Apps send an idempotency key with each action, and reuse it when they retry the same intent. Give
+the composer an `IdempotencyStore` and it honours those keys for every action: the first call runs,
+and a retry gets the first outcome back instead of running again. The store is your own; without
+`Config.Idempotency`, keys just pass through to your actions as `call.IdempotencyKey`.
+
+```go
+composer := cc.New(cc.Config{
+	Actions: actions,
+	Idempotency: &cc.Idempotency{
+		Store: redisIdempotency{rdb},                                     // your adapter: Begin, Finish, Release
+		Scope: func(ctx context.Context) string { return viewerID(ctx) }, // whose keys these are
+	},
+})
+```
+
+- With Redis, `Begin` is a `SET NX` of a "running" marker (returning the outcome if one is stored),
+  `Finish` a `SET` of the outcome, and `Release` a `DEL`.
+- `Scope` is required, so one caller can never replay another's key. Return `""` for actions anyone
+  may share.
+- Only completed outcomes are kept: results and declared errors. A failure releases the key, so a
+  retry runs again.
+- A duplicate that arrives while the first call is running waits for it (`Wait`, default 10s).
+- Outcomes are kept for `TTL` (default 24h).
+- If the store errors, the action runs anyway and the error reaches plugins as an
+  `IdempotencyFailed` failure.
+- In tests, `cctest.NewMemoryIdempotencyStore()` is an in-memory store.
 
 ## Mounting
 

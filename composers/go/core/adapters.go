@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"time"
 )
 
@@ -90,4 +91,84 @@ func (c *Composer) resolveIsland(ctx context.Context, call IslandCall) (any, err
 		report(fmt.Errorf("cache set %s: %w", key, err))
 	}
 	return props, nil
+}
+
+// IdempotencyStore keeps action outcomes by idempotency key (CMP-19), so a retried action returns
+// its first outcome instead of running again. Implement it with whatever your app runs; with Redis,
+// Begin is a SET NX of a "running" marker, Finish a SET of the outcome, and Release a DEL. It's
+// optional: without Config.Idempotency, keys pass through to your actions (Call.IdempotencyKey).
+type IdempotencyStore interface {
+	// Begin claims key for ttl. If a call with this key has finished, it returns that call's stored
+	// outcome instead. If another call holds the key and hasn't finished, it returns neither.
+	Begin(ctx context.Context, key string, ttl time.Duration) (stored []byte, claimed bool, err error)
+	// Finish stores the outcome of the call that claimed key, for ttl.
+	Finish(ctx context.Context, key string, outcome []byte, ttl time.Duration) error
+	// Release drops a claim without an outcome, so a retry runs the action again.
+	Release(ctx context.Context, key string) error
+}
+
+// Idempotency configures the idempotency store (CMP-19).
+type Idempotency struct {
+	Store IdempotencyStore
+	// Scope says whose keys these are, usually the viewer's id, so one caller can never replay
+	// another's. Required. Return "" for actions anyone may share.
+	Scope func(ctx context.Context) string
+	// TTL is how long outcomes are kept. Default 24h.
+	TTL time.Duration
+	// Wait is how long a duplicate waits for a call with its key that's still running. Default 10s.
+	Wait time.Duration
+}
+
+// performIdempotent runs an action at most once per scope and idempotency key, when the composer has
+// an idempotency store. Only completed outcomes (results and declared errors) are kept; anything
+// else releases the key, so a retry runs again. A store that errors is reported, and the action runs.
+func (c *Composer) performIdempotent(ctx context.Context, req ActionRequest) Result {
+	idem := c.idempotency
+	if idem == nil || req.IdempotencyKey == "" {
+		return c.performAction(ctx, req)
+	}
+	key := fmt.Sprintf("action:%s:%d:%s:%s", req.Action, req.Version, idem.Scope(ctx), req.IdempotencyKey)
+	report := func(err error) {
+		c.report(ctx, Failure{Kind: IdempotencyFailed, Action: req.Action, Version: req.Version, Err: err})
+	}
+
+	deadline := time.Now().Add(idem.Wait)
+	for {
+		stored, claimed, err := idem.Store.Begin(ctx, key, idem.TTL)
+		if err != nil {
+			report(fmt.Errorf("idempotency begin %s: %w", key, err))
+			return c.performAction(ctx, req)
+		}
+		if stored != nil && json.Valid(stored) {
+			return Result{http.StatusOK, json.RawMessage(stored)}
+		}
+		if claimed {
+			break
+		}
+		if time.Now().After(deadline) {
+			report(fmt.Errorf("idempotency %s: still running after %s", key, idem.Wait))
+			return fail(http.StatusInternalServerError, "action_failed", "a call with this idempotency key is still running")
+		}
+		select {
+		case <-ctx.Done():
+			return fail(http.StatusInternalServerError, "action_failed", "")
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
+
+	res := c.performAction(ctx, req)
+	if res.Status == http.StatusOK {
+		outcome, err := json.Marshal(res.Body)
+		if err == nil {
+			err = idem.Store.Finish(ctx, key, outcome, idem.TTL)
+		}
+		if err != nil {
+			report(fmt.Errorf("idempotency finish %s: %w", key, err))
+		}
+		return res
+	}
+	if err := idem.Store.Release(ctx, key); err != nil {
+		report(fmt.Errorf("idempotency release %s: %w", key, err))
+	}
+	return res
 }

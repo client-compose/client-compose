@@ -64,6 +64,8 @@ const (
 	ContextFailed FailureKind = "context"
 	// CacheFailed is the Cache adapter failing. The island resolved anyway.
 	CacheFailed FailureKind = "cache"
+	// IdempotencyFailed is the IdempotencyStore failing, or a duplicate call giving up waiting.
+	IdempotencyFailed FailureKind = "idempotency"
 )
 
 // Failure is something that went wrong while answering a request.

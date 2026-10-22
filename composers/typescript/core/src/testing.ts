@@ -21,7 +21,7 @@ import {
   type ScreenResponse,
 } from "@client-compose/protocol";
 
-import type { Cache } from "./adapters.ts";
+import type { Cache, IdempotencyStore } from "./adapters.ts";
 import type { Composer } from "./composer.ts";
 
 export interface TestComposerOptions<Req> {
@@ -197,5 +197,21 @@ export function memoryCache(): Cache & { keys(): string[] } {
     get: (key) => live(key)?.value,
     set: (key, value, ttlMs) => void entries.set(key, { value, expires: Date.now() + ttlMs }),
     keys: () => [...entries.keys()].filter((key) => live(key)),
+  };
+}
+
+/** An in-memory `IdempotencyStore` for tests. */
+export function memoryIdempotencyStore(): IdempotencyStore {
+  const entries = new Map<string, { outcome?: string; expires: number }>();
+  return {
+    begin(key, ttlMs) {
+      const entry = entries.get(key);
+      if (entry && entry.expires > Date.now()) return { stored: entry.outcome, claimed: false };
+      entries.set(key, { expires: Date.now() + ttlMs });
+      return { claimed: true };
+    },
+    finish: (key, outcome, ttlMs) =>
+      void entries.set(key, { outcome, expires: Date.now() + ttlMs }),
+    release: (key) => void entries.delete(key),
   };
 }

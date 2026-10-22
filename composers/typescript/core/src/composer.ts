@@ -9,7 +9,7 @@ import {
 } from "@client-compose/protocol";
 
 import { type Action, isActionRequestShape, performAction, protocolError } from "./actions.ts";
-import { type Cache, resolveCached } from "./adapters.ts";
+import { type Cache, type Idempotency, performIdempotent, resolveCached } from "./adapters.ts";
 import { attachScope, RequestScope } from "./loading.ts";
 import type { ComposeFn, Failure, PerformFn, Plugin, ResolveFn } from "./plugins.ts";
 import { type ComposeResult, fail, type PerformResult } from "./results.ts";
@@ -38,6 +38,11 @@ export interface ComposerConfig<Ctx, Req = Request> {
    * request.
    */
   cache?: Cache;
+  /**
+   * Runs each action at most once per scope and idempotency key (CMP-19). Without it, keys pass
+   * through to actions.
+   */
+  idempotency?: Idempotency<Ctx>;
   /** Each island's timeout unless its placement sets one. Default 2000. */
   defaultTimeoutMs?: number;
 }
@@ -115,8 +120,10 @@ export function createComposer<Ctx = undefined, Req = Request>(
   let resolveChain: ResolveFn<Ctx> = (call) => resolveCached(config.cache, call, report);
   let composeChain: ComposeFn<Ctx> = (req, ctx) =>
     composeScreen(screens.get(req.screen)!, req, ctx);
-  let performChain: PerformFn<Ctx> = (req, ctx) =>
+  const performOnce = (req: ActionRequest, ctx: Ctx) =>
     performAction(actions.get(req.action)!.get(req.version)!, req, ctx, report);
+  let performChain: PerformFn<Ctx> = (req, ctx) =>
+    performIdempotent(config.idempotency, req, ctx, performOnce, report);
   for (const p of [...plugins].reverse()) {
     if (p.island) resolveChain = p.island(resolveChain);
     if (p.screen) composeChain = p.screen(composeChain);
