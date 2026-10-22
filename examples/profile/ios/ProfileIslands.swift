@@ -27,34 +27,41 @@ enum Islands {
     }()
 }
 
+// MARK: - Client: one for the app, given to every screen below the root
+
+enum Compose {
+    static let client = ComposeClient(
+        baseURL: URL(string: "https://api.example.com/compose")!,
+        context: ClientContext(
+            appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0",
+            locale: Locale.current.identifier
+        ),
+        headers: { ["Authorization": "Bearer \(await Session.shared.token())"] },
+        onNavigate: { ref in Router.shared.show(ref) }
+    )
+}
+
+// In your App: RootView().compose(client: Compose.client, registry: Islands.registry)
+
 // MARK: - Screen
 
 struct ProfileScreen: View {
     let userId: String
 
     var body: some View {
-        ComposedScreen(
-            screen: "profile",
-            params: ["userId": userId],
-            context: ClientContext(
-                appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0",
-                locale: Locale.current.identifier
-            ),
-            registry: Islands.registry,
-            client: ScreenClient(
-                baseURL: URL(string: "https://api.example.com/compose")!,
-                headers: ["Authorization": "Bearer …"]
-            ),
-            onSkipped: { entry, reason in print("skipped island \(entry.key): \(reason)") },
-            loading: { ProgressView() },
-            failure: { _, retry in
+        // The screen's title comes from the composer; following someone reloads it by itself.
+        ComposedScreen("profile", params: ["userId": userId]) {
+            ProgressView()
+        } failure: { error, retry in
+            if (error as? ScreenError)?.isNotFound == true {
+                Text("This profile doesn't exist")
+            } else {
                 VStack(spacing: 12) {
                     Text("Couldn't load this profile")
                     Button("Try again", action: retry)
                 }
             }
-        )
-        .navigationTitle("Profile")
+        }
     }
 }
 
@@ -86,19 +93,25 @@ struct ProfileHeader: View {
 
 struct FollowButton: View {
     let userId: String
-    @State private var isFollowing: Bool
-
-    init(userId: String, isFollowing: Bool) {
-        self.userId = userId
-        _isFollowing = State(initialValue: isFollowing)
-    }
+    let isFollowing: Bool
+    // FollowUserV1 is generated from ../actions/follow-user.v1.json.
+    @ComposeAction(FollowUserV1.self) private var follow
 
     var body: some View {
-        Button(isFollowing ? "Following" : "Follow") {
-            // Interactivity stays on the client: call your follow API directly here.
-            isFollowing.toggle()
+        VStack(spacing: 8) {
+            Button(isFollowing ? "Following" : "Follow") {
+                // The composer says the profile changed, so it reloads with the new state.
+                Task { await follow.run(.init(userId: userId, follow: !isFollowing)) }
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(follow.pending)
+
+            if follow.last?.declaredError == .blocked {
+                Text("You can't follow this person").font(.footnote)
+            } else if follow.last?.failed == true {
+                Text("Something went wrong").font(.footnote)
+            }
         }
-        .buttonStyle(.borderedProminent)
         .padding(.horizontal)
     }
 }
@@ -116,4 +129,17 @@ struct PostGrid: View {
         }
         .padding(.top)
     }
+}
+
+// MARK: - Stand-ins for your app's own session and navigation
+
+actor Session {
+    static let shared = Session()
+    func token() -> String { "…" }
+}
+
+@MainActor
+final class Router {
+    static let shared = Router()
+    func show(_ ref: ScreenRef) { print("navigate to \(ref.screen)") }
 }

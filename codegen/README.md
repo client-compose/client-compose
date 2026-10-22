@@ -51,9 +51,9 @@ downloaded through a browser needs `xattr -d com.apple.quarantine <file>` before
 }
 ```
 
-`actions` is optional: a directory of action manifests (spec §5). Actions are generated for the Go
-and TypeScript targets; Swift and Kotlin get island types only, for now. A config may also have
-only `actions`.
+`actions` is optional: a directory of action manifests (spec §5). Actions are generated for the Go,
+TypeScript and Swift targets; Kotlin gets island types only, for now. A config may also have only
+`actions`.
 
 In a Go project, a `//go:generate client-compose-codegen <config>` (or `npx @client-compose/codegen <config>`) line lets `go generate` run it
 (see [`examples/profile/composer-go/main.go`](https://github.com/client-compose/client-compose/blob/main/examples/profile/composer-go/main.go)).
@@ -66,7 +66,7 @@ island type and version, so the registration can't name the wrong island:
 | Stack      | Generated                                                     | Used as                                                    |
 | ---------- | ------------------------------------------------------------- | ---------------------------------------------------------- |
 | Go         | `struct` + `IslandType()` / `IslandVersion()` methods         | `cc.Define(func(ctx, r) (ProfileHeaderV2, error) { … })`   |
-| Swift      | `struct … : IslandProps` with nested types                    | `registry.register(ProfileHeaderV2.self) { props, _ in … }` |
+| Swift      | `struct … : IslandProps, Codable` with nested types and a memberwise `init` | `registry.register(ProfileHeaderV2.self) { props, _ in … }` |
 | Kotlin     | `@Serializable data class` + `IslandDescriptor` companion     | `registry.register(ProfileHeaderV2) { props, _ -> … }`     |
 | TypeScript | `interface` + descriptor `const` with the same name           | `registry.register(ProfileHeaderV2, (props) => …)`, `island(ProfileHeaderV2, resolve)` |
 
@@ -75,7 +75,8 @@ For action `follow-user` v1 (spec §5.1):
 | Stack      | Generated | Used as |
 | ---------- | --------- | ------- |
 | Go         | `FollowUserV1Input` (tied to its action, version, input schema and result type), `FollowUserV1Result`, and one error type per declared error, e.g. `FollowUserV1Blocked` | `cc.DefineAction(func(ctx, call, in FollowUserV1Input) (FollowUserV1Result, cc.Effects, error) { … })`, returning `FollowUserV1Blocked{}` as the error |
-| TypeScript | `FollowUserV1Input`, `FollowUserV1Result`, the `FollowUserV1Error` union, and the `FollowUserV1` descriptor | `defineAction(FollowUserV1, perform)` in the composer, `callAction(…, FollowUserV1, input)` or `useAction(FollowUserV1)` in apps |
+| TypeScript | `FollowUserV1Input`, `FollowUserV1Result`, the `FollowUserV1Error` union, and the `FollowUserV1` descriptor | `action(FollowUserV1, perform)` in the composer, `callAction(…, FollowUserV1, input)` or `useAction(FollowUserV1)` in apps |
+| Swift      | `enum FollowUserV1: ActionDescriptor` holding `Input`, `Result`, and a `DeclaredError` enum with a case per declared error (`.blocked`, or `.limitReached(LimitReached)` with its details) | `client.perform(FollowUserV1.self, .init(userId: id))` or `@ComposeAction(FollowUserV1.self)` |
 
 ## Supported schema subset
 

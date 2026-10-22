@@ -1,5 +1,6 @@
 {
   "manifests": "islands",
+  "actions": "actions",
   "targets": {
     "go": {
       "out": "composer-go/islands_gen.go",

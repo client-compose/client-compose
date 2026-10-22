@@ -5,13 +5,15 @@ import ClientCompose
 import Foundation
 
 /// An island with no props.
-struct DividerV1: IslandProps, Equatable, Sendable {
+struct DividerV1: IslandProps, Codable, Equatable, Sendable {
     static let islandType = "divider"
     static let islandVersion = 1
+
+    init() {}
 }
 
 /// Exercises every schema feature codegen supports.
-struct KitchenSinkV1: IslandProps, Equatable, Sendable {
+struct KitchenSinkV1: IslandProps, Codable, Equatable, Sendable {
     static let islandType = "kitchen-sink"
     static let islandVersion = 1
 
@@ -31,17 +33,38 @@ struct KitchenSinkV1: IslandProps, Equatable, Sendable {
     let `class`: String
     let bigNumber: Int64?
 
-    enum Size: String, Decodable, Equatable, Sendable {
+    init(title: String, count: Int, ratio: Double? = nil, enabled: Bool, link: URL? = nil, tags: [String], size: Size, author: Author, items: [Entry]? = nil, metadata: [String: String]? = nil, `class`: String, bigNumber: Int64? = nil) {
+        self.title = title
+        self.count = count
+        self.ratio = ratio
+        self.enabled = enabled
+        self.link = link
+        self.tags = tags
+        self.size = size
+        self.author = author
+        self.items = items
+        self.metadata = metadata
+        self.`class` = `class`
+        self.bigNumber = bigNumber
+    }
+
+    enum Size: String, Codable, Equatable, Sendable {
         case small
         case medium
         case extraLarge = "extra-large"
     }
 
     /// Who made it.
-    struct Author: Decodable, Equatable, Sendable {
+    struct Author: Codable, Equatable, Sendable {
         let name: String
         let avatarUrl: URL?
         let role: Role?
+
+        init(name: String, avatarUrl: URL? = nil, role: Role? = nil) {
+            self.name = name
+            self.avatarUrl = avatarUrl
+            self.role = role
+        }
 
         enum CodingKeys: String, CodingKey {
             case name
@@ -49,14 +72,124 @@ struct KitchenSinkV1: IslandProps, Equatable, Sendable {
             case role
         }
 
-        enum Role: String, Decodable, Equatable, Sendable {
+        enum Role: String, Codable, Equatable, Sendable {
             case admin
             case member
         }
     }
 
-    struct Entry: Decodable, Equatable, Sendable {
+    struct Entry: Codable, Equatable, Sendable {
         let id: String
         let label: String?
+
+        init(id: String, label: String? = nil) {
+            self.id = id
+            self.label = label
+        }
+    }
+}
+
+/// An action with empty input and result, and no declared errors.
+enum PingV1: ActionDescriptor {
+    static let action = "ping"
+    static let version = 1
+
+    /// The input of "ping" v1.
+    struct Input: Codable, Equatable, Sendable {
+        init() {}
+    }
+
+    /// The result of "ping" v1.
+    struct Result: Codable, Equatable, Sendable {
+        init() {}
+    }
+
+    /// "ping" v1 declares no errors.
+    typealias DeclaredError = NoDeclaredError
+}
+
+/// Renames a thing.
+enum RenameThingV1: ActionDescriptor {
+    static let action = "rename-thing"
+    static let version = 1
+
+    /// The input of "rename-thing" v1.
+    struct Input: Codable, Equatable, Sendable {
+        let thingId: String
+        /// The new name.
+        let name: String
+        let visibility: Visibility?
+
+        init(thingId: String, name: String, visibility: Visibility? = nil) {
+            self.thingId = thingId
+            self.name = name
+            self.visibility = visibility
+        }
+
+        enum Visibility: String, Codable, Equatable, Sendable {
+            case `public`
+            case `private`
+        }
+    }
+
+    /// The result of "rename-thing" v1.
+    struct Result: Codable, Equatable, Sendable {
+        let thing: Thing
+
+        init(thing: Thing) {
+            self.thing = thing
+        }
+
+        struct Thing: Codable, Equatable, Sendable {
+            let id: String
+            let name: String
+
+            init(id: String, name: String) {
+                self.id = id
+                self.name = name
+            }
+        }
+    }
+
+    /// The errors "rename-thing" v1 declares. A newer composer may send codes this
+    /// app doesn't know: `ComposeClient.perform` throws those as `ActionFailure`.
+    enum DeclaredError: DeclaredActionError {
+        /// Another thing already has that name.
+        case nameTaken(NameTaken)
+        /// The thing can't be renamed right now.
+        case locked
+
+        static let codes = ["name_taken", "locked"]
+
+        init(code: String, details: JSONValue?) throws {
+            switch code {
+            case "name_taken": self = .nameTaken(try (details ?? .null).decode(NameTaken.self))
+            case "locked": self = .locked
+            default: throw ActionFailure(status: 200, code: code, body: Data())
+            }
+        }
+
+        var code: String {
+            switch self {
+            case .nameTaken: return "name_taken"
+            case .locked: return "locked"
+            }
+        }
+
+        var details: JSONValue? {
+            switch self {
+            case .nameTaken(let details): return try? JSONValue(encoding: details)
+            case .locked: return nil
+            }
+        }
+    }
+
+    /// The details of "name_taken".
+    struct NameTaken: Codable, Equatable, Sendable {
+        let suggestions: [String]
+
+        init(suggestions: [String]) {
+            self.suggestions = suggestions
+        }
     }
 }

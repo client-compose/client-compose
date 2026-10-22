@@ -1,0 +1,21 @@
+{
+  "action": "follow-user",
+  "version": 1,
+  "description": "Follow or unfollow a user.",
+  "input": {
+    "type": "object",
+    "required": ["userId", "follow"],
+    "properties": {
+      "userId": { "type": "string" },
+      "follow": { "type": "boolean", "description": "true to follow, false to unfollow." }
+    }
+  },
+  "result": {
+    "type": "object",
+    "required": ["followers"],
+    "properties": { "followers": { "type": "integer", "description": "The user's followers now." } }
+  },
+  "errors": {
+    "blocked": { "description": "The user has blocked the viewer." }
+  }
+}

@@ -22,10 +22,16 @@ public struct PlannedIsland<Output>: Identifiable {
 }
 
 /// Maps island type + version to a renderer. `Output` is whatever your UI layer renders,
-/// typically `AnyView` for SwiftUI or `UIView` for UIKit.
-public final class IslandRegistry<Output> {
+/// typically `AnyView` for SwiftUI or `UIView` for UIKit. Safe to share: registering takes a lock.
+public final class IslandRegistry<Output>: @unchecked Sendable {
     private typealias AnyRenderer = (JSONValue, IslandEntry) throws -> Output
-    private var renderers: [String: [Int: AnyRenderer]] = [:]
+    private let lock = NSLock()
+    private var _renderers: [String: [Int: AnyRenderer]] = [:]
+    private var renderers: [String: [Int: AnyRenderer]] {
+        lock.lock()
+        defer { lock.unlock() }
+        return _renderers
+    }
     private let decoder: JSONDecoder
 
     public init(decoder: JSONDecoder = JSONDecoder()) {
@@ -44,7 +50,9 @@ public final class IslandRegistry<Output> {
         render: @escaping (Props, IslandEntry) -> Output
     ) -> Self {
         let decoder = self.decoder
-        renderers[type, default: [:]][version] = { json, entry in
+        lock.lock()
+        defer { lock.unlock() }
+        _renderers[type, default: [:]][version] = { json, entry in
             render(try json.decode(Props.self, using: decoder), entry)
         }
         return self

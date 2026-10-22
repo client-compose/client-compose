@@ -6,6 +6,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/http"
 	"time"
@@ -26,7 +27,12 @@ type Services struct {
 	GetUser     func(ctx context.Context, id string) (User, error)
 	IsFollowing func(ctx context.Context, viewerID, userID string) (bool, error)
 	RecentPosts func(ctx context.Context, userID string) ([]Post, error)
+	// Follow follows (or unfollows) a user and returns their followers. errBlocked if they've
+	// blocked the viewer.
+	Follow func(ctx context.Context, viewerID, userID string, follow bool) (int, error)
 }
+
+var errBlocked = errors.New("blocked")
 
 func fakeServices() Services {
 	return Services{
@@ -36,6 +42,15 @@ func fakeServices() Services {
 		IsFollowing: func(context.Context, string, string) (bool, error) { return false, nil },
 		RecentPosts: func(_ context.Context, userID string) ([]Post, error) {
 			return []Post{{ID: "p1", ThumbnailURL: "https://example.com/" + userID + "/p1.jpg"}}, nil
+		},
+		Follow: func(_ context.Context, _, userID string, follow bool) (int, error) {
+			if userID == "u_blocker" {
+				return 0, errBlocked
+			}
+			if follow {
+				return 1043, nil
+			}
+			return 1042, nil
 		},
 	}
 }
@@ -48,6 +63,14 @@ type viewerKey struct{}
 // else, and everything on the screen sees the viewer it adds.
 func viewerContext(ctx context.Context, r *http.Request) (context.Context, error) {
 	return context.WithValue(ctx, viewerKey{}, r.Header.Get("X-User-Id")), nil
+}
+
+// signedIn requires a viewer.
+func signedIn(ctx context.Context, _ cc.Request) error {
+	if viewer(ctx) == "" {
+		return cc.ErrUnauthenticated
+	}
+	return nil
 }
 
 func viewer(ctx context.Context) string {
@@ -121,9 +144,25 @@ func profileScreen(s Services) cc.Screen {
 	}
 }
 
+// followUser follows or unfollows a user, and tells apps their profile changed.
+func followUser(s Services) cc.Action {
+	return cc.DefineAction(func(ctx context.Context, _ cc.Call, in FollowUserV1Input) (FollowUserV1Result, cc.Effects, error) {
+		followers, err := s.Follow(ctx, viewer(ctx), in.UserID, in.Follow)
+		if errors.Is(err, errBlocked) {
+			return FollowUserV1Result{}, cc.Effects{}, FollowUserV1Blocked{}
+		}
+		if err != nil {
+			return FollowUserV1Result{}, cc.Effects{}, err
+		}
+		profile := cc.ScreenRef{Screen: "profile", Params: map[string]string{"userId": in.UserID}}
+		return FollowUserV1Result{Followers: followers}, cc.Effects{Invalidate: []cc.ScreenRef{profile}}, nil
+	}).Requires(signedIn)
+}
+
 func newComposer(s Services) *cc.Composer {
 	return cc.New(cc.Config{
 		Screens: []cc.Screen{profileScreen(s)},
+		Actions: []cc.Action{followUser(s)},
 		Context: viewerContext,
 		Use: []cc.Plugin{cc.ReportErrors(func(_ context.Context, f cc.Failure) {
 			log.Printf("%s failed (screen %s, island %s): %v", f.Kind, f.Screen, f.Key, f.Err)
