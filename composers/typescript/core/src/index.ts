@@ -8,6 +8,7 @@ export {
   type ActionOptions,
   type ActionOutcome,
 } from "./actions.ts";
+export { type Cache, type IslandCache } from "./adapters.ts";
 export {
   type Cache,
   type Idempotency,
