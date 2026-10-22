@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+
 import type { FollowButtonV1 } from "./islands.generated";
 
 /** A Client Component island: interactivity stays on the client. */

@@ -1,6 +1,7 @@
 // A registry mixing Server Components and a Client Component, imported from the built package's
 // main entry, as an app's shared islands module would be.
 import { createElement } from "react";
+
 import { ReactIslandRegistry } from "../../dist/index.js";
 import { Counter } from "./counter.mjs";
 

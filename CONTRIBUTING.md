@@ -68,6 +68,11 @@ re-implementing negotiation or error codes in an adapter, it belongs in the core
 Keep dependencies minimal. A core should depend on the language's standard library plus,
 at most, its usual JSON library.
 
+## Style
+
+TypeScript and JavaScript are formatted by Prettier and linted by ESLint (`pnpm format`, `pnpm lint`;
+CI runs both). Go uses gofmt. Generated files, fixtures and manifests are left as they are.
+
 ## Changing an npm package
 
 If your change touches a published TypeScript package (see [RELEASING.md](RELEASING.md)), run

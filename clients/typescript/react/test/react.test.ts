@@ -1,21 +1,24 @@
 import "./setup.ts";
-import { test } from "node:test";
+
 import assert from "node:assert/strict";
-import { act, createElement, useState, type ReactNode } from "react";
-import { createRoot } from "react-dom/client";
+import { test } from "node:test";
+
 import type { IslandDescriptor, ScreenRequest, ScreenResponse } from "@client-compose/protocol";
+import { act, createElement, type ReactNode, useState } from "react";
+import { createRoot } from "react-dom/client";
+
 import {
+  type ClientComposeConfig,
   ClientComposeProvider,
   ComposedScreen,
   Island as IslandView,
   ReactIslandRegistry,
   useScreen,
-  type ClientComposeConfig,
 } from "../src/index.ts";
 
 const Header: IslandDescriptor<{ name: string }> = { type: "header", version: 1 };
 const Posts: IslandDescriptor<{ count: number }> = { type: "posts", version: 1 };
-const Broken: IslandDescriptor<{}> = { type: "broken", version: 1 };
+const Broken: IslandDescriptor<Record<string, never>> = { type: "broken", version: 1 };
 
 const registry = new ReactIslandRegistry()
   .registerComponent(Header, ({ name }) => createElement("h1", null, name))
@@ -25,13 +28,24 @@ const registry = new ReactIslandRegistry()
   });
 
 type Island = ScreenResponse["islands"][number];
-const ok = (key: string, type: string, props: object): Island => ({ key, type, version: 1, status: "ok", props: props as never });
+const ok = (key: string, type: string, props: object): Island => ({
+  key,
+  type,
+  version: 1,
+  status: "ok",
+  props: props as never,
+});
 
 /** A fetch that serves queued responses and records requests. */
-function fakeFetch(...responses: (Island[] | { status: number } | { islands: Island[]; maxAge: number })[]) {
+function fakeFetch(
+  ...responses: (Island[] | { status: number } | { islands: Island[]; maxAge: number })[]
+) {
   const requests: { body: ScreenRequest; headers: Record<string, string> }[] = [];
   const impl = (async (_url: string, init: RequestInit) => {
-    requests.push({ body: JSON.parse(String(init.body)), headers: init.headers as Record<string, string> });
+    requests.push({
+      body: JSON.parse(String(init.body)),
+      headers: init.headers as Record<string, string>,
+    });
     const next = responses.shift() ?? [];
     if ("status" in next) return new Response("nope", { status: next.status });
     const islands = Array.isArray(next) ? next : next.islands;
@@ -52,7 +66,10 @@ async function render(node: ReactNode) {
   };
 }
 
-const config = (fetchImpl: typeof fetch, extra: Partial<ClientComposeConfig> = {}): ClientComposeConfig => ({
+const config = (
+  fetchImpl: typeof fetch,
+  extra: Partial<ClientComposeConfig> = {},
+): ClientComposeConfig => ({
   registry,
   baseUrl: "https://composer.test",
   client: { platform: "web", appVersion: "1.0.0" },
@@ -60,14 +77,22 @@ const config = (fetchImpl: typeof fetch, extra: Partial<ClientComposeConfig> = {
   ...extra,
 });
 
-const withProvider = (cfg: ClientComposeConfig, child: ReactNode) => createElement(ClientComposeProvider, { config: cfg }, child);
+const withProvider = (cfg: ClientComposeConfig, child: ReactNode) =>
+  createElement(ClientComposeProvider, { config: cfg }, child);
 
 test("renders islands in order and declares capabilities", async () => {
-  const f = fakeFetch([ok("posts", "posts", { count: 3 }), ok("header", "header", { name: "Ada" })]);
+  const f = fakeFetch([
+    ok("posts", "posts", { count: 3 }),
+    ok("header", "header", { name: "Ada" }),
+  ]);
   const ui = await render(
     withProvider(
       config(f.impl, { headers: async () => ({ Authorization: "Bearer t" }) }),
-      createElement(ComposedScreen, { screen: "profile", params: { userId: "u1" }, loading: "loading…" }),
+      createElement(ComposedScreen, {
+        screen: "profile",
+        params: { userId: "u1" },
+        loading: "loading…",
+      }),
     ),
   );
   assert.equal(ui.html(), "<p>3 posts</p><h1>Ada</h1>");
@@ -77,7 +102,11 @@ test("renders islands in order and declares capabilities", async () => {
 });
 
 test("a crashing island is isolated and reported", async () => {
-  const f = fakeFetch([ok("a", "header", { name: "Ada" }), ok("b", "broken", {}), ok("c", "posts", { count: 1 })]);
+  const f = fakeFetch([
+    ok("a", "header", { name: "Ada" }),
+    ok("b", "broken", {}),
+    ok("c", "posts", { count: 1 }),
+  ]);
   const crashed: string[] = [];
   const originalError = console.error;
   console.error = () => {}; // React logs caught render errors.
@@ -100,12 +129,19 @@ test("errored islands are hidden by default, or rendered with renderIslandError"
     ok("a", "header", { name: "Ada" }),
     { key: "p", type: "posts", version: 1, status: "error", error: { code: "timeout" } },
   ];
-  const hidden = await render(withProvider(config(fakeFetch(islands).impl), createElement(ComposedScreen, { screen: "profile" })));
+  const hidden = await render(
+    withProvider(
+      config(fakeFetch(islands).impl),
+      createElement(ComposedScreen, { screen: "profile" }),
+    ),
+  );
   assert.equal(hidden.html(), "<h1>Ada</h1>");
 
   const shown = await render(
     withProvider(
-      config(fakeFetch(islands).impl, { renderIslandError: (e) => createElement("i", null, e.error.code) }),
+      config(fakeFetch(islands).impl, {
+        renderIslandError: (e) => createElement("i", null, e.error.code),
+      }),
       createElement(ComposedScreen, { screen: "profile" }),
     ),
   );
@@ -154,7 +190,11 @@ test("reuses a response within cache.maxAge; reload bypasses the cache", async (
   function Screen() {
     const s = useScreen("profile");
     reload = s.reload;
-    return createElement("div", null, s.islands.map((island) => createElement(IslandView, { key: island.key, island })));
+    return createElement(
+      "div",
+      null,
+      s.islands.map((island) => createElement(IslandView, { key: island.key, island })),
+    );
   }
   function App() {
     const [mounted, setMounted] = useState(true);
@@ -178,7 +218,8 @@ test("reuses a response within cache.maxAge; reload bypasses the cache", async (
 test("refetches when params change", async () => {
   const f = fakeFetch([ok("a", "header", { name: "u1" })], [ok("a", "header", { name: "u2" })]);
   const cfg = config(f.impl);
-  const screen = (userId: string) => withProvider(cfg, createElement(ComposedScreen, { screen: "profile", params: { userId } }));
+  const screen = (userId: string) =>
+    withProvider(cfg, createElement(ComposedScreen, { screen: "profile", params: { userId } }));
   const ui = await render(screen("u1"));
   assert.equal(ui.html(), "<h1>u1</h1>");
   await ui.rerender(screen("u2"));

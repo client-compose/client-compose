@@ -2,7 +2,9 @@
 //   node composers/typescript/node-http/conformance-server.ts [port]
 
 import { createServer, type IncomingMessage } from "node:http";
+
 import { conformanceActions, conformanceScreen, createComposer } from "@client-compose/composer";
+
 import { createRequestListener } from "./src/index.ts";
 
 export function conformanceServer() {
@@ -15,5 +17,7 @@ export function conformanceServer() {
 
 if (import.meta.main) {
   const port = Number(process.argv[2] ?? 4100);
-  conformanceServer().listen(port, () => console.log(`conformance server on http://localhost:${port}`));
+  conformanceServer().listen(port, () =>
+    console.log(`conformance server on http://localhost:${port}`),
+  );
 }

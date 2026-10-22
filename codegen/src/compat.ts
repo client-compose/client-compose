@@ -9,13 +9,14 @@
 import { execFileSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { dirname, relative, sep } from "node:path";
+
 import {
-  ManifestError,
-  parseActionManifest,
-  parseManifest,
   type Action,
   type Island,
+  ManifestError,
   type ObjectDef,
+  parseActionManifest,
+  parseManifest,
   type TypeRef,
 } from "./manifest.ts";
 
@@ -45,7 +46,8 @@ export function compareIslands(base: Island[], head: Island[]): CompatIssue[] {
       });
       continue;
     }
-    const report = (path: string, message: string) => issues.push({ severity: "breaking", island: label, path, message });
+    const report = (path: string, message: string) =>
+      issues.push({ severity: "breaking", island: label, path, message });
     compareObject(old.props, current.props, "props", report);
   }
   return issues;
@@ -73,7 +75,8 @@ export function compareActions(base: Action[], head: Action[]): CompatIssue[] {
       });
       continue;
     }
-    const report = (path: string, message: string) => issues.push({ severity: "breaking", island: label, path, message });
+    const report = (path: string, message: string) =>
+      issues.push({ severity: "breaking", island: label, path, message });
     compareObject(old.input, current.input, "input", report);
     compareObject(old.result, current.result, "result", report);
     const currentErrors = new Map(current.errors.map((e) => [e.code, e]));
@@ -81,9 +84,14 @@ export function compareActions(base: Action[], head: Action[]): CompatIssue[] {
       const after = currentErrors.get(before.code);
       if (!after) continue;
       const path = `errors.${before.code}.details`;
-      if (before.details && after.details) compareObject(before.details, after.details, path, report);
+      if (before.details && after.details)
+        compareObject(before.details, after.details, path, report);
       else if (before.details) report(path, "details removed: old apps expect them");
-      else if (after.details) report(path, "details added: new apps would expect them from a composer that doesn't send them");
+      else if (after.details)
+        report(
+          path,
+          "details added: new apps would expect them from a composer that doesn't send them",
+        );
     }
   }
   return issues;
@@ -127,12 +135,14 @@ function compareType(old: TypeRef, current: TypeRef, path: string, report: Repor
   switch (old.kind) {
     case "string": {
       const after = current as typeof old;
-      if (old.format !== after.format) report(path, `format changed from ${describe(old)} to ${describe(after)}`);
+      if (old.format !== after.format)
+        report(path, `format changed from ${describe(old)} to ${describe(after)}`);
       return;
     }
     case "integer": {
       const after = current as typeof old;
-      if (old.int64 !== after.int64) report(path, `integer size changed from ${describe(old)} to ${describe(after)}`);
+      if (old.int64 !== after.int64)
+        report(path, `integer size changed from ${describe(old)} to ${describe(after)}`);
       return;
     }
     case "array":
@@ -146,9 +156,16 @@ function compareType(old: TypeRef, current: TypeRef, path: string, report: Repor
       const after = new Set((current as typeof old).def.values);
       const added = [...after].filter((v) => !before.has(v));
       const removed = [...before].filter((v) => !after.has(v));
-      if (added.length) report(path, `enum value${added.length > 1 ? "s" : ""} added (${quote(added)}): old apps can't decode them`);
+      if (added.length)
+        report(
+          path,
+          `enum value${added.length > 1 ? "s" : ""} added (${quote(added)}): old apps can't decode them`,
+        );
       if (removed.length) {
-        report(path, `enum value${removed.length > 1 ? "s" : ""} removed (${quote(removed)}): new apps can't decode them from a composer that still sends them`);
+        report(
+          path,
+          `enum value${removed.length > 1 ? "s" : ""} removed (${quote(removed)}): new apps can't decode them from a composer that still sends them`,
+        );
       }
       return;
     }
@@ -181,13 +198,19 @@ const quote = (values: string[]) => values.map((v) => JSON.stringify(v)).join(",
  * Loads the island manifests that were in `manifestsDir` at a git ref, e.g. "origin/main".
  * Returns no islands if the directory didn't exist at that ref.
  */
-export function loadManifestsAtRef(manifestsDir: string, ref: string): { islands: Island[]; issues: CompatIssue[] } {
+export function loadManifestsAtRef(
+  manifestsDir: string,
+  ref: string,
+): { islands: Island[]; issues: CompatIssue[] } {
   const { items, issues } = loadAtRef(manifestsDir, ref, parseManifest);
   return { islands: items, issues };
 }
 
 /** loadManifestsAtRef for action manifests. */
-export function loadActionManifestsAtRef(actionsDir: string, ref: string): { actions: Action[]; issues: CompatIssue[] } {
+export function loadActionManifestsAtRef(
+  actionsDir: string,
+  ref: string,
+): { actions: Action[]; issues: CompatIssue[] } {
   const { items, issues } = loadAtRef(actionsDir, ref, parseActionManifest);
   return { actions: items, issues };
 }
@@ -197,13 +220,20 @@ function loadAtRef<T>(
   ref: string,
   parse: (raw: unknown, source: string) => T,
 ): { items: T[]; issues: CompatIssue[] } {
-  const git = (args: string[]) => execFileSync("git", args, { cwd: manifestsDir, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  const git = (args: string[]) =>
+    execFileSync("git", args, {
+      cwd: manifestsDir,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
   let top: string;
   try {
     top = git(["rev-parse", "--show-toplevel"]).trim();
     git(["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]);
   } catch {
-    throw new ManifestError(`can't read git ref ${JSON.stringify(ref)} for ${manifestsDir} (is it a git repo, and is the ref fetched?)`);
+    throw new ManifestError(
+      `can't read git ref ${JSON.stringify(ref)} for ${manifestsDir} (is it a git repo, and is the ref fetched?)`,
+    );
   }
   // git reports the resolved top level, so resolve symlinks (e.g. macOS /var -> /private/var) here too.
   const dir = relative(top, realpathSync(manifestsDir)).split(sep).join("/");
@@ -221,7 +251,12 @@ function loadAtRef<T>(
       items.push(parse(JSON.parse(gitAtTop(["show", source])), source));
     } catch (err) {
       // A base manifest the current codegen can't read can't be compared; say so rather than fail.
-      issues.push({ severity: "warning", island: file, path: "", message: `skipped: ${(err as Error).message}` });
+      issues.push({
+        severity: "warning",
+        island: file,
+        path: "",
+        message: `skipped: ${(err as Error).message}`,
+      });
     }
   }
   return { items, issues };

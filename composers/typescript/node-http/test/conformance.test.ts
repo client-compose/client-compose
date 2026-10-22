@@ -1,7 +1,14 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { AddressInfo } from "node:net";
-import { actionCases, composerCases, runActionCase, runComposerCase } from "@client-compose/conformance";
+import { test } from "node:test";
+
+import {
+  actionCases,
+  composerCases,
+  runActionCase,
+  runComposerCase,
+} from "@client-compose/conformance";
+
 import { conformanceServer } from "../conformance-server.ts";
 
 const server = conformanceServer().listen(0);

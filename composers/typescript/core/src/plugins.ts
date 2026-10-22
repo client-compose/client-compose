@@ -59,7 +59,7 @@ export interface Failure {
  *       },
  *     };
  */
-export interface Plugin<Ctx, Req = any> {
+export interface Plugin<Ctx, Req = unknown> {
   /**
    * Runs once per HTTP request, after the composer's own `context` function, and adds to the
    * context: the viewer from a token, a tenant. Throw UnauthenticatedError or ForbiddenError to
@@ -80,6 +80,8 @@ export interface Plugin<Ctx, Req = any> {
 }
 
 /** A plugin that passes every failure to `report`, e.g. to log it. */
-export function reportErrors(report: (failure: Failure) => void): Plugin<any> {
+export function reportErrors<Ctx, Req = unknown>(
+  report: (failure: Failure) => void,
+): Plugin<Ctx, Req> {
   return { error: report };
 }

@@ -9,7 +9,6 @@
 //     assert.equal(followed.result?.followers, 8);
 
 import {
-  PROTOCOL_VERSION,
   type ActionDescriptor,
   type ActionEffects,
   type Capabilities,
@@ -17,6 +16,7 @@ import {
   type DeclaredError,
   type IslandDescriptor,
   type IslandEntry,
+  PROTOCOL_VERSION,
   type ScreenErrorResponse,
   type ScreenResponse,
 } from "@client-compose/protocol";
@@ -71,7 +71,11 @@ export interface TestOutcome<R, E extends DeclaredError> {
 }
 
 export interface TestComposer {
-  screen(id: string, params?: Record<string, string>, options?: RequestOptions): Promise<TestScreen>;
+  screen(
+    id: string,
+    params?: Record<string, string>,
+    options?: RequestOptions,
+  ): Promise<TestScreen>;
   perform<I, R, E extends DeclaredError>(
     descriptor: ActionDescriptor<I, R, E>,
     input: I,
@@ -81,7 +85,10 @@ export interface TestComposer {
 
 const base = "https://composer.test";
 
-export function testComposer<Ctx, Req = Request>(composer: Composer<Ctx, Req>, options: TestComposerOptions<Req> = {}): TestComposer {
+export function testComposer<Ctx, Req = Request>(
+  composer: Composer<Ctx, Req>,
+  options: TestComposerOptions<Req> = {},
+): TestComposer {
   const islands: Capabilities = options.declare ? declared(options.declare) : composer.islands();
   const client = options.client ?? { platform: "test", appVersion: "1" };
   const toRequest =
@@ -92,7 +99,11 @@ export function testComposer<Ctx, Req = Request>(composer: Composer<Ctx, Req>, o
   async function post(path: string, body: unknown, headers: Record<string, string> = {}) {
     const raw = JSON.stringify(body);
     const allHeaders = { "content-type": "application/json", ...headers };
-    const res = await composer.handle(path, raw, toRequest({ url: base + path, headers: allHeaders, body: raw }));
+    const res = await composer.handle(
+      path,
+      raw,
+      toRequest({ url: base + path, headers: allHeaders, body: raw }),
+    );
     if (!res) throw new Error(`testComposer: ${path} isn't a composer route`);
     return res;
   }
@@ -115,11 +126,18 @@ export function testComposer<Ctx, Req = Request>(composer: Composer<Ctx, Req>, o
         props<P>(descriptor: IslandDescriptor<P>, key: string): P {
           const entry = entries.find((e) => e.key === key);
           if (!entry) {
-            throw new Error(`testComposer: screen ${id} has no island "${key}" (it has ${entries.map((e) => e.key).join(", ") || "none"})`);
+            throw new Error(
+              `testComposer: screen ${id} has no island "${key}" (it has ${entries.map((e) => e.key).join(", ") || "none"})`,
+            );
           }
-          if (entry.status !== "ok") throw new Error(`testComposer: island "${key}" is ${entry.status}: ${JSON.stringify(entry)}`);
+          if (entry.status !== "ok")
+            throw new Error(
+              `testComposer: island "${key}" is ${entry.status}: ${JSON.stringify(entry)}`,
+            );
           if (entry.type !== descriptor.type || entry.version !== descriptor.version) {
-            throw new Error(`testComposer: island "${key}" is ${entry.type} v${entry.version}, not ${descriptor.type} v${descriptor.version}`);
+            throw new Error(
+              `testComposer: island "${key}" is ${entry.type} v${entry.version}, not ${descriptor.type} v${descriptor.version}`,
+            );
           }
           return entry.props as P;
         },
@@ -135,13 +153,27 @@ export function testComposer<Ctx, Req = Request>(composer: Composer<Ctx, Req>, o
           version: descriptor.version,
           input,
           client,
-          ...(requestOptions.idempotencyKey !== undefined && { idempotencyKey: requestOptions.idempotencyKey }),
+          ...(requestOptions.idempotencyKey !== undefined && {
+            idempotencyKey: requestOptions.idempotencyKey,
+          }),
         },
         requestOptions.headers,
       );
-      if (res.status !== 200) return { httpStatus: res.status, failure: (res.body as ScreenErrorResponse).error.code };
-      const body = res.body as { status: "ok" | "error"; result?: never; effects?: ActionEffects; error?: never };
-      return { httpStatus: 200, status: body.status, result: body.result, effects: body.effects, error: body.error };
+      if (res.status !== 200)
+        return { httpStatus: res.status, failure: (res.body as ScreenErrorResponse).error.code };
+      const body = res.body as {
+        status: "ok" | "error";
+        result?: never;
+        effects?: ActionEffects;
+        error?: never;
+      };
+      return {
+        httpStatus: 200,
+        status: body.status,
+        result: body.result,
+        effects: body.effects,
+        error: body.error,
+      };
     },
   };
 }

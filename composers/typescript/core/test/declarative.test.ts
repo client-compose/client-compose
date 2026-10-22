@@ -1,23 +1,24 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
+import { test } from "node:test";
+
+import { ConformanceV1 } from "../src/conformance-actions.generated.ts";
 import {
   action,
   createComposer,
   defineBatchLoader,
+  type Failure,
   island,
+  type IslandDescriptor,
   LoadNotFoundError,
   place,
   placeStatic,
+  type Plugin,
   reportErrors,
+  type Requirement,
   screen,
   UnauthenticatedError,
-  type Failure,
-  type IslandDescriptor,
-  type Plugin,
-  type Requirement,
 } from "../src/index.ts";
 import { testComposer } from "../src/testing.ts";
-import { ConformanceV1 } from "../src/conformance-actions.generated.ts";
 
 // Stand-ins for generated descriptors.
 const HeaderV1: IslandDescriptor<{ name: string }> = { type: "header", version: 1 };
@@ -44,7 +45,10 @@ test("declared screens: islands in order, `when` per request, static islands", a
   const profile = screen<Ctx>("profile", {
     islands: [
       place("header", header, { required: true }),
-      { ...placeStatic("edit", FormV1, { label: "Edit profile" }), when: ({ ctx, params }) => ctx.viewer === params.userId },
+      {
+        ...placeStatic("edit", FormV1, { label: "Edit profile" }),
+        when: ({ ctx, params }) => ctx.viewer === params.userId,
+      },
     ],
   });
   const app = testComposer(createComposer({ screens: [profile], context: viewerFrom }));
@@ -72,7 +76,9 @@ test("requirements and the context function answer 401 before anything runs", as
     },
     { requires: [signedIn] },
   );
-  const app = testComposer(createComposer<Ctx>({ screens: [profile], actions: [echo], context: viewerFrom }));
+  const app = testComposer(
+    createComposer<Ctx>({ screens: [profile], actions: [echo], context: viewerFrom }),
+  );
 
   assert.equal((await app.screen("profile")).error, "unauthenticated");
   assert.equal((await app.screen("profile", {}, as("bad"))).status, 401);
@@ -103,7 +109,12 @@ test("plugins wrap in order, add context, and hear failures", async () => {
   });
   const composer = createComposer<Ctx>({
     screens: [screen("s", { islands: [place("b", broken)] })],
-    use: [tracing("outer"), tracing("inner"), { context: () => ({ viewer: "plugin-viewer" }) }, reportErrors((f) => failures.push(f))],
+    use: [
+      tracing("outer"),
+      tracing("inner"),
+      { context: () => ({ viewer: "plugin-viewer" }) },
+      reportErrors((f) => failures.push(f)),
+    ],
   });
 
   const s = await testComposer(composer).screen("s");
@@ -119,7 +130,10 @@ test("config mistakes throw", () => {
   const profile = screen("profile", { islands: [] });
   assert.throws(() => createComposer({ screens: [profile, profile] }), /defined twice/);
   assert.throws(() => screen("empty", {}), /needs either islands or layout/);
-  assert.throws(() => screen("both", { islands: [], layout: () => [] }), /needs either islands or layout/);
+  assert.throws(
+    () => screen("both", { islands: [], layout: () => [] }),
+    /needs either islands or layout/,
+  );
 });
 
 test("loadMany batches keys, and rejects if any is missing", async () => {
@@ -138,14 +152,25 @@ test("loadMany batches keys, and rejects if any is missing", async () => {
     },
   });
   await testComposer(createComposer({ screens: [s] })).screen("s");
-  assert.deepEqual([...got!], [["a", "A"], ["b", "B"]]);
+  assert.deepEqual(
+    [...got!],
+    [
+      ["a", "A"],
+      ["b", "B"],
+    ],
+  );
   assert.ok(missing instanceof LoadNotFoundError);
   assert.deepEqual(fetches[0], ["a", "b"]);
 });
 
 test("the test kit declares an older app's islands", async () => {
-  const HeaderV2: IslandDescriptor<{ name: string; badge?: string }> = { type: "header", version: 2 };
-  const s = screen("s", { islands: [place("header", [header, island(HeaderV2, () => ({ name: "v2" }))])] });
+  const HeaderV2: IslandDescriptor<{ name: string; badge?: string }> = {
+    type: "header",
+    version: 2,
+  };
+  const s = screen("s", {
+    islands: [place("header", [header, island(HeaderV2, () => ({ name: "v2" }))])],
+  });
   const composer = createComposer({ screens: [s] });
   assert.deepEqual(composer.islands(), { header: [1, 2] });
   const old = await testComposer(composer, { declare: [HeaderV1] }).screen("s", { userId: "ada" });

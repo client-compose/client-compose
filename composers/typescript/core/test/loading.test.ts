@@ -1,22 +1,28 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
+import { test } from "node:test";
+
 import type { ScreenRequest } from "@client-compose/protocol";
+
 import {
   createComposer,
-  NotFoundError,
   defineBatchLoader,
-  screen,
-  LoadNotFoundError,
   type Island,
   type LayoutContext,
+  LoadNotFoundError,
+  NotFoundError,
   type Placement,
   type ResolveContext,
+  screen,
 } from "../src/index.ts";
 
 type Resolve = (rc: ResolveContext<null>) => unknown;
 
 /** A screen whose islands are the given resolvers, keyed a, b, c… in order. */
-function compose(resolvers: Resolve[], layout?: (rc: LayoutContext<null>) => unknown, timeoutMs?: number) {
+function compose(
+  resolvers: Resolve[],
+  layout?: (rc: LayoutContext<null>) => unknown,
+  timeoutMs?: number,
+) {
   const islands = resolvers.map((resolve, i): Placement<null> => ({
     key: String.fromCharCode(97 + i),
     timeoutMs,
@@ -40,9 +46,9 @@ function compose(resolvers: Resolve[], layout?: (rc: LayoutContext<null>) => unk
 const props = async (result: ReturnType<typeof compose>) => {
   const r = await result;
   assert.equal(r.status, 200);
-  return (r.body as { islands: { status: string; props?: unknown; error?: { code: string } }[] }).islands.map((i) =>
-    i.status === "ok" ? i.props : i.error!.code,
-  );
+  return (
+    r.body as { islands: { status: string; props?: unknown; error?: { code: string } }[] }
+  ).islands.map((i) => (i.status === "ok" ? i.props : i.error!.code));
 };
 
 test("the layout and resolvers share loads by key", async () => {
@@ -54,7 +60,13 @@ test("the layout and resolvers share loads by key", async () => {
       return { name: "Ada" };
     });
   const result = await props(
-    compose([async (rc) => ({ name: (await user(rc)).name }), async (rc) => ({ initial: (await user(rc)).name[0] })], user),
+    compose(
+      [
+        async (rc) => ({ name: (await user(rc)).name }),
+        async (rc) => ({ initial: (await user(rc)).name[0] }),
+      ],
+      user,
+    ),
   );
   assert.deepEqual(result, [{ name: "Ada" }, { initial: "A" }]);
   assert.equal(calls, 1);
@@ -120,7 +132,11 @@ test("batch loaders: missing keys reject, array results align, maxBatchSize spli
     { maxBatchSize: 2 },
   );
   const result = await props(
-    compose([(rc) => square.load(rc, 2).then((v) => ({ v })), (rc) => square.load(rc, -1), (rc) => square.load(rc, 3).then((v) => ({ v }))]),
+    compose([
+      (rc) => square.load(rc, 2).then((v) => ({ v })),
+      (rc) => square.load(rc, -1),
+      (rc) => square.load(rc, 3).then((v) => ({ v })),
+    ]),
   );
   assert.deepEqual(result, [{ v: 4 }, "resolve_failed", { v: 9 }]);
   assert.deepEqual(batches, [[2, -1], [3]]);
@@ -145,9 +161,21 @@ test("batch loaders need a composer context", () => {
 
 test("NotFoundError (or a batch loader's missing key) in a layout is a 404, and a failing meta is dropped", async () => {
   const userById = defineBatchLoader(async (ids: string[]) => ids.map(() => undefined));
-  const request: ScreenRequest = { protocol: 0, screen: "s", client: { platform: "test", appVersion: "1" }, islands: { t: [1] } };
-  for (const layout of [() => { throw new NotFoundError(); }, async (rc: LayoutContext<null>) => [await userById.load(rc, "x")]]) {
-    const result = await createComposer<null>({ screens: [screen<null>("s", { layout: layout as never })] }).compose(request, null);
+  const request: ScreenRequest = {
+    protocol: 0,
+    screen: "s",
+    client: { platform: "test", appVersion: "1" },
+    islands: { t: [1] },
+  };
+  for (const layout of [
+    () => {
+      throw new NotFoundError();
+    },
+    async (rc: LayoutContext<null>) => [await userById.load(rc, "x")],
+  ]) {
+    const result = await createComposer<null>({
+      screens: [screen<null>("s", { layout: layout as never })],
+    }).compose(request, null);
     assert.equal(result.status, 404);
     assert.equal((result.body as { error: { code: string } }).error.code, "not_found");
   }

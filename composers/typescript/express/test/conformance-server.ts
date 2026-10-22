@@ -1,12 +1,17 @@
 // The conformance screen and action, served from Express under a prefix, with or without
 // express.json() in front.
 import type { AddressInfo } from "node:net";
-import express from "express";
+
 import { conformanceActions, conformanceScreen, createComposer } from "@client-compose/composer";
+import express from "express";
+
 import { composerHandler } from "../src/index.ts";
 
 export async function conformanceServer(options: { json: boolean }) {
-  const composer = createComposer<undefined, express.Request>({ screens: [conformanceScreen()], actions: conformanceActions() });
+  const composer = createComposer<undefined, express.Request>({
+    screens: [conformanceScreen()],
+    actions: conformanceActions(),
+  });
   const app = express();
   if (options.json) app.use(express.json());
   app.use("/compose", composerHandler(composer));

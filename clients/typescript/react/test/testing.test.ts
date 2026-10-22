@@ -1,23 +1,28 @@
 import "./setup.ts";
-import { test } from "node:test";
+
 import assert from "node:assert/strict";
+import { test } from "node:test";
+
+import type { ActionDescriptor, IslandDescriptor, ScreenRef } from "@client-compose/protocol";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
-import type { ActionDescriptor, IslandDescriptor, ScreenRef } from "@client-compose/protocol";
+
 import {
+  type ActionResult,
+  type ActionState,
   ClientComposeProvider,
   ComposedScreen,
   declaredError,
   isUnexpected,
   ReactIslandRegistry,
   useAction,
-  type ActionResult,
-  type ActionState,
 } from "../src/index.ts";
 import { actionError, actionOk, createTestConfig, island, screen } from "../src/testing.ts";
 
 const Name: IslandDescriptor<{ name: string }> = { type: "name", version: 1 };
-const registry = new ReactIslandRegistry().registerComponent(Name, ({ name }) => createElement("b", null, name));
+const registry = new ReactIslandRegistry().registerComponent(Name, ({ name }) =>
+  createElement("b", null, name),
+);
 
 type FollowError = { code: "blocked" } | { code: "limit"; details: { max: number } };
 const Follow: ActionDescriptor<{ userId: string }, { followers: number }, FollowError> = {
@@ -37,7 +42,11 @@ test("createTestConfig renders screens from the fake composer and records effect
       screens: { profile: () => screen("profile", [island("n", Name, { name: "Ada" })]) },
       actions: {
         follow: () =>
-          actionOk(Follow, { followers: 8 }, { navigate: { screen: "feed" }, invalidate: [{ screen: "profile" }] }),
+          actionOk(
+            Follow,
+            { followers: 8 },
+            { navigate: { screen: "feed" }, invalidate: [{ screen: "profile" }] },
+          ),
       },
     },
   });
@@ -48,7 +57,9 @@ test("createTestConfig renders screens from the fake composer and records effect
   }
   const container = document.createElement("div");
   const root = createRoot(container);
-  await act(async () => root.render(createElement(ClientComposeProvider, { config }, createElement(Harness))));
+  await act(async () =>
+    root.render(createElement(ClientComposeProvider, { config }, createElement(Harness))),
+  );
   assert.equal(container.innerHTML, "<b>Ada</b>");
 
   await act(async () => {
@@ -77,9 +88,20 @@ test("declaredError and isUnexpected read how an action call ended", () => {
     status: "ok",
     result: {},
   };
-  const blocked: ActionResult<unknown, FollowError> = { ...ok, status: "error", error: { code: "blocked" } };
-  const limit: ActionResult<unknown, FollowError> = { ...ok, status: "error", error: { code: "limit", details: { max: 5 } } };
-  const failed: ActionResult<unknown, FollowError> = { status: "failed", error: new Error("offline") };
+  const blocked: ActionResult<unknown, FollowError> = {
+    ...ok,
+    status: "error",
+    error: { code: "blocked" },
+  };
+  const limit: ActionResult<unknown, FollowError> = {
+    ...ok,
+    status: "error",
+    error: { code: "limit", details: { max: 5 } },
+  };
+  const failed: ActionResult<unknown, FollowError> = {
+    status: "failed",
+    error: new Error("offline"),
+  };
 
   assert.equal(declaredError(undefined), undefined);
   assert.equal(declaredError(ok), undefined);

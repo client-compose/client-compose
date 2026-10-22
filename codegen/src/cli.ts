@@ -4,7 +4,8 @@
 
 import { readFileSync } from "node:fs";
 import { relative } from "node:path";
-import { checkCompat, generate, ManifestError, stale, write, type CompatIssue } from "./index.ts";
+
+import { checkCompat, type CompatIssue, generate, ManifestError, stale, write } from "./index.ts";
 
 // Standalone binaries have the version compiled in (see scripts/build-codegen-binaries.sh).
 declare const __CLIENT_COMPOSE_CODEGEN_VERSION__: string | undefined;
@@ -22,8 +23,13 @@ const USAGE = `Usage:
   client-compose-codegen --version | --help`;
 
 function version(): string {
-  if (typeof __CLIENT_COMPOSE_CODEGEN_VERSION__ === "string") return __CLIENT_COMPOSE_CODEGEN_VERSION__;
-  return (JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { version: string }).version;
+  if (typeof __CLIENT_COMPOSE_CODEGEN_VERSION__ === "string")
+    return __CLIENT_COMPOSE_CODEGEN_VERSION__;
+  return (
+    JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
+      version: string;
+    }
+  ).version;
 }
 
 function fail(message: string): never {
@@ -34,7 +40,8 @@ function fail(message: string): never {
 function runGenerate(args: string[]): boolean {
   const check = args.includes("--check");
   const configs = args.filter((a) => a !== "--check");
-  if (configs.length === 0 || configs.some((c) => c.startsWith("-"))) fail("Expected one or more config files.");
+  if (configs.length === 0 || configs.some((c) => c.startsWith("-")))
+    fail("Expected one or more config files.");
 
   let ok = true;
   for (const config of configs) {
@@ -42,12 +49,16 @@ function runGenerate(args: string[]): boolean {
       const files = generate(config);
       const outdated = stale(files);
       if (check) {
-        for (const f of outdated) console.error(`✖ out of date: ${relative(process.cwd(), f.path)}`);
+        for (const f of outdated)
+          console.error(`✖ out of date: ${relative(process.cwd(), f.path)}`);
         if (outdated.length) ok = false;
         else console.log(`✔ ${config}: ${files.length} file(s) up to date`);
       } else {
         write(outdated);
-        for (const f of files) console.log(`${outdated.includes(f) ? "wrote" : "unchanged"} ${relative(process.cwd(), f.path)}`);
+        for (const f of files)
+          console.log(
+            `${outdated.includes(f) ? "wrote" : "unchanged"} ${relative(process.cwd(), f.path)}`,
+          );
       }
     } catch (err) {
       if (!(err instanceof ManifestError)) throw err;
@@ -91,7 +102,9 @@ function runCompat(args: string[]): boolean {
     }
     for (const issue of issues) {
       const where = issue.path ? ` · ${issue.path}` : "";
-      console.log(`${issue.severity === "breaking" ? "✖" : "⚠"} ${issue.island}${where}: ${issue.message}`);
+      console.log(
+        `${issue.severity === "breaking" ? "✖" : "⚠"} ${issue.island}${where}: ${issue.message}`,
+      );
     }
     const breaking = issues.filter((i) => i.severity === "breaking");
     if (breaking.length) {
@@ -109,7 +122,8 @@ function runCompat(args: string[]): boolean {
   return ok;
 }
 
-const nextVersion = (island: string) => island.replace(/ v(\d+)$/, (_, v: string) => ` v${Number(v) + 1}`);
+const nextVersion = (island: string) =>
+  island.replace(/ v(\d+)$/, (_, v: string) => ` v${Number(v) + 1}`);
 
 const args = process.argv.slice(2);
 if (args.includes("--help") || args.includes("-h")) {

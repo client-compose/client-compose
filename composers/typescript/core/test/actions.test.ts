@@ -1,13 +1,18 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
-import { action, createComposer, ForbiddenError, reportErrors, type Action } from "../src/index.ts";
+import { test } from "node:test";
+
 import { ConformanceV1, type ConformanceV1Input } from "../src/conformance-actions.generated.ts";
+import { type Action, action, createComposer, ForbiddenError, reportErrors } from "../src/index.ts";
 
 /** Performs actions in-process, reporting failures as `action vN: message`. */
 function performer<Ctx>(actions: Action<Ctx>[], reported?: string[]) {
   const composer = createComposer<Ctx>({
     actions,
-    use: [reportErrors((f) => reported?.push(`${f.action} v${f.version}: ${(f.error as Error).message}`))],
+    use: [
+      reportErrors((f) =>
+        reported?.push(`${f.action} v${f.version}: ${(f.error as Error).message}`),
+      ),
+    ],
   });
   return composer.perform;
 }
@@ -28,7 +33,10 @@ test("handlers see validated input with null optionals removed", async () => {
       return { result: { echo: input.echo, version: 1 } };
     }),
   ]);
-  const res = await perform(request({ outcome: "ok", echo: "hi", count: null, extra: 1 }), undefined);
+  const res = await perform(
+    request({ outcome: "ok", echo: "hi", count: null, extra: 1 }),
+    undefined,
+  );
   assert.equal(res.status, 200);
   assert.deepEqual(seen, { outcome: "ok", echo: "hi", extra: 1 });
 });
@@ -46,9 +54,15 @@ test("failures and undeclared codes are reported and answered with action_failed
   );
   for (const outcome of ["fail", "ok"]) {
     const res = await perform(request({ outcome, echo: "x" }), undefined);
-    assert.deepEqual([res.status, res.body], [500, { protocol: 0, error: { code: "action_failed", message: undefined } }]);
+    assert.deepEqual(
+      [res.status, res.body],
+      [500, { protocol: 0, error: { code: "action_failed", message: undefined } }],
+    );
   }
-  assert.deepEqual(reported, ["conformance v1: boom", "conformance v1: returned undeclared error code nope"]);
+  assert.deepEqual(reported, [
+    "conformance v1: boom",
+    "conformance v1: returned undeclared error code nope",
+  ]);
 });
 
 test("protocol errors are not reported as failures", async () => {

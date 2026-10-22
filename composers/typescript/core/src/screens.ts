@@ -78,15 +78,22 @@ export interface PlaceOptions<Ctx> {
  */
 export function place<Ctx>(
   key: string,
-  versions: Island<Ctx, any> | Island<Ctx, any>[],
+  versions: Island<Ctx, unknown> | Island<Ctx, unknown>[],
   options: PlaceOptions<Ctx> = {},
 ): Placement<Ctx> {
   return { key, versions: Array.isArray(versions) ? versions : [versions], ...options };
 }
 
 /** Place an island whose props are known up front: a form, a heading. */
-export function placeStatic<P, Ctx = any>(key: string, descriptor: IslandDescriptor<P>, props: P): Placement<Ctx> {
-  return place(key, island<P, Ctx>(descriptor, () => props));
+export function placeStatic<P, Ctx>(
+  key: string,
+  descriptor: IslandDescriptor<P>,
+  props: P,
+): Placement<Ctx> {
+  return place(
+    key,
+    island<P, Ctx>(descriptor, () => props),
+  );
 }
 
 /** What a screen is made of. Build one with `screen`. */
@@ -133,5 +140,7 @@ export function negotiate<Ctx>(
   supported: number[] | undefined,
 ): Island<Ctx, unknown> | undefined {
   if (!supported) return undefined;
-  return versions.filter((v) => supported.includes(v.version)).sort((a, b) => b.version - a.version)[0];
+  return versions
+    .filter((v) => supported.includes(v.version))
+    .sort((a, b) => b.version - a.version)[0];
 }

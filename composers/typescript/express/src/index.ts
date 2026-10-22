@@ -1,7 +1,7 @@
 // Express adapter. The composer does the work; this hands it the body and writes the response.
 
+import { type Composer, matchRoute, PROTOCOL_VERSION } from "@client-compose/composer";
 import type { ErrorRequestHandler, NextFunction, Request, RequestHandler, Response } from "express";
-import { PROTOCOL_VERSION, matchRoute, type Composer } from "@client-compose/composer";
 
 /**
  * Serve a composer from Express. Its `context` receives the Express request, so what your
@@ -18,7 +18,9 @@ import { PROTOCOL_VERSION, matchRoute, type Composer } from "@client-compose/com
  * It works with or without `express.json()` in front of it: if that parser rejects a composer
  * request's body, the app gets the protocol's 400 `bad_request` rather than Express's error page.
  */
-export function composerHandler<Ctx>(composer: Composer<Ctx, Request>): [RequestHandler, ErrorRequestHandler] {
+export function composerHandler<Ctx>(
+  composer: Composer<Ctx, Request>,
+): [RequestHandler, ErrorRequestHandler] {
   const handle = async (req: Request, res: Response, next: NextFunction) => {
     if (!matchRoute(req.originalUrl)) {
       next();
@@ -37,7 +39,10 @@ export function composerHandler<Ctx>(composer: Composer<Ctx, Request>): [Request
   };
   const badBody: ErrorRequestHandler = (err, req, res, next) => {
     if (matchRoute(req.originalUrl) && isParseError(err)) {
-      res.status(400).json({ protocol: PROTOCOL_VERSION, error: { code: "bad_request", message: "Body is not valid JSON" } });
+      res.status(400).json({
+        protocol: PROTOCOL_VERSION,
+        error: { code: "bad_request", message: "Body is not valid JSON" },
+      });
       return;
     }
     next(err);
@@ -47,7 +52,9 @@ export function composerHandler<Ctx>(composer: Composer<Ctx, Request>): [Request
 
 /** body-parser's error for a body it couldn't parse. */
 const isParseError = (err: unknown) =>
-  typeof err === "object" && err !== null && (err as { type?: unknown }).type === "entity.parse.failed";
+  typeof err === "object" &&
+  err !== null &&
+  (err as { type?: unknown }).type === "entity.parse.failed";
 
 async function rawBody(req: Request): Promise<string> {
   // A body parser in front of us has already read the stream.

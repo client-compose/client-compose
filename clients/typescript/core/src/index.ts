@@ -2,7 +2,6 @@
 // `R` is whatever your UI layer renders: a React element, a DOM node, a string...
 
 import {
-  PROTOCOL_VERSION,
   type ActionDescriptor,
   type ActionRequest,
   type ActionResponse,
@@ -11,14 +10,15 @@ import {
   type DeclaredError,
   type IslandDescriptor,
   type IslandEntry,
+  PROTOCOL_VERSION,
   type ScreenRequest,
   type ScreenResponse,
 } from "@client-compose/protocol";
 
-type OkEntry<P = any> = IslandEntry<P> & { status: "ok" };
+type OkEntry<P = unknown> = IslandEntry<P> & { status: "ok" };
 type ErrorEntry = IslandEntry & { status: "error" };
 
-export type IslandRenderer<R, P = any> = (props: P, entry: OkEntry<P>) => R;
+export type IslandRenderer<R, P = unknown> = (props: P, entry: OkEntry<P>) => R;
 
 export class IslandRegistry<R> {
   private renderers = new Map<string, Map<number, IslandRenderer<R>>>();
@@ -36,13 +36,17 @@ export class IslandRegistry<R> {
         ? [islandOrType, versionOrRender as number, maybeRender!]
         : [islandOrType.type, islandOrType.version, versionOrRender as IslandRenderer<R, P>];
     if (!this.renderers.has(type)) this.renderers.set(type, new Map());
-    this.renderers.get(type)!.set(version, render);
+    // The registry hands each renderer the props of its own island type and version.
+    this.renderers.get(type)!.set(version, render as IslandRenderer<R>);
     return this;
   }
 
   capabilities(): Capabilities {
     return Object.fromEntries(
-      [...this.renderers].map(([type, versions]) => [type, [...versions.keys()].sort((a, b) => a - b)]),
+      [...this.renderers].map(([type, versions]) => [
+        type,
+        [...versions.keys()].sort((a, b) => a - b),
+      ]),
     );
   }
 
@@ -226,6 +230,11 @@ export async function callAction<I, R, E extends DeclaredError>(
   input: I,
   options: CallActionOptions,
 ): Promise<ActionResponse<R, E>> {
-  const request = buildActionRequest(action, input, options.client, options.idempotencyKey ?? newIdempotencyKey());
+  const request = buildActionRequest(
+    action,
+    input,
+    options.client,
+    options.idempotencyKey ?? newIdempotencyKey(),
+  );
   return (await fetchAction(baseUrl, request, options.init, options.fetch)) as ActionResponse<R, E>;
 }

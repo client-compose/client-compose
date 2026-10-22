@@ -1,6 +1,13 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
-import { actionCases, composerCases, runActionCase, runComposerCase } from "@client-compose/conformance";
+import { test } from "node:test";
+
+import {
+  actionCases,
+  composerCases,
+  runActionCase,
+  runComposerCase,
+} from "@client-compose/conformance";
+
 import { conformanceServer } from "./conformance-server.ts";
 
 const { baseUrl, close } = await conformanceServer();

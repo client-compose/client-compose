@@ -1,5 +1,6 @@
-import type { ReactNode } from "react";
 import "./styles.css";
+
+import type { ReactNode } from "react";
 
 export const metadata = { title: "Client Compose · Profile (Next.js)" };
 

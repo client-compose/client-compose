@@ -1,4 +1,9 @@
-import { PROTOCOL_VERSION, type ActionResponse, type ScreenErrorResponse, type ScreenResponse } from "@client-compose/protocol";
+import {
+  type ActionResponse,
+  PROTOCOL_VERSION,
+  type ScreenErrorResponse,
+  type ScreenResponse,
+} from "@client-compose/protocol";
 
 /** A composed screen, or the error the composer answers with. */
 export type ComposeResult =

@@ -1,8 +1,9 @@
 // Classic server rendering with client-side data fetching: fetch on the server with loadScreen, then
 // hand the response to the client <ComposedScreen> as initialResponse.
 import { loadScreen } from "@client-compose/react";
-import { serverConfig } from "../../../src/composer";
+
 import { ClientProfile } from "../../../src/client-profile";
+import { serverConfig } from "../../../src/composer";
 
 export default async function Page(props: {
   params: Promise<{ userId: string }>;

@@ -70,7 +70,11 @@ export const clientCases = (): ClientCase[] => load("client");
  * Sends one screen case to the composer at `baseUrl`. Pass `fetchImpl` to run against a
  * fetch-standard handler in-process (e.g. `composer.fetch`) instead of a server.
  */
-export async function runComposerCase(baseUrl: string, c: ComposerCase, fetchImpl: typeof fetch = fetch): Promise<CaseResult> {
+export async function runComposerCase(
+  baseUrl: string,
+  c: ComposerCase,
+  fetchImpl: typeof fetch = fetch,
+): Promise<CaseResult> {
   const request = {
     protocol: 0,
     screen: "__conformance",
@@ -80,11 +84,20 @@ export async function runComposerCase(baseUrl: string, c: ComposerCase, fetchImp
     ...c.request,
   };
   const path = c.path ?? String(request.screen);
-  return post(fetchImpl, `${baseUrl.replace(/\/$/, "")}/screens/${encodeURIComponent(path)}`, c.rawBody ?? JSON.stringify(request), c);
+  return post(
+    fetchImpl,
+    `${baseUrl.replace(/\/$/, "")}/screens/${encodeURIComponent(path)}`,
+    c.rawBody ?? JSON.stringify(request),
+    c,
+  );
 }
 
 /** Sends one action case. `fetchImpl` as for runComposerCase. */
-export async function runActionCase(baseUrl: string, c: ActionCase, fetchImpl: typeof fetch = fetch): Promise<CaseResult> {
+export async function runActionCase(
+  baseUrl: string,
+  c: ActionCase,
+  fetchImpl: typeof fetch = fetch,
+): Promise<CaseResult> {
   const request = {
     protocol: 0,
     action: "conformance",
@@ -94,7 +107,12 @@ export async function runActionCase(baseUrl: string, c: ActionCase, fetchImpl: t
     ...c.request,
   };
   const path = c.path ?? String(request.action);
-  return post(fetchImpl, `${baseUrl.replace(/\/$/, "")}/actions/${encodeURIComponent(path)}`, c.rawBody ?? JSON.stringify(request), c);
+  return post(
+    fetchImpl,
+    `${baseUrl.replace(/\/$/, "")}/actions/${encodeURIComponent(path)}`,
+    c.rawBody ?? JSON.stringify(request),
+    c,
+  );
 }
 
 async function post(
@@ -104,10 +122,18 @@ async function post(
   c: { name: string; expect: { status: number; body?: unknown } },
 ): Promise<CaseResult> {
   try {
-    const res = await fetchImpl(url, { method: "POST", headers: { "content-type": "application/json" }, body });
+    const res = await fetchImpl(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body,
+    });
     const text = await res.text();
     if (res.status !== c.expect.status) {
-      return { name: c.name, passed: false, message: `expected status ${c.expect.status}, got ${res.status}: ${text}` };
+      return {
+        name: c.name,
+        passed: false,
+        message: `expected status ${c.expect.status}, got ${res.status}: ${text}`,
+      };
     }
     if (c.expect.body !== undefined) {
       let body: unknown;
@@ -126,10 +152,14 @@ async function post(
 }
 
 /** Runs the screen cases, then the action cases (spec §8.1). `fetchImpl` as for runComposerCase. */
-export async function runComposerConformance(baseUrl: string, fetchImpl: typeof fetch = fetch): Promise<CaseResult[]> {
+export async function runComposerConformance(
+  baseUrl: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<CaseResult[]> {
   const results: CaseResult[] = [];
   for (const c of composerCases()) results.push(await runComposerCase(baseUrl, c, fetchImpl));
-  for (const c of actionCases()) results.push(await runActionCase(baseUrl, { ...c, name: `action: ${c.name}` }, fetchImpl));
+  for (const c of actionCases())
+    results.push(await runActionCase(baseUrl, { ...c, name: `action: ${c.name}` }, fetchImpl));
   return results;
 }
 
@@ -138,8 +168,15 @@ export async function runComposerConformance(baseUrl: string, fetchImpl: typeof 
  * everything else must be strictly equal, except `"$absent"`, which requires the value to be
  * missing. Returns a description of the first mismatch.
  */
-export function subsetMismatch(expected: unknown, actual: unknown, path: string): string | undefined {
-  if (expected === "$absent") return actual === undefined ? undefined : `${path}: expected no value, got ${JSON.stringify(actual)}`;
+export function subsetMismatch(
+  expected: unknown,
+  actual: unknown,
+  path: string,
+): string | undefined {
+  if (expected === "$absent")
+    return actual === undefined
+      ? undefined
+      : `${path}: expected no value, got ${JSON.stringify(actual)}`;
   if (Array.isArray(expected)) {
     if (!Array.isArray(actual)) return `${path}: expected array, got ${JSON.stringify(actual)}`;
     if (expected.length !== actual.length) {
@@ -161,5 +198,7 @@ export function subsetMismatch(expected: unknown, actual: unknown, path: string)
     }
     return undefined;
   }
-  return Object.is(expected, actual) ? undefined : `${path}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`;
+  return Object.is(expected, actual)
+    ? undefined
+    : `${path}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`;
 }

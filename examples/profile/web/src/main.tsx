@@ -1,8 +1,14 @@
+import "./styles.css";
+
+import {
+  type ClientComposeConfig,
+  ClientComposeProvider,
+  ComposedScreen,
+} from "@client-compose/react";
 import { StrictMode, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { ClientComposeProvider, ComposedScreen, type ClientComposeConfig } from "@client-compose/react";
+
 import { registry } from "./islands.tsx";
-import "./styles.css";
 
 const USERS = ["u_1", "u_2", "u_3"];
 
@@ -29,13 +35,17 @@ function App() {
         <label>
           Signed in as{" "}
           <select value={viewer} onChange={(e) => setViewer(e.target.value)}>
-            {USERS.map((u) => <option key={u}>{u}</option>)}
+            {USERS.map((u) => (
+              <option key={u}>{u}</option>
+            ))}
           </select>
         </label>
         <label>
           Viewing profile{" "}
           <select value={profile} onChange={(e) => setProfile(e.target.value)}>
-            {USERS.map((u) => <option key={u}>{u}</option>)}
+            {USERS.map((u) => (
+              <option key={u}>{u}</option>
+            ))}
           </select>
         </label>
       </nav>
@@ -46,7 +56,8 @@ function App() {
           loading={<p className="status">Loading…</p>}
           renderError={(_, reload) => (
             <p className="status">
-              Couldn't load this profile. Is the Go composer running? <button onClick={reload}>Retry</button>
+              Couldn't load this profile. Is the Go composer running?{" "}
+              <button onClick={reload}>Retry</button>
             </p>
           )}
         />

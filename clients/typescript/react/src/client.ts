@@ -5,10 +5,27 @@
 // Components instead of running them on the server.
 
 import {
+  buildActionRequest,
+  fetchAction,
+  newIdempotencyKey,
+  plan,
+  type PlannedIsland,
+} from "@client-compose/client";
+import {
+  type ActionDescriptor,
+  type ActionEffects,
+  type ActionResponse,
+  type DeclaredError,
+  type ScreenRef,
+  screenRefMatches,
+  type ScreenResponse,
+} from "@client-compose/protocol";
+import {
   Component,
   createContext,
   createElement,
   Fragment,
+  type ReactNode,
   Suspense,
   useCallback,
   useContext,
@@ -16,17 +33,8 @@ import {
   useMemo,
   useRef,
   useState,
-  type ReactNode,
 } from "react";
-import { buildActionRequest, fetchAction, newIdempotencyKey, plan, type PlannedIsland } from "@client-compose/client";
-import {
-  screenRefMatches,
-  type ActionDescriptor,
-  type ActionEffects,
-  type ActionResponse,
-  type DeclaredError,
-  type ScreenResponse,
-} from "@client-compose/protocol";
+
 import type { ClientComposeConfig } from "./config.ts";
 import { loadScreen } from "./load.ts";
 
@@ -44,39 +52,80 @@ interface MountedScreen {
   reload: () => void;
 }
 
+/**
+ * The provider's screens: cached responses, and the screens on show, which actions that change them
+ * reload (spec §5.3).
+ */
+class ScreenStore {
+  private readonly cache = new Map<string, CacheEntry>();
+  private readonly mounted = new Set<MountedScreen>();
+
+  /** The cached response for a key, while it's fresh. */
+  cached(key: string): ScreenResponse | undefined {
+    const entry = this.cache.get(key);
+    return entry && entry.expiresAt > Date.now() ? entry.response : undefined;
+  }
+
+  /** Keep a response for its `cache.maxAge`. */
+  remember(key: string, screen: string, params: Record<string, string>, response: ScreenResponse) {
+    if (!response.cache || response.cache.maxAge <= 0) return;
+    const expiresAt = Date.now() + response.cache.maxAge * 1000;
+    this.cache.set(key, { screen, params, response, expiresAt });
+  }
+
+  /** A screen on show. Returns the function that takes it off. */
+  mount(screen: MountedScreen): () => void {
+    this.mounted.add(screen);
+    return () => void this.mounted.delete(screen);
+  }
+
+  /** Drop cached responses the refs match, and reload the screens on show that they match. */
+  invalidate(refs: ScreenRef[]) {
+    const matches = (screen: string, params: Record<string, string>) =>
+      refs.some((ref) => screenRefMatches(ref, screen, params));
+    for (const [key, entry] of this.cache) {
+      if (matches(entry.screen, entry.params)) this.cache.delete(key);
+    }
+    for (const m of this.mounted) {
+      if (matches(m.screen, m.params)) m.reload();
+    }
+  }
+}
+
 interface ContextValue {
   config: ClientComposeConfig;
-  cache: Map<string, CacheEntry>;
-  mounted: Set<MountedScreen>;
+  screens: ScreenStore;
   applyEffects: (effects: ActionEffects) => void;
 }
 
 const ClientComposeContext = createContext<ContextValue | null>(null);
 
-export function ClientComposeProvider(props: { config: ClientComposeConfig; children?: ReactNode }): ReactNode {
-  const cache = useMemo(() => new Map<string, CacheEntry>(), []);
-  const mounted = useMemo(() => new Set<MountedScreen>(), []);
+export function ClientComposeProvider(props: {
+  config: ClientComposeConfig;
+  children?: ReactNode;
+}): ReactNode {
+  const [screens] = useState(() => new ScreenStore());
   const value = useMemo((): ContextValue => {
     const config = props.config;
     const applyEffects = (effects: ActionEffects) => {
       const refs = effects.invalidate ?? [];
       if (refs.length) {
-        const matches = (screen: string, params: Record<string, string>) =>
-          refs.some((ref) => screenRefMatches(ref, screen, params));
-        for (const [key, entry] of cache) if (matches(entry.screen, entry.params)) cache.delete(key);
-        for (const m of mounted) if (matches(m.screen, m.params)) m.reload();
+        screens.invalidate(refs);
         config.onInvalidate?.(refs);
       }
       if (effects.navigate) config.onNavigate?.(effects.navigate);
     };
-    return { config, cache, mounted, applyEffects };
-  }, [props.config, cache, mounted]);
+    return { config, screens, applyEffects };
+  }, [props.config, screens]);
   return createElement(ClientComposeContext.Provider, { value }, props.children);
 }
 
 function useClientCompose(): ContextValue {
   const ctx = useContext(ClientComposeContext);
-  if (!ctx) throw new Error("Client Compose hooks and components must be used inside <ClientComposeProvider>");
+  if (!ctx)
+    throw new Error(
+      "Client Compose hooks and components must be used inside <ClientComposeProvider>",
+    );
   return ctx;
 }
 
@@ -116,14 +165,14 @@ export function useScreen(
   params: Record<string, string> = {},
   options: UseScreenOptions = {},
 ): ScreenState {
-  const { config, cache, mounted } = useClientCompose();
+  const { config, screens } = useClientCompose();
   const key = `${screen}?${stableKey(params)}`;
   const latestParams = useRef(params);
   latestParams.current = params;
   const force = useRef(false);
   const [reloads, setReloads] = useState(0);
   const store = (response: ScreenResponse) =>
-    cache.set(key, { screen, params: latestParams.current, response, expiresAt: Date.now() + response.cache!.maxAge * 1000 });
+    screens.remember(key, screen, latestParams.current, response);
 
   // The latest server-provided response, and the screen key it was provided for.
   const [seed, setSeed] = useState(() => ({
@@ -135,10 +184,7 @@ export function useScreen(
     setSeed({ response: options.initialResponse, key });
   }
 
-  const cached = () => {
-    const entry = config.cache === false ? undefined : cache.get(key);
-    return entry && entry.expiresAt > Date.now() ? entry.response : undefined;
-  };
+  const cached = () => (config.cache === false ? undefined : screens.cached(key));
   const [state, setState] = useState<FetchState>(() => ({
     key,
     response: options.initialResponse ?? cached(),
@@ -151,8 +197,12 @@ export function useScreen(
     if (!forced && seed.key === key && seed.response) {
       // Use the server's response without a request (StrictMode remounts land here too).
       const response = seed.response;
-      if (response.cache && response.cache.maxAge > 0 && config.cache !== false) store(response);
-      setState((prev) => (prev.key === key && prev.response === response ? prev : { key, response, refreshing: false }));
+      if (config.cache !== false) store(response);
+      setState((prev) =>
+        prev.key === key && prev.response === response
+          ? prev
+          : { key, response, refreshing: false },
+      );
       return;
     }
 
@@ -163,15 +213,24 @@ export function useScreen(
     }
 
     const controller = new AbortController();
-    setState((prev) => (prev.key === key ? { ...prev, refreshing: true } : { key, refreshing: true }));
+    setState((prev) =>
+      prev.key === key ? { ...prev, refreshing: true } : { key, refreshing: true },
+    );
     (async () => {
       try {
-        const response = await loadScreen(config, screen, latestParams.current, { signal: controller.signal });
-        if (response.cache && response.cache.maxAge > 0) store(response);
+        const response = await loadScreen(config, screen, latestParams.current, {
+          signal: controller.signal,
+        });
+        store(response);
         if (!controller.signal.aborted) setState({ key, response, refreshing: false });
       } catch (error) {
         if (controller.signal.aborted) return;
-        setState((prev) => ({ key, response: prev.key === key ? prev.response : undefined, error, refreshing: false }));
+        setState((prev) => ({
+          key,
+          response: prev.key === key ? prev.response : undefined,
+          error,
+          refreshing: false,
+        }));
       }
     })();
     return () => controller.abort();
@@ -183,13 +242,18 @@ export function useScreen(
   // never the previous key's islands.
   const seeded = seed.key === key ? seed.response : undefined;
   const current: FetchState =
-    state.key === key ? state : { key, response: seeded ?? cached(), refreshing: seeded === undefined };
+    state.key === key
+      ? state
+      : { key, response: seeded ?? cached(), refreshing: seeded === undefined };
   const { response } = current;
 
   const islands = useMemo(
     () =>
       response
-        ? plan(config.registry, response, { onError: config.renderIslandError, onSkipped: config.onSkipped })
+        ? plan(config.registry, response, {
+            onError: config.renderIslandError,
+            onSkipped: config.onSkipped,
+          })
         : [],
     [response, config],
   );
@@ -201,14 +265,10 @@ export function useScreen(
 
   // Let actions that change this screen reload it (spec §5.3).
   useEffect(() => {
-    const entry: MountedScreen = { screen, params: latestParams.current, reload };
-    mounted.add(entry);
-    return () => {
-      mounted.delete(entry);
-    };
+    return screens.mount({ screen, params: latestParams.current, reload });
     // `key` covers screen and params.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, mounted, reload]);
+  }, [key, screens, reload]);
 
   return {
     status: response ? "ready" : current.error !== undefined ? "error" : "loading",
@@ -259,7 +319,11 @@ function IslandContent(props: { island: PlannedIsland<ReactNode> }): ReactNode {
  * same structure; it can't call this function, because it's in a "use client" module.)
  */
 function isolateIsland(key: string, node: ReactNode): ReactNode {
-  return createElement(Suspense, { key, fallback: null }, createElement(IslandBoundary, { islandKey: key }, node));
+  return createElement(
+    Suspense,
+    { key, fallback: null },
+    createElement(IslandBoundary, { islandKey: key }, node),
+  );
 }
 
 /** Render one planned island, isolated so that it can't break the rest of the screen. */
@@ -293,7 +357,11 @@ export function ComposedScreen(props: ComposedScreenProps): ReactNode {
 }
 
 function stableKey(params: Record<string, string>): string {
-  return JSON.stringify(Object.keys(params).sort().map((k) => [k, params[k]]));
+  return JSON.stringify(
+    Object.keys(params)
+      .sort()
+      .map((k) => [k, params[k]]),
+  );
 }
 
 /** How an action call ended: its result, one of its declared errors, or a failed call. */
@@ -329,7 +397,9 @@ export interface ActionState<I, R, E extends DeclaredError> {
  *     const res = await follow.run({ userId });
  *     if (res.status === "error" && res.error.code === "blocked") ...
  */
-export function useAction<I, R, E extends DeclaredError>(action: ActionDescriptor<I, R, E>): ActionState<I, R, E> {
+export function useAction<I, R, E extends DeclaredError>(
+  action: ActionDescriptor<I, R, E>,
+): ActionState<I, R, E> {
   const { config, applyEffects } = useClientCompose();
   const [inFlight, setInFlight] = useState(0);
   const [last, setLast] = useState<ActionResult<R, E> | undefined>(undefined);
@@ -339,10 +409,20 @@ export function useAction<I, R, E extends DeclaredError>(action: ActionDescripto
       setInFlight((n) => n + 1);
       let outcome: ActionResult<R, E>;
       try {
-        const request = buildActionRequest(action, input, config.client, options.idempotencyKey ?? newIdempotencyKey());
+        const request = buildActionRequest(
+          action,
+          input,
+          config.client,
+          options.idempotencyKey ?? newIdempotencyKey(),
+        );
         const response = config.performAction
           ? await config.performAction(request)
-          : await fetchAction(config.baseUrl, request, { headers: await config.headers?.() }, config.fetch);
+          : await fetchAction(
+              config.baseUrl,
+              request,
+              { headers: await config.headers?.() },
+              config.fetch,
+            );
         outcome = response as ActionResponse<R, E>;
         if (outcome.status === "ok" && outcome.effects) applyEffects(outcome.effects);
       } catch (error) {

@@ -1,10 +1,13 @@
 // Reading how an action call ended, for showing its errors.
 
 import type { DeclaredError } from "@client-compose/protocol";
+
 import type { ActionResult } from "./client.ts";
 
 /** The declared error an action call ended with, if that's how it ended. */
-export function declaredError<E extends DeclaredError>(result: ActionResult<unknown, E> | undefined): E | undefined {
+export function declaredError<E extends DeclaredError>(
+  result: ActionResult<unknown, E> | undefined,
+): E | undefined {
   return result?.status === "error" ? result.error : undefined;
 }
 

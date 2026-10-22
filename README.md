@@ -71,6 +71,8 @@ Each implementation has its own README and test command. For the TypeScript pack
 ```sh
 pnpm install
 pnpm typecheck
+pnpm lint             # ESLint
+pnpm format           # Prettier (pnpm format:check in CI)
 pnpm test
 pnpm check-packages   # build, pack, lint and install-test the npm packages
 ```

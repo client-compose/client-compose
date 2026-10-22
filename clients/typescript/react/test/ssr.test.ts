@@ -1,17 +1,26 @@
 // Classic server rendering: fetch on the server with loadScreen, render HTML with initialResponse,
 // then hydrate on the client without a second request.
 import "./setup.ts";
-import { test } from "node:test";
+
 import assert from "node:assert/strict";
-import { act, createElement, StrictMode, useState, type ReactNode } from "react";
+import { test } from "node:test";
+
+import type { IslandDescriptor, ScreenRequest, ScreenResponse } from "@client-compose/protocol";
+import { act, createElement, type ReactNode, StrictMode, useState } from "react";
 import { hydrateRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";
-import type { IslandDescriptor, ScreenRequest, ScreenResponse } from "@client-compose/protocol";
-import { ClientComposeProvider, ComposedScreen, loadScreen, ReactIslandRegistry, type ClientComposeConfig } from "../src/index.ts";
+
+import {
+  type ClientComposeConfig,
+  ClientComposeProvider,
+  ComposedScreen,
+  loadScreen,
+  ReactIslandRegistry,
+} from "../src/index.ts";
 
 const Header: IslandDescriptor<{ name: string }> = { type: "header", version: 1 };
 const Counter: IslandDescriptor<{ start: number }> = { type: "counter", version: 1 };
-const Broken: IslandDescriptor<{}> = { type: "broken", version: 1 };
+const Broken: IslandDescriptor<Record<string, never>> = { type: "broken", version: 1 };
 
 function CounterIsland({ start }: { start: number }) {
   const [n, setN] = useState(start);
@@ -50,11 +59,20 @@ const config = (fetchImpl: typeof fetch): ClientComposeConfig => ({
   fetch: fetchImpl,
 });
 
-const app = (cfg: ClientComposeConfig, userId: string, initialResponse?: ScreenResponse): ReactNode =>
+const app = (
+  cfg: ClientComposeConfig,
+  userId: string,
+  initialResponse?: ScreenResponse,
+): ReactNode =>
   createElement(
     ClientComposeProvider,
     { config: cfg },
-    createElement(ComposedScreen, { screen: "profile", params: { userId }, initialResponse, loading: "loading" }),
+    createElement(ComposedScreen, {
+      screen: "profile",
+      params: { userId },
+      initialResponse,
+      loading: "loading",
+    }),
   );
 
 /** Hydrate server HTML, failing on any hydration warning. */
@@ -81,7 +99,11 @@ async function hydrate(html: string, node: ReactNode) {
 test("loadScreen declares capabilities and merges headers and request options", async () => {
   const f = recordingFetch(response("Ada"));
   const result = await loadScreen(
-    { ...config(f.impl), headers: async () => ({ Authorization: "Bearer t" }), requestInit: { cache: "no-store" } },
+    {
+      ...config(f.impl),
+      headers: async () => ({ Authorization: "Bearer t" }),
+      requestInit: { cache: "no-store" },
+    },
     "profile",
     { userId: "u1" },
   );
@@ -121,7 +143,9 @@ test("server renders islands from initialResponse, and hydration doesn't refetch
 
 test("StrictMode's double mount doesn't refetch a server-rendered screen", async () => {
   const initial = response("Ada");
-  const html = renderToString(createElement(StrictMode, null, app(config(recordingFetch().impl), "u1", initial)));
+  const html = renderToString(
+    createElement(StrictMode, null, app(config(recordingFetch().impl), "u1", initial)),
+  );
   const browser = recordingFetch();
   await hydrate(html, createElement(StrictMode, null, app(config(browser.impl), "u1", initial)));
   assert.equal(browser.requests.length, 0);
@@ -146,10 +170,16 @@ test("a crashing island is left out of the server HTML and hidden after hydratio
     console.error = quiet;
   }
   // The broken island's boundary renders its (empty) fallback; its neighbours render normally.
-  assert.match(html, /^<!--\$--><h1>Ada<\/h1><!--\/\$--><!--\$!-->.*<!--\/\$--><!--\$--><button>count 1<\/button><!--\/\$-->$/s);
+  assert.match(
+    html,
+    /^<!--\$--><h1>Ada<\/h1><!--\/\$--><!--\$!-->.*<!--\/\$--><!--\$--><button>count 1<\/button><!--\/\$-->$/s,
+  );
 
   const crashed: string[] = [];
-  const cfg = { ...config(recordingFetch().impl), onRenderError: (key: string) => crashed.push(key) };
+  const cfg = {
+    ...config(recordingFetch().impl),
+    onRenderError: (key: string) => crashed.push(key),
+  };
   const container = document.createElement("div");
   container.innerHTML = html;
   console.error = () => {};

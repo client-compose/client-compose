@@ -1,7 +1,7 @@
 // Fastify adapter. The composer does the work; this registers its two routes.
 
-import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import type { Composer } from "@client-compose/composer";
+import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 
 /**
  * Serve a composer from Fastify, as a plugin. Its `context` receives the Fastify request, so what
@@ -20,7 +20,9 @@ import type { Composer } from "@client-compose/composer";
 export function composerPlugin<Ctx>(composer: Composer<Ctx, FastifyRequest>): FastifyPluginAsync {
   return async (app) => {
     app.removeAllContentTypeParsers();
-    app.addContentTypeParser("*", { parseAs: "string" }, (_request, body, done) => done(null, body));
+    app.addContentTypeParser("*", { parseAs: "string" }, (_request, body, done) =>
+      done(null, body),
+    );
 
     const handler = async (request: FastifyRequest) => {
       const body = typeof request.body === "string" ? request.body : "";

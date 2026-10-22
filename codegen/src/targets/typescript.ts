@@ -6,7 +6,8 @@ export interface TypeScriptOptions {
 }
 
 const flat = (path: string[]) => path.join("");
-const key = (name: string) => (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name) ? name : JSON.stringify(name));
+const key = (name: string) =>
+  /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name) ? name : JSON.stringify(name);
 
 export function generateTypeScript(
   islands: Island[],
@@ -14,7 +15,10 @@ export function generateTypeScript(
   opts: TypeScriptOptions = {},
   actions: Action[] = [],
 ): string {
-  const imports = [...(islands.length || !actions.length ? ["IslandDescriptor"] : []), ...(actions.length ? ["ActionDescriptor"] : [])];
+  const imports = [
+    ...(islands.length || !actions.length ? ["IslandDescriptor"] : []),
+    ...(actions.length ? ["ActionDescriptor"] : []),
+  ];
   const out: string[] = [
     header.replace(/^/gm, "// "),
     "",
@@ -52,7 +56,9 @@ export function generateTypeScript(
   const emitEnum = (def: EnumDef) => {
     out.push("");
     doc("", def.description);
-    out.push(`export type ${flat(def.path)} = ${def.values.map((v) => JSON.stringify(v)).join(" | ")};`);
+    out.push(
+      `export type ${flat(def.path)} = ${def.values.map((v) => JSON.stringify(v)).join(" | ")};`,
+    );
   };
 
   const emitObject = (def: ObjectDef, island?: Island) => {
@@ -70,18 +76,29 @@ export function generateTypeScript(
         `export const ${name}: IslandDescriptor<${name}> = { type: ${JSON.stringify(island.type)}, version: ${island.version} };`,
       );
     }
-    for (const child of def.children) child.kind === "enum" ? emitEnum(child) : emitObject(child);
+    for (const child of def.children)
+      if (child.kind === "enum") emitEnum(child);
+      else emitObject(child);
   };
 
   const emitAction = (action: Action) => {
     const name = flat(action.input.path.slice(0, -1));
-    const [input, result, error] = [flat(action.input.path), flat(action.result.path), `${name}Error`];
+    const [input, result, error] = [
+      flat(action.input.path),
+      flat(action.result.path),
+      `${name}Error`,
+    ];
     emitObject(action.input);
     emitObject(action.result);
-    for (const e of action.errors) if (e.details) emitObject({ ...e.details, description: e.description ?? e.details.description });
+    for (const e of action.errors)
+      if (e.details)
+        emitObject({ ...e.details, description: e.description ?? e.details.description });
     out.push("");
     if (action.errors.length === 0) {
-      out.push(`/** Declared errors of action ${JSON.stringify(action.action)} v${action.version}: none. */`, `export type ${error} = never;`);
+      out.push(
+        `/** Declared errors of action ${JSON.stringify(action.action)} v${action.version}: none. */`,
+        `export type ${error} = never;`,
+      );
     } else {
       out.push(
         `/**`,

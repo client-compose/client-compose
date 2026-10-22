@@ -1,5 +1,13 @@
 import { spawnSync } from "node:child_process";
-import { words, type Action, type EnumDef, type Island, type ObjectDef, type TypeRef } from "../manifest.ts";
+
+import {
+  type Action,
+  type EnumDef,
+  type Island,
+  type ObjectDef,
+  type TypeRef,
+  words,
+} from "../manifest.ts";
 
 export interface GoOptions {
   package: string;
@@ -19,7 +27,12 @@ const goName = (s: string) =>
 
 const typeIdent = (path: string[]) => path.map(goName).join("");
 
-export function generateGo(islands: Island[], header: string, opts: GoOptions, actions: Action[] = []): string {
+export function generateGo(
+  islands: Island[],
+  header: string,
+  opts: GoOptions,
+  actions: Action[] = [],
+): string {
   const out: string[] = [header.replace(/^/gm, "// "), "", `package ${opts.package}`];
 
   const doc = (indent: string, text?: string) => {
@@ -58,7 +71,10 @@ export function generateGo(islands: Island[], header: string, opts: GoOptions, a
   const emitObject = (def: ObjectDef, island?: Island, intro?: string) => {
     const name = typeIdent(def.path);
     out.push("");
-    if (island) out.push(`// ${name} holds the props of island ${JSON.stringify(island.type)} v${island.version}.`);
+    if (island)
+      out.push(
+        `// ${name} holds the props of island ${JSON.stringify(island.type)} v${island.version}.`,
+      );
     if (intro) out.push(`// ${name} ${intro}`);
     doc("", island?.description ?? def.description);
     out.push(`type ${name} struct${def.fields.length ? " {" : "{}"}`);
@@ -80,14 +96,20 @@ export function generateGo(islands: Island[], header: string, opts: GoOptions, a
         `func (${name}) IslandVersion() int { return ${island.version} }`,
       );
     }
-    for (const child of def.children) child.kind === "enum" ? emitEnum(child) : emitObject(child);
+    for (const child of def.children)
+      if (child.kind === "enum") emitEnum(child);
+      else emitObject(child);
   };
 
   const emitAction = (action: Action) => {
     const label = `action ${JSON.stringify(action.action)} v${action.version}`;
     const input = typeIdent(action.input.path);
     const result = typeIdent(action.result.path);
-    emitObject({ ...action.input, children: [], description: action.description }, undefined, `is the input of ${label}.`);
+    emitObject(
+      { ...action.input, children: [], description: action.description },
+      undefined,
+      `is the input of ${label}.`,
+    );
     out.push(
       "",
       `func (${input}) ActionName() string { return ${JSON.stringify(action.action)} }`,
@@ -103,12 +125,23 @@ export function generateGo(islands: Island[], header: string, opts: GoOptions, a
       `// ActionResult ties the input to its result type, ${result}.`,
       `func (${input}) ActionResult(${result}) {}`,
     );
-    for (const child of action.input.children) child.kind === "enum" ? emitEnum(child) : emitObject(child);
+    for (const child of action.input.children)
+      if (child.kind === "enum") emitEnum(child);
+      else emitObject(child);
     emitObject(action.result, undefined, `is the result of ${label}.`);
     for (const e of action.errors) {
       const name = typeIdent(e.path);
-      const details: ObjectDef = e.details ?? { kind: "object", path: e.path, fields: [], children: [] };
-      emitObject({ ...details, description: e.description }, undefined, `is the declared error ${JSON.stringify(e.code)} of ${label}.`);
+      const details: ObjectDef = e.details ?? {
+        kind: "object",
+        path: e.path,
+        fields: [],
+        children: [],
+      };
+      emitObject(
+        { ...details, description: e.description },
+        undefined,
+        `is the declared error ${JSON.stringify(e.code)} of ${label}.`,
+      );
       out.push(
         "",
         `func (${name}) ActionErrorCode() string { return ${JSON.stringify(e.code)} }`,

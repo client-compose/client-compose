@@ -34,17 +34,22 @@ export class RequestScope {
   }
 
   batchState<K, V>(loader: BatchLoader<K, V>): BatchState<K, V> {
-    let state = this.batches.get(loader as BatchLoader<unknown, unknown>) as BatchState<K, V> | undefined;
+    let state = this.batches.get(loader as BatchLoader<unknown, unknown>) as
+      BatchState<K, V> | undefined;
     if (!state) {
       state = { memo: new Map(), pending: [], timer: undefined };
-      this.batches.set(loader as BatchLoader<unknown, unknown>, state as BatchState<unknown, unknown>);
+      this.batches.set(
+        loader as BatchLoader<unknown, unknown>,
+        state as BatchState<unknown, unknown>,
+      );
     }
     return state;
   }
 }
 
 export function attachScope<T extends object>(target: T, scope: RequestScope): T & LoadContext {
-  return Object.defineProperty(target, scopeSymbol, { value: scope, enumerable: false }) as T & LoadContext;
+  return Object.defineProperty(target, scopeSymbol, { value: scope, enumerable: false }) as T &
+    LoadContext;
 }
 
 function scopeOf(context: LoadContext): RequestScope {
@@ -121,7 +126,10 @@ interface BatchState<K, V> {
  *     const user = await userById.load(rc, params.userId);
  */
 export function defineBatchLoader<K, V>(
-  fetch: (keys: K[], signal: AbortSignal) => Promise<ReadonlyMap<K, V> | ReadonlyArray<V | undefined>>,
+  fetch: (
+    keys: K[],
+    signal: AbortSignal,
+  ) => Promise<ReadonlyMap<K, V> | ReadonlyArray<V | undefined>>,
   options: BatchLoaderOptions<K> = {},
 ): BatchLoader<K, V> {
   const cacheKey = options.cacheKey ?? ((key: K) => String(key));
@@ -135,7 +143,9 @@ export function defineBatchLoader<K, V>(
       const existing = state.memo.get(id);
       if (existing) return existing;
 
-      const promise = new Promise<V>((resolve, reject) => state.pending.push({ key, resolve, reject }));
+      const promise = new Promise<V>((resolve, reject) =>
+        state.pending.push({ key, resolve, reject }),
+      );
       promise.catch(() => {});
       state.memo.set(id, promise);
       if (state.pending.length >= maxBatchSize) {
@@ -174,5 +184,6 @@ export function defineBatchLoader<K, V>(
   return loader;
 }
 
-const isMap = <K, V>(value: ReadonlyMap<K, V> | ReadonlyArray<V | undefined>): value is ReadonlyMap<K, V> =>
-  value instanceof Map;
+const isMap = <K, V>(
+  value: ReadonlyMap<K, V> | ReadonlyArray<V | undefined>,
+): value is ReadonlyMap<K, V> => value instanceof Map;

@@ -3,8 +3,9 @@
 // from the /rsc route), and FollowButton is a Client Component from its own "use client" file.
 
 import { ReactIslandRegistry } from "@client-compose/react";
+
 import { FollowButton } from "./follow-button";
-import { PostGridV1, ProfileHeaderV1, ProfileHeaderV2, FollowButtonV1 } from "./islands.generated";
+import { FollowButtonV1, PostGridV1, ProfileHeaderV1, ProfileHeaderV2 } from "./islands.generated";
 
 function ProfileHeader(props: { displayName: string; avatarUrl: string; badge?: string }) {
   return (

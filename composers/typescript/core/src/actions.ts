@@ -1,15 +1,22 @@
 // Actions (spec §5): typed calls that change something.
 
 import {
-  PROTOCOL_VERSION,
   type ActionDescriptor,
   type ActionEffects,
   type ActionRequest,
   type ClientContext,
   type DeclaredError,
+  PROTOCOL_VERSION,
 } from "@client-compose/protocol";
 
-import { attachScope, ForbiddenError, NotFoundError, RequestScope, UnauthenticatedError, type LoadContext } from "./loading.ts";
+import {
+  attachScope,
+  ForbiddenError,
+  type LoadContext,
+  NotFoundError,
+  RequestScope,
+  UnauthenticatedError,
+} from "./loading.ts";
 import type { Failure, Requirement } from "./plugins.ts";
 import { fail, type PerformResult } from "./results.ts";
 import { validate } from "./validate.ts";
@@ -30,13 +37,16 @@ export interface ActionContext<Ctx> extends LoadContext {
 }
 
 /** What an action returns: a result (and optionally its effects), or one of its declared errors. */
-export type ActionOutcome<R, E extends DeclaredError> = { result: R; effects?: ActionEffects } | { error: E };
+export type ActionOutcome<R, E extends DeclaredError> =
+  { result: R; effects?: ActionEffects } | { error: E };
 
 /** One action version and how to perform it. Build one with `action`. */
-export interface Action<Ctx, I = any, R = any, E extends DeclaredError = any> {
+export interface Action<Ctx, I = unknown, R = unknown, E extends DeclaredError = DeclaredError> {
   descriptor: ActionDescriptor<I, R, E>;
   requires?: Requirement<Ctx>[];
-  perform: (input: I, ac: ActionContext<Ctx>) => Promise<ActionOutcome<R, E>> | ActionOutcome<R, E>;
+  // A method, not a function property, so actions with different inputs share one list
+  // (`Action<Ctx>[]`): method parameters are checked bivariantly.
+  perform(input: I, ac: ActionContext<Ctx>): Promise<ActionOutcome<R, E>> | ActionOutcome<R, E>;
 }
 
 export interface ActionOptions<Ctx> {
@@ -81,7 +91,8 @@ export async function performAction<Ctx>(
   report: (failure: Failure) => void,
 ): Promise<PerformResult> {
   const { descriptor } = handler;
-  const reportFailure = (error: unknown) => report({ kind: "action", action: descriptor.action, version: descriptor.version, error });
+  const reportFailure = (error: unknown) =>
+    report({ kind: "action", action: descriptor.action, version: descriptor.version, error });
   try {
     for (const requirement of handler.requires ?? []) await requirement(ctx);
   } catch (err) {
@@ -96,10 +107,20 @@ export async function performAction<Ctx>(
   const request = new AbortController();
   const scope = new RequestScope(request.signal);
   const ac = attachScope(
-    { client: req.client, ctx, idempotencyKey: req.idempotencyKey, signal: request.signal, load: scope.load.bind(scope) },
+    {
+      client: req.client,
+      ctx,
+      idempotencyKey: req.idempotencyKey,
+      signal: request.signal,
+      load: scope.load.bind(scope),
+    },
     scope,
   );
-  const base = { protocol: PROTOCOL_VERSION, action: descriptor.action, version: descriptor.version } as const;
+  const base = {
+    protocol: PROTOCOL_VERSION,
+    action: descriptor.action,
+    version: descriptor.version,
+  } as const;
   try {
     const outcome = await handler.perform(input.value, ac);
     if ("error" in outcome) {
@@ -112,7 +133,13 @@ export async function performAction<Ctx>(
     const hasEffects = Boolean(effects?.invalidate?.length || effects?.navigate);
     return {
       status: 200,
-      body: { ...base, status: "ok", result: outcome.result ?? {}, ...(hasEffects && { effects: compactEffects(effects!) }) },
+      body: {
+        ...base,
+        status: "ok",
+        // Results are objects: the manifest's result schema says so (spec §5.1).
+        result: (outcome.result ?? {}) as Record<string, unknown>,
+        ...(hasEffects && { effects: compactEffects(effects!) }),
+      },
     };
   } catch (err) {
     const res = protocolError(err);

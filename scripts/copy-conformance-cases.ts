@@ -9,5 +9,8 @@ copyFileSync(new URL("conformance/composer/cases.json", root), new URL("composer
 copyFileSync(new URL("conformance/composer/action-cases.json", root), new URL("actions.json", out));
 copyFileSync(new URL("conformance/client/cases.json", root), new URL("client.json", out));
 for (const file of readdirSync(new URL("conformance/composer/actions/", root))) {
-  copyFileSync(new URL(`conformance/composer/actions/${file}`, root), new URL(`actions/${file}`, out));
+  copyFileSync(
+    new URL(`conformance/composer/actions/${file}`, root),
+    new URL(`actions/${file}`, out),
+  );
 }
