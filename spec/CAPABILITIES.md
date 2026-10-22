@@ -279,7 +279,7 @@ Names in *italics* don't exist yet; the parity work below adds them.
 | CLI-6 effects | ✅ | ✗ | ✗ |
 | CLI-7 cache | ✅ (in the binding) | ✗ | ✗ |
 | CLI-8 test kit | ✅ | ✗ | ✗ |
-| CLI-9 conformance | ◐ rendering only | ◐ rendering only | ◐ rendering only |
+| CLI-9 conformance | ✅ rendering, actions and effects | ◐ rendering only | ◐ rendering only |
 | UI-1 composed screen | ✅ | ◐ no not-found slot or container control | ✗ no Compose binding |
 | UI-2 screen state | ✅ `useScreen` | ✗ | ✗ |
 | UI-3 action state | ✅ `useAction` | ✗ | ✗ |
@@ -300,8 +300,7 @@ anything thrown while building an island's view.
 | TL-1 props | ✅ | ✅ | ✅ | ✅ |
 | TL-2 actions | ✅ | ✅ | ✗ | ✗ |
 
-TL-3 to TL-5 are language-neutral and done. The client fixtures (CLI-9) don't cover actions or
-effects yet, for any client.
+TL-3 to TL-5 are language-neutral and done.
 
 ## The parity work
 

@@ -6,7 +6,8 @@ Language-neutral test suites every implementation must pass (spec §8).
 | -------------------- | ------------- | ------------------------------------------------------------------- |
 | `composer/cases.json` | Composers     | Over HTTP against a test-only conformance server: `run-against.sh <port> <command…>` |
 | `composer/action-cases.json` | Composers | The same, for actions. The test-only `conformance` action is described by the manifests in `composer/actions/`; generate its types with codegen (`composer/client-compose.codegen.json`) |
-| `client/cases.json`   | Clients       | Loaded by each client's own unit tests                              |
+| `client/cases.json`   | Clients       | Loaded by each client's own unit tests: rendering                   |
+| `client/action-cases.json` | Clients  | The same, for actions and effects: requests, outcomes, screen references, screen errors |
 
 The composer runner needs Node, and nothing from the implementation's language. Outside this repo,
 use the published runner (Node 20+):

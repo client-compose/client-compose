@@ -1,0 +1,133 @@
+{
+  "$comment": "Client conformance cases for actions and effects (spec §5, §8.2). Every client core runs them in its own unit tests. `descriptor` is the action the cases use: build its descriptor by hand (or generate it from conformance/composer/actions). `requests`: build the request for `input` with the client context { platform: \"conformance\", appVersion: \"0.0.0\" } and `idempotencyKey`; it must POST to `expectPath` (relative to the base URL) with a body equal to `expectBody`. `outcomes`: answer a call with `response` (a JSON `body`, or a `rawBody` sent as is) and classify what the client returns: \"ok\" with `result` and `effects` (absent effects are {}), \"error\" with a declared `code` and `details` (null when there are none), or \"failed\" with the HTTP `status` and the protocol error `code` (null when the body has none). A code the action doesn't declare is \"failed\" (spec §5.1). `screenRefs`: whether `ref` matches a screen with this id and params (spec §5.3). `screenErrors`: the protocol error code a failed screen request exposes (null when the body has none).",
+  "descriptor": { "action": "rename-thing", "version": 2, "errors": ["taken", "locked"] },
+  "requests": [
+    {
+      "name": "builds the request for the descriptor's action and version",
+      "input": { "thingId": "t1", "name": "New name" },
+      "idempotencyKey": "6f1c0f7e-0d8e-4c55-9d1a-3f1f0b6d1c2a",
+      "expectPath": "actions/rename-thing",
+      "expectBody": {
+        "protocol": 0,
+        "action": "rename-thing",
+        "version": 2,
+        "input": { "thingId": "t1", "name": "New name" },
+        "client": { "platform": "conformance", "appVersion": "0.0.0" },
+        "idempotencyKey": "6f1c0f7e-0d8e-4c55-9d1a-3f1f0b6d1c2a"
+      }
+    },
+    {
+      "name": "sends nested input as given",
+      "input": { "thingId": "t1", "name": "Ä \"quoted\" name", "tags": ["a", "b"], "meta": { "pinned": true, "rank": 2 } },
+      "idempotencyKey": "k-2",
+      "expectPath": "actions/rename-thing",
+      "expectBody": {
+        "protocol": 0,
+        "action": "rename-thing",
+        "version": 2,
+        "input": { "thingId": "t1", "name": "Ä \"quoted\" name", "tags": ["a", "b"], "meta": { "pinned": true, "rank": 2 } },
+        "client": { "platform": "conformance", "appVersion": "0.0.0" },
+        "idempotencyKey": "k-2"
+      }
+    }
+  ],
+  "outcomes": [
+    {
+      "name": "a result with effects",
+      "response": {
+        "status": 200,
+        "body": {
+          "protocol": 0, "action": "rename-thing", "version": 2, "status": "ok",
+          "result": { "thing": { "id": "t1", "name": "New name" } },
+          "effects": { "invalidate": [{ "screen": "thing", "params": { "thingId": "t1" } }, { "screen": "things" }], "navigate": { "screen": "thing", "params": { "thingId": "t1" } } }
+        }
+      },
+      "expect": {
+        "outcome": "ok",
+        "result": { "thing": { "id": "t1", "name": "New name" } },
+        "effects": { "invalidate": [{ "screen": "thing", "params": { "thingId": "t1" } }, { "screen": "things" }], "navigate": { "screen": "thing", "params": { "thingId": "t1" } } }
+      }
+    },
+    {
+      "name": "an empty result without effects",
+      "response": { "status": 200, "body": { "protocol": 0, "action": "rename-thing", "version": 2, "status": "ok", "result": {} } },
+      "expect": { "outcome": "ok", "result": {}, "effects": {} }
+    },
+    {
+      "name": "ignores unknown fields",
+      "response": {
+        "status": 200,
+        "body": { "protocol": 0, "action": "rename-thing", "version": 2, "status": "ok", "result": { "thing": { "id": "t1", "name": "x" } }, "trace": "abc", "effects": { "refresh": true } }
+      },
+      "expect": { "outcome": "ok", "result": { "thing": { "id": "t1", "name": "x" } }, "effects": {} }
+    },
+    {
+      "name": "a declared error with details",
+      "response": {
+        "status": 200,
+        "body": { "protocol": 0, "action": "rename-thing", "version": 2, "status": "error", "error": { "code": "taken", "details": { "suggestion": "New name 2" } } }
+      },
+      "expect": { "outcome": "error", "code": "taken", "details": { "suggestion": "New name 2" } }
+    },
+    {
+      "name": "a declared error without details",
+      "response": {
+        "status": 200,
+        "body": { "protocol": 0, "action": "rename-thing", "version": 2, "status": "error", "error": { "code": "locked", "message": "for logs" } }
+      },
+      "expect": { "outcome": "error", "code": "locked", "details": null }
+    },
+    {
+      "name": "an error code the action doesn't declare is a failure",
+      "response": {
+        "status": 200,
+        "body": { "protocol": 0, "action": "rename-thing", "version": 2, "status": "error", "error": { "code": "archived" } }
+      },
+      "expect": { "outcome": "failed", "status": 200, "code": "archived" }
+    },
+    {
+      "name": "an unknown status is a failure",
+      "response": { "status": 200, "body": { "protocol": 0, "action": "rename-thing", "version": 2, "status": "pending" } },
+      "expect": { "outcome": "failed", "status": 200, "code": null }
+    },
+    {
+      "name": "a body that isn't JSON is a failure",
+      "response": { "status": 200, "rawBody": "<html>ok</html>" },
+      "expect": { "outcome": "failed", "status": 200, "code": null }
+    },
+    {
+      "name": "unauthenticated",
+      "response": { "status": 401, "body": { "protocol": 0, "error": { "code": "unauthenticated" } } },
+      "expect": { "outcome": "failed", "status": 401, "code": "unauthenticated" }
+    },
+    {
+      "name": "invalid input",
+      "response": { "status": 400, "body": { "protocol": 0, "error": { "code": "invalid_input", "message": "input.name: required" } } },
+      "expect": { "outcome": "failed", "status": 400, "code": "invalid_input" }
+    },
+    {
+      "name": "the action failed",
+      "response": { "status": 500, "body": { "protocol": 0, "error": { "code": "action_failed" } } },
+      "expect": { "outcome": "failed", "status": 500, "code": "action_failed" }
+    },
+    {
+      "name": "a failure from something in front of the composer",
+      "response": { "status": 502, "rawBody": "<html>bad gateway</html>" },
+      "expect": { "outcome": "failed", "status": 502, "code": null }
+    }
+  ],
+  "screenRefs": [
+    { "name": "a reference without params matches every params", "ref": { "screen": "feed" }, "screen": "feed", "params": { "page": "2" }, "matches": true },
+    { "name": "a reference's params must all match", "ref": { "screen": "thing", "params": { "thingId": "t1" } }, "screen": "thing", "params": { "thingId": "t1", "tab": "history" }, "matches": true },
+    { "name": "a different param value doesn't match", "ref": { "screen": "thing", "params": { "thingId": "t1" } }, "screen": "thing", "params": { "thingId": "t2" }, "matches": false },
+    { "name": "a param the screen doesn't have doesn't match", "ref": { "screen": "thing", "params": { "thingId": "t1" } }, "screen": "thing", "params": {}, "matches": false },
+    { "name": "another screen doesn't match", "ref": { "screen": "thing" }, "screen": "things", "params": {}, "matches": false }
+  ],
+  "screenErrors": [
+    { "name": "not found", "status": 404, "body": { "protocol": 0, "error": { "code": "not_found" } }, "expectCode": "not_found" },
+    { "name": "unknown screen", "status": 404, "body": { "protocol": 0, "error": { "code": "unknown_screen", "message": "nope" } }, "expectCode": "unknown_screen" },
+    { "name": "unauthenticated", "status": 401, "body": { "protocol": 0, "error": { "code": "unauthenticated" } }, "expectCode": "unauthenticated" },
+    { "name": "forbidden", "status": 403, "body": { "protocol": 0, "error": { "code": "forbidden" } }, "expectCode": "forbidden" },
+    { "name": "a failure from something in front of the composer", "status": 502, "rawBody": "<html>bad gateway</html>", "expectCode": null }
+  ]
+}
