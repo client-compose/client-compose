@@ -1,7 +1,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createActions, defineAction, ForbiddenError, performHttp } from "../src/index.ts";
+import { action, createComposer, ForbiddenError, reportErrors, type Action } from "../src/index.ts";
 import { ConformanceV1, type ConformanceV1Input } from "../src/conformance-actions.generated.ts";
+
+/** Performs actions in-process, reporting failures as `action vN: message`. */
+function performer<Ctx>(actions: Action<Ctx>[], reported?: string[]) {
+  const composer = createComposer<Ctx>({
+    actions,
+    use: [reportErrors((f) => reported?.push(`${f.action} v${f.version}: ${(f.error as Error).message}`))],
+  });
+  return composer.perform;
+}
 
 const request = (input: unknown) => ({
   protocol: 0 as const,
@@ -13,8 +22,8 @@ const request = (input: unknown) => ({
 
 test("handlers see validated input with null optionals removed", async () => {
   let seen: ConformanceV1Input | undefined;
-  const perform = createActions([
-    defineAction(ConformanceV1, (input) => {
+  const perform = performer([
+    action(ConformanceV1, (input) => {
       seen = input;
       return { result: { echo: input.echo, version: 1 } };
     }),
@@ -26,14 +35,14 @@ test("handlers see validated input with null optionals removed", async () => {
 
 test("failures and undeclared codes are reported and answered with action_failed", async () => {
   const reported: string[] = [];
-  const perform = createActions(
+  const perform = performer(
     [
-      defineAction(ConformanceV1, (input) => {
+      action(ConformanceV1, (input) => {
         if (input.outcome === "fail") throw new Error("boom");
         return { error: { code: "nope" } as never };
       }),
     ],
-    { onActionError: (action, version, err) => reported.push(`${action} v${version}: ${(err as Error).message}`) },
+    reported,
   );
   for (const outcome of ["fail", "ok"]) {
     const res = await perform(request({ outcome, echo: "x" }), undefined);
@@ -43,33 +52,42 @@ test("failures and undeclared codes are reported and answered with action_failed
 });
 
 test("protocol errors are not reported as failures", async () => {
-  const reported: unknown[] = [];
-  const perform = createActions(
+  const reported: string[] = [];
+  const perform = performer(
     [
-      defineAction(ConformanceV1, () => {
+      action(ConformanceV1, () => {
         throw new ForbiddenError();
       }),
     ],
-    { onActionError: (...args) => reported.push(args) },
+    reported,
   );
   assert.equal((await perform(request({ outcome: "ok", echo: "x" }), undefined)).status, 403);
   assert.deepEqual(reported, []);
 });
 
-test("actions share request-scoped loads, and the adapter's context reaches them", async () => {
+test("actions share request-scoped loads, and the context function's context reaches them", async () => {
   let runs = 0;
-  const perform = createActions<{ user: string }>([
-    defineAction(ConformanceV1, async (input, { load, ctx }) => {
-      const values = await Promise.all([1, 2, 3].map(() => load("k", () => ++runs)));
-      return { result: { echo: `${ctx.user}:${values.join(",")}`, version: 1 } };
+  const composer = createComposer<{ user: string }>({
+    actions: [
+      action(ConformanceV1, async (_, { load, ctx }) => {
+        const values = await Promise.all([1, 2, 3].map(() => load("k", () => ++runs)));
+        return { result: { echo: `${ctx.user}:${values.join(",")}`, version: 1 } };
+      }),
+    ],
+    context: (req) => ({ user: req.headers.get("x-user") ?? "" }),
+  });
+  const res = await composer.fetch(
+    new Request("https://api.test/compose/actions/conformance", {
+      method: "POST",
+      headers: { "x-user": "ada" },
+      body: JSON.stringify(request({ outcome: "ok", echo: "" })),
     }),
-  ]);
-  const res = await performHttp(perform, "conformance", JSON.stringify(request({ outcome: "ok", echo: "" })), { user: "ada" });
+  );
   assert.equal(res.status, 200);
-  assert.deepEqual(res.status === 200 && res.body.status === "ok" && res.body.result, { echo: "ada:1,1,1", version: 1 });
+  assert.deepEqual((await res.json()).result, { echo: "ada:1,1,1", version: 1 });
 });
 
 test("defining an action version twice throws", () => {
-  const a = defineAction(ConformanceV1, () => ({ result: { echo: "", version: 1 } }));
-  assert.throws(() => createActions([a, a]), /conformance v1 is defined twice/);
+  const a = action(ConformanceV1, () => ({ result: { echo: "", version: 1 } }));
+  assert.throws(() => createComposer({ actions: [a, a] }), /conformance v1 is defined twice/);
 });

@@ -1,16 +1,16 @@
 // Test-only server exposing the `__conformance` screen and `conformance` action (spec §8.1).
 //   node composers/typescript/node-http/conformance-server.ts [port]
 
-import { createServer } from "node:http";
-import { conformanceActions, conformanceScreen, createActions, createComposer } from "@client-compose/composer";
+import { createServer, type IncomingMessage } from "node:http";
+import { conformanceActions, conformanceScreen, createComposer } from "@client-compose/composer";
 import { createRequestListener } from "./src/index.ts";
 
 export function conformanceServer() {
-  return createServer(
-    createRequestListener(createComposer([conformanceScreen()]), () => null, {
-      actions: createActions(conformanceActions()),
-    }),
-  );
+  const composer = createComposer<undefined, IncomingMessage>({
+    screens: [conformanceScreen()],
+    actions: conformanceActions(),
+  });
+  return createServer(createRequestListener(composer));
 }
 
 if (import.meta.main) {

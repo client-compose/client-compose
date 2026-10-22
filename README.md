@@ -41,7 +41,7 @@ Every implementation passes the shared [conformance suites](conformance/).
 | Role     | Stack                     | Path                       | Tier | Protocol |
 | -------- | ------------------------- | -------------------------- | ---- | -------- |
 | Composer | Go (`net/http`)           | `composers/go/core`        | Core | v0       |
-| Composer | TypeScript (`node:http`)  | `composers/typescript`     | Core | v0       |
+| Composer | TypeScript (fetch, `node:http`, Express, Fastify) | `composers/typescript` | Core | v0 |
 | Client   | Swift (+ SwiftUI)         | `clients/swift`            | Core | v0       |
 | Client   | Kotlin (JVM / Android)    | `clients/kotlin`           | Core | v0       |
 | Client   | TypeScript                | `clients/typescript/core`  | Core | v0       |
@@ -85,6 +85,8 @@ Releases are managed with Changesets; see [RELEASING.md](RELEASING.md).
 | [`@client-compose/client`](clients/typescript/core) | Framework-agnostic client |
 | [`@client-compose/composer`](composers/typescript/core) | Framework-agnostic composer |
 | [`@client-compose/node-http`](composers/typescript/node-http) | `node:http` adapter for the composer |
+| [`@client-compose/express`](composers/typescript/express) | Express adapter for the composer |
+| [`@client-compose/fastify`](composers/typescript/fastify) | Fastify adapter for the composer |
 | [`@client-compose/codegen`](codegen) | Props types for Go, Swift, Kotlin and TypeScript from manifests |
 | [`@client-compose/conformance`](conformance/runner) | Conformance suites and runner, for implementations in any language |
 | [`@client-compose/protocol`](shared/typescript/protocol) | Wire types |
@@ -100,5 +102,6 @@ Releases are managed with Changesets; see [RELEASING.md](RELEASING.md).
 - [x] Actions: typed mutations with declared errors and screen invalidation (spec §5), in the Go and
       TypeScript composers, the TypeScript client and the React binding
 - [ ] Actions in the Swift and Kotlin clients and codegen targets
-- [ ] More composer adapters: chi/gin/echo (Go), Express/Fastify/Hono/Lambda (TS)
+- [x] Composer adapters: any `net/http` router (Go); fetch-standard (Bun, Deno, Workers, Hono, Next.js), `node:http`, Express and Fastify (TS)
+- [ ] AWS Lambda adapter (TS)
 - [ ] v1 candidates in `spec/PROTOCOL.md` §7 (streaming, single-island refresh)

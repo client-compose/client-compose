@@ -1,0 +1,61 @@
+{
+  "name": "@client-compose/fastify",
+  "version": "0.0.0",
+  "description": "Fastify adapter for the Client Compose composer.",
+  "keywords": [
+    "client-compose",
+    "server-driven-ui",
+    "backend-for-frontend",
+    "islands",
+    "composer",
+    "fastify"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/client-compose/client-compose.git",
+    "directory": "composers/typescript/fastify"
+  },
+  "homepage": "https://github.com/client-compose/client-compose/tree/main/composers/typescript/fastify#readme",
+  "bugs": {
+    "url": "https://github.com/client-compose/client-compose/issues"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.tsbuildinfo",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "dependencies": {
+    "@client-compose/composer": "workspace:*"
+  },
+  "peerDependencies": {
+    "fastify": "^5.0.0"
+  },
+  "devDependencies": {
+    "@client-compose/conformance": "workspace:*",
+    "fastify": "5.12.5"
+  },
+  "publishConfig": {
+    "access": "public",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "./package.json": "./package.json"
+    }
+  }
+}

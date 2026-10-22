@@ -90,6 +90,11 @@ export interface BatchLoaderOptions<K> {
 export interface BatchLoader<K, V> {
   /** Load one key, batched with every other key requested in the same request and window. */
   load(context: LoadContext, key: K): Promise<V>;
+  /**
+   * Load several keys at once, batched as `load` is, keyed by their `cacheKey`. Rejects if any key
+   * fails, missing keys included.
+   */
+  loadMany(context: LoadContext, keys: readonly K[]): Promise<Map<K, V>>;
 }
 
 interface Pending<K, V> {
@@ -139,6 +144,10 @@ export function defineBatchLoader<K, V>(
         state.timer = setTimeout(() => flush(scope, state), options.windowMs ?? 0);
       }
       return promise;
+    },
+    async loadMany(context, keys) {
+      const values = await Promise.all(keys.map((key) => loader.load(context, key)));
+      return new Map(keys.map((key, i) => [key, values[i]]));
     },
   };
 

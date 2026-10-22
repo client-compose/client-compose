@@ -5,9 +5,9 @@ import {
   createComposer,
   NotFoundError,
   defineBatchLoader,
-  defineScreen,
+  screen,
   LoadNotFoundError,
-  type IslandResolver,
+  type Island,
   type LayoutContext,
   type Placement,
   type ResolveContext,
@@ -20,10 +20,9 @@ function compose(resolvers: Resolve[], layout?: (rc: LayoutContext<null>) => unk
   const islands = resolvers.map((resolve, i): Placement<null> => ({
     key: String.fromCharCode(97 + i),
     timeoutMs,
-    island: [{ type: `t${i}`, version: 1, resolve } as IslandResolver<null>],
+    versions: [{ type: `t${i}`, version: 1, resolve } as Island<null, unknown>],
   }));
-  const screen = defineScreen<null>({
-    id: "s",
+  const s = screen<null>("s", {
     layout: async (rc) => {
       await layout?.(rc);
       return islands;
@@ -35,7 +34,7 @@ function compose(resolvers: Resolve[], layout?: (rc: LayoutContext<null>) => unk
     client: { platform: "test", appVersion: "1" },
     islands: Object.fromEntries(resolvers.map((_, i) => [`t${i}`, [1]])),
   };
-  return createComposer([screen])(request, null);
+  return createComposer<null>({ screens: [s] }).compose(request, null);
 }
 
 const props = async (result: ReturnType<typeof compose>) => {
@@ -148,20 +147,22 @@ test("NotFoundError (or a batch loader's missing key) in a layout is a 404, and 
   const userById = defineBatchLoader(async (ids: string[]) => ids.map(() => undefined));
   const request: ScreenRequest = { protocol: 0, screen: "s", client: { platform: "test", appVersion: "1" }, islands: { t: [1] } };
   for (const layout of [() => { throw new NotFoundError(); }, async (rc: LayoutContext<null>) => [await userById.load(rc, "x")]]) {
-    const result = await createComposer([defineScreen<null>({ id: "s", layout: layout as never })])(request, null);
+    const result = await createComposer<null>({ screens: [screen<null>("s", { layout: layout as never })] }).compose(request, null);
     assert.equal(result.status, 404);
     assert.equal((result.body as { error: { code: string } }).error.code, "not_found");
   }
 
   const metaErrors: unknown[] = [];
-  const screen = defineScreen<null>({
-    id: "s",
+  const s = screen<null>("s", {
     meta: () => {
       throw new Error("meta broke");
     },
-    layout: () => [{ key: "k", island: [{ type: "t", version: 1, resolve: () => ({ ok: true }) }] }],
+    islands: [{ key: "k", versions: [{ type: "t", version: 1, resolve: () => ({ ok: true }) }] }],
   });
-  const result = await createComposer([screen], { onMetaError: (_, e) => metaErrors.push(e) })(request, null);
+  const result = await createComposer<null>({
+    screens: [s],
+    use: [{ error: (f) => f.kind === "meta" && metaErrors.push(f.error) }],
+  }).compose(request, null);
   assert.equal(result.status, 200);
   assert.equal("meta" in result.body, false);
   assert.equal(metaErrors.length, 1);

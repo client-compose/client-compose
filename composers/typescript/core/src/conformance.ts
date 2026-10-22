@@ -1,14 +1,14 @@
 // The test-only `__conformance` screen and `conformance` action (spec §8.1). Never register these
 // in production.
 
-import { defineAction, type ActionHandler } from "./actions.ts";
+import { action, type Action } from "./actions.ts";
 import {
   ConformanceV1,
   ConformanceV2,
   type ConformanceV1Error,
   type ConformanceV1Input,
 } from "./conformance-actions.generated.ts";
-import type { IslandResolver, ScreenDefinition } from "./index.ts";
+import { screen, type Island, type Screen } from "./screens.ts";
 import { ForbiddenError, NotFoundError, UnauthenticatedError } from "./loading.ts";
 
 interface MockPlacement {
@@ -25,9 +25,9 @@ interface MockPlacement {
   startDelayMs?: number;
 }
 
-export function conformanceScreen<Ctx = unknown>(): ScreenDefinition<Ctx> {
-  return {
-    id: "__conformance",
+export function conformanceScreen<Ctx = unknown>(): Screen<Ctx> {
+  // Its islands come from the request, so it has a layout rather than declared islands.
+  return screen<Ctx>("__conformance", {
     meta: ({ params }) => (params.meta ? JSON.parse(params.meta) : {}),
     layout: ({ params }) => {
       if (params.notFound === "true") throw new NotFoundError("no such thing");
@@ -39,8 +39,8 @@ export function conformanceScreen<Ctx = unknown>(): ScreenDefinition<Ctx> {
         key: p.key,
         required: p.required,
         timeoutMs: p.timeoutMs,
-        island: p.versions.map(
-          (version): IslandResolver<Ctx> => ({
+        versions: p.versions.map(
+          (version): Island<Ctx, unknown> => ({
             type: p.type,
             version,
             resolve: async ({ signal, load }) => {
@@ -67,10 +67,10 @@ export function conformanceScreen<Ctx = unknown>(): ScreenDefinition<Ctx> {
         ),
       }));
     },
-  };
+  });
 }
 
-export function conformanceActions<Ctx = unknown>(): ActionHandler<Ctx>[] {
+export function conformanceActions<Ctx = unknown>(): Action<Ctx>[] {
   // v2 is v1 with a different version number.
   const perform = (version: number) => (input: ConformanceV1Input, ac: { idempotencyKey?: string }) => {
     const error = (e: ConformanceV1Error) => ({ error: e });
@@ -95,5 +95,5 @@ export function conformanceActions<Ctx = unknown>(): ActionHandler<Ctx>[] {
       effects: input.effects,
     };
   };
-  return [defineAction(ConformanceV1, perform(1)), defineAction(ConformanceV2, perform(2))];
+  return [action(ConformanceV1, perform(1)), action(ConformanceV2, perform(2))];
 }

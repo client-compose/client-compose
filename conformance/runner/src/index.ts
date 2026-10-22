@@ -66,7 +66,11 @@ export const composerCases = (): ComposerCase[] => load("composer");
 export const actionCases = (): ActionCase[] => load("actions");
 export const clientCases = (): ClientCase[] => load("client");
 
-export async function runComposerCase(baseUrl: string, c: ComposerCase): Promise<CaseResult> {
+/**
+ * Sends one screen case to the composer at `baseUrl`. Pass `fetchImpl` to run against a
+ * fetch-standard handler in-process (e.g. `composer.fetch`) instead of a server.
+ */
+export async function runComposerCase(baseUrl: string, c: ComposerCase, fetchImpl: typeof fetch = fetch): Promise<CaseResult> {
   const request = {
     protocol: 0,
     screen: "__conformance",
@@ -76,10 +80,11 @@ export async function runComposerCase(baseUrl: string, c: ComposerCase): Promise
     ...c.request,
   };
   const path = c.path ?? String(request.screen);
-  return post(`${baseUrl.replace(/\/$/, "")}/screens/${encodeURIComponent(path)}`, c.rawBody ?? JSON.stringify(request), c);
+  return post(fetchImpl, `${baseUrl.replace(/\/$/, "")}/screens/${encodeURIComponent(path)}`, c.rawBody ?? JSON.stringify(request), c);
 }
 
-export async function runActionCase(baseUrl: string, c: ActionCase): Promise<CaseResult> {
+/** Sends one action case. `fetchImpl` as for runComposerCase. */
+export async function runActionCase(baseUrl: string, c: ActionCase, fetchImpl: typeof fetch = fetch): Promise<CaseResult> {
   const request = {
     protocol: 0,
     action: "conformance",
@@ -89,12 +94,17 @@ export async function runActionCase(baseUrl: string, c: ActionCase): Promise<Cas
     ...c.request,
   };
   const path = c.path ?? String(request.action);
-  return post(`${baseUrl.replace(/\/$/, "")}/actions/${encodeURIComponent(path)}`, c.rawBody ?? JSON.stringify(request), c);
+  return post(fetchImpl, `${baseUrl.replace(/\/$/, "")}/actions/${encodeURIComponent(path)}`, c.rawBody ?? JSON.stringify(request), c);
 }
 
-async function post(url: string, body: string, c: { name: string; expect: { status: number; body?: unknown } }): Promise<CaseResult> {
+async function post(
+  fetchImpl: typeof fetch,
+  url: string,
+  body: string,
+  c: { name: string; expect: { status: number; body?: unknown } },
+): Promise<CaseResult> {
   try {
-    const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body });
+    const res = await fetchImpl(url, { method: "POST", headers: { "content-type": "application/json" }, body });
     const text = await res.text();
     if (res.status !== c.expect.status) {
       return { name: c.name, passed: false, message: `expected status ${c.expect.status}, got ${res.status}: ${text}` };
@@ -115,11 +125,11 @@ async function post(url: string, body: string, c: { name: string; expect: { stat
   }
 }
 
-/** Runs the screen cases, then the action cases (spec §8.1). */
-export async function runComposerConformance(baseUrl: string): Promise<CaseResult[]> {
+/** Runs the screen cases, then the action cases (spec §8.1). `fetchImpl` as for runComposerCase. */
+export async function runComposerConformance(baseUrl: string, fetchImpl: typeof fetch = fetch): Promise<CaseResult[]> {
   const results: CaseResult[] = [];
-  for (const c of composerCases()) results.push(await runComposerCase(baseUrl, c));
-  for (const c of actionCases()) results.push(await runActionCase(baseUrl, { ...c, name: `action: ${c.name}` }));
+  for (const c of composerCases()) results.push(await runComposerCase(baseUrl, c, fetchImpl));
+  for (const c of actionCases()) results.push(await runActionCase(baseUrl, { ...c, name: `action: ${c.name}` }, fetchImpl));
   return results;
 }
 

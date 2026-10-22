@@ -1,9 +1,11 @@
 # @client-compose/composer
 
-Framework-agnostic composer for [Client Compose](https://github.com/client-compose/client-compose):
-decide which islands make up a screen and resolve their props from your backend services.
+The composer for [Client Compose](https://github.com/client-compose/client-compose), in TypeScript.
+It decides what each screen is made of and resolves its islands' props, in parallel, from your
+services. You declare screens as data; it handles version negotiation, timeouts and failure
+isolation, and serves them from any HTTP stack.
 
-Tier: **core** · Protocol: **v0** · Node 20+ (or any runtime with `AbortController` and timers)
+Tier: **core** · Protocol: **v0** · Node 20+, Bun, Deno, Cloudflare Workers (anything with `fetch`'s `Request` and `Response`)
 
 ```sh
 npm install @client-compose/composer
@@ -12,74 +14,178 @@ npm install @client-compose/composer
 ## Usage
 
 ```ts
-import { createComposer, defineIsland, defineScreen } from "@client-compose/composer";
-import { PostGridV1, ProfileHeaderV2 } from "./islands.generated"; // from @client-compose/codegen
+import { action, createComposer, island, place, placeStatic, reportErrors, screen } from "@client-compose/composer";
+import { FollowButtonV1, PostGridV1, ProfileHeaderV2, ReportLinkV1 } from "./islands.generated"; // from @client-compose/codegen
 
-type Ctx = { users: UsersService; posts: PostsService };
+interface Ctx {
+  viewer?: User;
+}
 
-const header = defineIsland<ProfileHeaderV2, Ctx>(ProfileHeaderV2, async ({ params, ctx }) => {
-  const user = await ctx.users.get(params.userId);
-  return { userId: user.id, displayName: user.name, avatarUrl: user.avatar };
+const ProfileHeader = island(ProfileHeaderV2, async ({ params, load }) => {
+  const user = await load(`user:${params.userId}`, (signal) => users.get(params.userId, { signal }));
+  return { displayName: user.name, avatarUrl: user.avatar };
 });
 
-const posts = defineIsland<PostGridV1, Ctx>(PostGridV1, async ({ params, ctx, signal }) => ({
-  posts: await ctx.posts.recent(params.userId, { signal }),
-}));
-
-const profile = defineScreen<Ctx>({
-  id: "profile",
-  cacheMaxAge: 30,
-  layout: ({ client }) => [
-    { key: "header", island: [header], required: true },
-    { key: "posts", island: [posts], timeoutMs: 500 },
+const profile = screen<Ctx>("profile", {
+  requires: [signedIn],
+  islands: [
+    place("header", ProfileHeader, { required: true }),
+    place("follow", FollowButton, { when: ({ ctx, params }) => ctx.viewer?.id !== params.userId }),
+    place("posts", [PostGridV1Island, PostGridV2Island], { timeoutMs: 300 }),
+    placeStatic("report", ReportLinkV1, { label: "Report this profile" }),
   ],
+  cache: { maxAge: 30 },
 });
 
-export const compose = createComposer([profile], {
-  onIslandError: (key, type, error) => logger.warn({ key, type, error }, "island failed"),
+export const composer = createComposer<Ctx>({
+  screens: [profile],
+  actions: [followUser],
+  context: async (request) => ({ viewer: await sessions.viewer(request) }),
+  use: [reportErrors((failure) => logger.error(failure, "composer failure"))],
 });
+
+export default { fetch: composer.fetch }; // Bun, Deno, Workers, Hono, Next.js route handlers
 ```
 
-Throw `NotFoundError` from a layout when what the params refer to doesn't exist (a batch loader's
-missing key counts too); the screen responds 404 `not_found` and clients show their not-found UI.
-`UnauthenticatedError` and `ForbiddenError` respond 401 and 403.
-Add an optional `meta` function to describe the screen as a whole (page title, description, sharing
-image); it runs alongside the islands and shares their `rc.load`s:
+## Screens
+
+A screen lists its islands in order. `place(key, versions, options)` puts one there:
+
+- **versions**: one island, or every version you can resolve. The highest the app supports is sent;
+  if there's none, the island is left out.
+- **`required`**: the screen fails without it.
+- **`timeoutMs`**: overrides `defaultTimeoutMs` (2000).
+- **`when`**: decides per request whether it appears, e.g. no follow button on your own profile.
+
+`placeStatic(key, Descriptor, props)` places an island whose props are known up front: a form, a
+heading.
+
+When a screen's islands can only be decided per request (from a CMS, or an experiment), give it a
+`layout` function instead of `islands`. Throw `NotFoundError` from it when what the params refer to
+doesn't exist (a batch loader's missing key counts too); the screen responds 404 `not_found`.
+
+`meta` optionally describes the screen as a whole (page title, description, sharing image). It runs
+alongside the islands and shares their `load`s; if it fails, the response just has no meta:
 
 ```ts
-meta: async (rc) => {
-  const recipe = await recipeById(rc, rc.params.recipeId);
+meta: async ({ params, load }) => {
+  const recipe = await load(`recipe:${params.recipeId}`, () => recipes.get(params.recipeId));
   return { title: recipe.title, description: recipe.summary };
 },
 ```
 
-Each placement lists the versions the composer can resolve; the highest version the client also
-supports is used. Islands resolve in parallel, each with its own timeout, and a failing island is
-returned as an error for that island only, unless it's `required`.
+## Context and requirements
+
+`context` runs once per request, before anything else, and returns what every requirement, layout,
+island and action receives as `ctx`: the viewer, their locale, a tenant. It's given your server's
+request: a fetch `Request` by default, or whatever your adapter passes (an Express or Fastify request,
+a node:http `IncomingMessage`). Say which with the composer's second type parameter:
+`createComposer<Ctx, express.Request>(…)`.
+
+A requirement checks the context before a screen or action runs. Throw `UnauthenticatedError` or
+`ForbiddenError` and the app gets 401 or 403, without your layout or action running:
+
+```ts
+const signedIn: Requirement<Ctx> = (ctx) => {
+  if (!ctx.viewer) throw new UnauthenticatedError();
+};
+```
+
+Islands and actions can throw those errors too, when they find out late.
+
+## Actions
+
+Actions (spec §5) change things. Define each version with its generated descriptor and return a
+result (and the screens it changed), or one of its declared errors:
+
+```ts
+import { FollowUserV1 } from "./actions.generated"; // from @client-compose/codegen
+
+const followUser = action(
+  FollowUserV1,
+  async ({ userId }, { ctx, idempotencyKey }) => {
+    if (await blocks.has(userId, ctx.viewer)) return { error: { code: "blocked" } }; // typed
+    const followers = await follows.add(ctx.viewer, userId, idempotencyKey);
+    return { result: { followers }, effects: { invalidate: [{ screen: "profile", params: { userId } }] } };
+  },
+  { requires: [signedIn] },
+);
+```
+
+- Requirements are checked first, then the input is validated against the manifest (400
+  `invalid_input`). Null optional properties are removed, so your code sees what its types say.
+- A thrown error (other than `NotFoundError`, `UnauthenticatedError` or `ForbiddenError`), or an error
+  code the action doesn't declare, is a failure: 500 `action_failed`, reported to plugins.
+- `load` and batch loaders work as in islands, scoped to the action request.
+
+## Plugins
+
+A plugin hooks into the composer. Set the hooks you need:
+
+| Hook | Wraps | For |
+| --- | --- | --- |
+| `context` | each request, after your `context` function | adding to the context: the viewer from a token, a tenant |
+| `screen` | composing a whole screen | tracing, metrics, caching whole anonymous screens |
+| `island` | resolving one island version | caching props, tracing, per-island metrics |
+| `action` | performing an action | idempotency stores, rate limits, audit logs |
+| `error` | every failure | logs, error tracking |
+
+Plugins run in the order they're listed in `use`, the first outermost:
+
+```ts
+const tracing: Plugin<Ctx> = {
+  island: (next) => async (call) => {
+    const span = tracer.startSpan(`island ${call.island.type}`);
+    try {
+      return await next(call);
+    } finally {
+      span.end();
+    }
+  },
+};
+```
+
+`reportErrors(fn)` is a plugin with just an `error` hook.
+
+## Serving it
+
+`composer.fetch` is a fetch-standard handler. It answers POST requests whose path ends in
+`/screens/{screen}` or `/actions/{action}`, so you can mount it under any prefix:
+
+```ts
+// Bun, Deno, Cloudflare Workers
+export default { fetch: composer.fetch };
+
+// Hono
+app.all("/compose/*", (c) => composer.fetch(c.req.raw));
+
+// Next.js route handler: app/compose/[...path]/route.ts
+export const POST = composer.fetch;
+```
+
+For Node servers there are adapters, which pass their own request type to `context`:
+
+| Server | Package |
+| --- | --- |
+| node:http | [`@client-compose/node-http`](https://www.npmjs.com/package/@client-compose/node-http) |
+| Express | [`@client-compose/express`](https://www.npmjs.com/package/@client-compose/express) |
+| Fastify | [`@client-compose/fastify`](https://www.npmjs.com/package/@client-compose/fastify) |
+
+Writing one for another server is a few lines: hand `composer.handle(path, rawBody, request)` the
+request and write the status and JSON body it returns.
 
 ## Loading data efficiently
 
 Islands resolve in parallel, and several often need the same data. Three layers, from most to
 least specific:
 
-**1. Share data between islands in a request: `rc.load(key, fn)`.** The first call runs `fn`; every
-other call with the same key in the same request (other islands, and the layout) gets the same
-result. Wrap each lookup in a small helper so every island uses the same key:
+**1. Share data between islands in a request: `load(key, fn)`.** The first call runs `fn`; every
+other call with the same key in the same request (other islands, the layout, meta, `when`) gets the
+same result. Wrap each lookup in a small helper so every island uses the same key:
 
 ```ts
-// LayoutContext works for both the layout and resolvers.
-const user = (rc: LayoutContext<Ctx>, id: string) =>
-  rc.load(`user:${id}`, (signal) => rc.ctx.users.get(id, { signal }));
-
-const header = defineIsland<ProfileHeaderV2, Ctx>(ProfileHeaderV2, async (rc) => {
-  const u = await user(rc, rc.params.userId);
-  return { userId: u.id, displayName: u.name, avatarUrl: u.avatar };
-});
-const follow = defineIsland<FollowButtonV1, Ctx>(FollowButtonV1, async (rc) => ({
-  userId: rc.params.userId,
-  isFollowing: await rc.ctx.follows.check(rc.params.userId),
-  displayName: (await user(rc, rc.params.userId)).name, // same call as the header's
-}));
+// LayoutContext works for layouts, `when`, meta and islands.
+const user = (rc: LayoutContext<Ctx>, id: string) => rc.load(`user:${id}`, (signal) => users.get(id, { signal }));
 ```
 
 Pass the `signal` that `load` gives `fn` to your fetch. It belongs to the request, not to one
@@ -87,90 +193,56 @@ island, so an island timing out never cancels work another island is waiting on.
 
 **2. Combine lookups across islands into one call: `defineBatchLoader`.** When islands need
 different items from the same service, a batch loader collects their keys (de-duplicated) and makes
-one `getMany` call:
+one call:
 
 ```ts
 // Define once, at module level; batches and results are per request.
 const userById = defineBatchLoader((ids: string[], signal) => users.getMany(ids, { signal }));
 
-// in any resolver or layout:
+// in any island, layout or action:
 const author = await userById.load(rc, post.authorId);
+const authors = await userById.loadMany(rc, authorIds); // rejects if any is missing
 ```
 
 `fetch` returns a `Map` keyed by id, or an array aligned with `ids` (`undefined` for a missing id,
 which rejects with `LoadNotFoundError`). Options: `maxBatchSize`, `windowMs`, `cacheKey`.
 
 **3. Cache across requests in your service clients, not here.** `load` and batch loaders are scoped
-to one request on purpose, so one user's data never leaks into another's screen. For data that can
-be shared (catalogue entries, feature config), cache it in the service client (HTTP caching, a TTL
-cache), keyed by everything the result depends on, including the viewer when it's personalised.
+to one request on purpose, so one user's data never leaks into another's screen.
 
-Rules of thumb:
+## Testing
 
-- Put every input in the key (`user:${id}`, `posts:${id}:recent`). The viewer doesn't need to be in
-  it: a request only ever has one.
-- Loading in the layout is fine: if the layout needs the user to decide which islands to show, the
-  islands that also need it reuse the same call.
-- A failed load fails every island that awaited it (each as its own island error); it isn't retried
-  within the request.
-
-## Actions
-
-Actions (spec §5) change things. Define each version with its generated descriptor. Return a
-result (and optionally the screens it changed) or one of the declared errors:
+`@client-compose/composer/testing` calls your composer in-process, the way apps do, so your context
+function, requirements and plugins all run, and gives you typed results:
 
 ```ts
-import { createActions, defineAction, UnauthenticatedError } from "@client-compose/composer";
-import { FollowUserV1 } from "./actions.generated"; // from @client-compose/codegen
+import { testComposer } from "@client-compose/composer/testing";
 
-const follow = defineAction<FollowUserV1Input, FollowUserV1Result, FollowUserV1Error, Ctx>(
-  FollowUserV1,
-  async ({ userId }, { ctx, idempotencyKey }) => {
-    if (!ctx.user) throw new UnauthenticatedError(); // 401
-    if (await ctx.blocks.has(userId, ctx.user)) return { error: { code: "blocked" } }; // typed
-    const followers = await ctx.follows.add(ctx.user, userId, idempotencyKey);
-    return { result: { followers }, effects: { invalidate: [{ screen: "profile", params: { userId } }] } };
-  },
-);
+const app = testComposer(composer);
 
-export const perform = createActions([follow], {
-  onActionError: (action, version, error) => logger.error({ action, version, error }, "action failed"),
-});
+const profile = await app.screen("profile", { userId: "u1" }, { headers: { authorization: "Bearer t" } });
+assert.deepEqual(profile.keys(), ["header", "posts"]);
+const header = profile.props(ProfileHeaderV2, "header");
+
+const followed = await app.perform(FollowUserV1, { userId: "u1" });
+assert.equal(followed.result?.followers, 8);
 ```
 
-- Input is validated against the manifest first (400 `invalid_input`). Null optional properties
-  are removed, so handlers see what their types say.
-- A thrown error (other than `NotFoundError`, `UnauthenticatedError` or `ForbiddenError`), or an
-  error code the action doesn't declare, is a failure: 500 `action_failed`, reported to
-  `onActionError`.
-- `load` and batch loaders work as in resolvers, scoped to the action request.
-
-## Serving it
-
-Use an adapter such as [`@client-compose/node-http`](https://www.npmjs.com/package/@client-compose/node-http),
-or write one for your framework: route `POST /screens/:screen`, read the raw body, and call
-`composeHttp`, which parses and validates the request and returns the protocol's status codes.
-
-```ts
-import { composeHttp, performHttp } from "@client-compose/composer";
-
-app.post("/screens/:screen", async (req, res) => {
-  const result = await composeHttp(compose, req.params.screen, await readBody(req), { users, posts });
-  res.status(result.status).json(result.body);
-});
-
-app.post("/actions/:action", async (req, res) => {
-  const result = await performHttp(perform, req.params.action, await readBody(req), { users, posts });
-  res.status(result.status).json(result.body);
-});
-```
+- By default the app declares every island your declared screens place. To test an older app,
+  `testComposer(composer, { declare: [ProfileHeaderV1, PostGridV1] })`.
+- Screens give `status`, `keys()`, `island(key)`, `props(Descriptor, key)` and the full `response`;
+  errors come back as their protocol code (`"not_found"`, `"unauthenticated"`).
+- `perform` gives the typed `result`, `effects`, the declared `error`, or the protocol `failure`.
+- For a composer whose `context` takes an Express or Fastify request, pass `request` to build one.
 
 ## Conformance
 
 `conformanceScreen()` and `conformanceActions()` are the test-only screen and actions used by the
-shared conformance suite; register them only in a test server. See [`@client-compose/conformance`](https://www.npmjs.com/package/@client-compose/conformance).
+shared conformance suite; register them only in tests. The suite runs against `composer.fetch`
+in-process, with no server: see [`@client-compose/conformance`](https://www.npmjs.com/package/@client-compose/conformance).
 
 ## Links
 
 - [Protocol spec](https://github.com/client-compose/client-compose/blob/main/spec/PROTOCOL.md)
+- [Capabilities](https://github.com/client-compose/client-compose/blob/main/spec/CAPABILITIES.md)
 - [Examples](https://github.com/client-compose/client-compose/tree/main/examples/profile)

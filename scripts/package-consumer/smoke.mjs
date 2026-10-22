@@ -5,15 +5,8 @@ import { createServer } from "node:http";
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
 import { buildRequest, callAction, fetchScreen, IslandRegistry, plan } from "@client-compose/client";
-import {
-  conformanceActions,
-  conformanceScreen,
-  createActions,
-  createComposer,
-  defineAction,
-  defineIsland,
-  defineScreen,
-} from "@client-compose/composer";
+import { action, conformanceActions, conformanceScreen, createComposer, island, place, screen } from "@client-compose/composer";
+import { testComposer } from "@client-compose/composer/testing";
 import { clientCases, runComposerConformance } from "@client-compose/conformance";
 import { generateTypeScript, parseManifest } from "@client-compose/codegen";
 import { createRequestListener } from "@client-compose/node-http";
@@ -26,18 +19,25 @@ assert.equal(PROTOCOL_VERSION, 0);
 
 // Composer conformance, through @client-compose/composer + node-http.
 const greeting = { type: "greeting", version: 1 };
-const screens = [
-  conformanceScreen(),
-  defineScreen({ id: "home", layout: () => [{ key: "hello", island: [defineIsland(greeting, () => ({ name: "Ada" }))] }] }),
-];
 const Greet = { action: "greet", version: 1, errors: [], input: { type: "object", required: ["name"], properties: { name: { type: "string" } } } };
-const actions = createActions([...conformanceActions(), defineAction(Greet, ({ name }) => ({ result: { text: `Hi ${name}` } }))]);
-const server = createServer(createRequestListener(createComposer(screens), () => null, { actions })).listen(0, "127.0.0.1");
+const composer = createComposer({
+  screens: [conformanceScreen(), screen("home", { islands: [place("hello", island(greeting, () => ({ name: "Ada" })))] })],
+  actions: [...conformanceActions(), action(Greet, ({ name }) => ({ result: { text: `Hi ${name}` } }))],
+});
+const server = createServer(createRequestListener(composer)).listen(0, "127.0.0.1");
 await once(server, "listening");
 const baseUrl = `http://127.0.0.1:${server.address().port}`;
 const results = await runComposerConformance(baseUrl);
 assert.deepEqual(results.filter((r) => !r.passed), [], "composer conformance");
 console.log(`composer conformance (screens and actions): ${results.length}/${results.length}`);
+
+// The same composer through its fetch-standard handler, in-process.
+const inProcess = await runComposerConformance("https://composer.test", (input, init) => composer.fetch(new Request(input, init)));
+assert.deepEqual(inProcess.filter((r) => !r.passed), [], "composer conformance through fetch");
+
+// The composer's test kit.
+const home = await testComposer(composer).screen("home");
+assert.deepEqual(home.props(greeting, "hello"), { name: "Ada" });
 
 // Actions, through @client-compose/client.
 const greeted = await callAction(baseUrl, Greet, { name: "Ada" }, { client: { platform: "node", appVersion: "0" } });
@@ -94,6 +94,6 @@ assert.deepEqual(tested.gateway.actionRequests()[1].client, tested.config.client
 console.log("proxy: ok");
 
 // Codegen as a library.
-const island = parseManifest({ type: "greeting", version: 1, props: { type: "object", required: ["name"], properties: { name: { type: "string" } } } }, "greeting.json");
-assert.match(generateTypeScript([island], "test"), /export interface GreetingV1 \{\n  name: string;\n\}/);
+const manifest = parseManifest({ type: "greeting", version: 1, props: { type: "object", required: ["name"], properties: { name: { type: "string" } } } }, "greeting.json");
+assert.match(generateTypeScript([manifest], "test"), /export interface GreetingV1 \{\n  name: string;\n\}/);
 console.log("codegen library: ok");

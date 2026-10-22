@@ -231,40 +231,40 @@ What makes these feel like one toolkit rather than six libraries:
 
 | Concept | Go | TypeScript composer | TypeScript client / React | Swift / SwiftUI | Kotlin / Compose |
 | --- | --- | --- | --- | --- | --- |
-| Composer | *`cc.New(cc.Config{Screens, Actions, Context, Use})`* | *`createComposer({ screens, actions, context, use })`* | | | |
-| Screen | *`cc.Screen{ID, Islands, Requires, Meta}`* | *`screen(id, { islands, requires, meta })`* | | | |
-| Placement | `cc.Placement{Key, Versions, Required, When}` | *`place(key, Island, { required, when })`* | | | |
-| Plugin | *`cc.Plugin`* | *`Plugin`* | | | |
-| Island version | `cc.Define(fn)` | *`island(Props, fn)`* | | | |
-| Action version | `cc.DefineAction(fn)` | *`action(Action, fn)`* | | | |
+| Composer | *`cc.New(cc.Config{Screens, Actions, Context, Use})`* | `createComposer({ screens, actions, context, use })` | | | |
+| Screen | *`cc.Screen{ID, Islands, Requires, Meta}`* | `screen(id, { islands, requires, meta })` | | | |
+| Placement | `cc.Placement{Key, Versions, Required, When}` | `place(key, Island, { required, when })` | | | |
+| Plugin | *`cc.Plugin`* | `Plugin` | | | |
+| Island version | `cc.Define(fn)` | `island(Props, fn)` | | | |
+| Action version | `cc.DefineAction(fn)` | `action(Action, fn)` | | | |
 | Shared load | `cc.Load(ctx, key, fn)` | `rc.load(key, fn)` | | | |
 | Client | | | `ClientComposeConfig` | *`ComposeClient`* | *`ComposeClient`* |
 | Register | | | `registry.registerComponent(Props, C)` | `registry.register(Props.self) { … }` | `registry.register(Props) { … }` |
 | Screen view | | | `<ComposedScreen>` | `ComposedScreen` | *`ComposedScreen()`* |
 | Screen state | | | `useScreen` | *`ScreenModel`* | *`ScreenState`* (`StateFlow`) |
 | Action | | | `useAction(Action)` | *`client.perform(Action.self, input)`* | *`client.perform(Action, input)`* |
-| Test kit | *`cctest`* | *`@client-compose/composer/testing`* | `@client-compose/react/testing` | *`ClientComposeTesting`* | *`client-compose-testing`* |
+| Test kit | *`cctest`* | `@client-compose/composer/testing` | `@client-compose/react/testing` | *`ClientComposeTesting`* | *`client-compose-testing`* |
 
 Names in *italics* don't exist yet; the parity work below adds them.
 
 ## Where each stack stands
 
-✅ done · ◐ partly · ✗ missing · — doesn't apply. As of 2026-10-22.
+✅ done · ◐ partly · ✗ missing · — doesn't apply. Updated as the parity work lands.
 
 ### Composers
 
 | | Go | TypeScript |
 | --- | --- | --- |
-| CMP-1 declarative screens | ◐ layout functions only | ◐ layout functions only |
+| CMP-1 declarative screens | ◐ layout functions only | ✅ |
 | CMP-2 to CMP-9 | ✅ | ✅ |
-| CMP-10 one composer | ✅ | ◐ screens and actions are separate (`createComposer`, `createActions`) |
-| CMP-11 error reporting | ◐ options, not plugins | ◐ options, not plugins |
-| CMP-12 adapters | ✅ `net/http` (any router via `ComposeHTTP`) | ◐ `node:http` only: fetch-standard, Express and Fastify to add |
-| CMP-13 in-process testing | ◐ `Compose` and `Perform` exist, no helpers | ✗ |
+| CMP-10 one composer | ✅ | ✅ |
+| CMP-11 error reporting | ◐ options, not plugins | ✅ `reportErrors` |
+| CMP-12 adapters | ✅ `net/http` (any router via `ComposeHTTP`) | ✅ `composer.fetch` (Bun, Deno, Workers, Hono, Next.js), `node:http`, Express, Fastify |
+| CMP-13 in-process testing | ◐ `Compose` and `Perform` exist, no helpers | ✅ `testComposer` |
 | CMP-14 conformance | ✅ | ✅ |
-| CMP-15 app context | ◐ your own `net/http` middleware | ✗ |
-| CMP-16 requirements | ✗ return `ErrUnauthenticated` by hand | ✗ throw by hand |
-| CMP-17 plugins | ✗ | ✗ |
+| CMP-15 app context | ◐ your own `net/http` middleware | ✅ `context` |
+| CMP-16 requirements | ✗ return `ErrUnauthenticated` by hand | ✅ `requires` |
+| CMP-17 plugins | ✗ | ✅ `Plugin` |
 | Integrations | ✗ | ✗ |
 
 ### Clients

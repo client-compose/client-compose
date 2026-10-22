@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { callAction, IslandRegistry } from "@client-compose/client";
-import { createActions, defineAction, defineIsland, performHttp } from "@client-compose/composer";
+import { action, createComposer, island } from "@client-compose/composer";
 import { generate, parseActionManifest, parseManifest, stale } from "../src/index.ts";
 import { DividerV1, KitchenSinkV1, PingV1, RenameThingV1 } from "./golden/typescript/islands.generated.ts";
 
@@ -20,21 +20,20 @@ test("conformance action types are up to date", () => {
 });
 
 test("generated action descriptors work end to end with the composer and client", async () => {
-  const perform = createActions([
-    defineAction(RenameThingV1, ({ thingId, name }) => {
-      if (name === "taken") return { error: { code: "name_taken", details: { suggestions: ["taken-2"] } } };
-      return {
-        result: { thing: { id: thingId, name } },
-        effects: { invalidate: [{ screen: "thing", params: { thingId } }] },
-      };
-    }),
-    defineAction(PingV1, () => ({ result: {} })),
-  ]);
-  // The client's fetch goes straight to the composer's HTTP entry point.
-  const fetchImpl = (async (url: string, init: RequestInit) => {
-    const res = await performHttp(perform, url.split("/").pop()!, init.body as string, undefined);
-    return new Response(JSON.stringify(res.body), { status: res.status });
-  }) as typeof fetch;
+  const composer = createComposer({
+    actions: [
+      action(RenameThingV1, ({ thingId, name }) => {
+        if (name === "taken") return { error: { code: "name_taken", details: { suggestions: ["taken-2"] } } };
+        return {
+          result: { thing: { id: thingId, name } },
+          effects: { invalidate: [{ screen: "thing", params: { thingId } }] },
+        };
+      }),
+      action(PingV1, () => ({ result: {} })),
+    ],
+  });
+  // The client's fetch goes straight to the composer's fetch-standard handler.
+  const fetchImpl = ((url: string, init: RequestInit) => composer.fetch(new Request(`https://composer.test${url}`, init))) as typeof fetch;
   const options = { client: { platform: "test", appVersion: "1" }, fetch: fetchImpl };
 
   const ok = await callAction("", RenameThingV1, { thingId: "t1", name: "New", visibility: "public" }, options);
@@ -61,8 +60,8 @@ test("generated TS descriptors work with the client and composer", () => {
   assert.deepEqual(registry.capabilities(), { "kitchen-sink": [1], divider: [1] });
   assert.equal(registry.get("kitchen-sink", 1)!(sample, {} as never), "Hello:https://example.com/ada.png");
 
-  const island = defineIsland(KitchenSinkV1, () => sample);
-  assert.deepEqual([island.type, island.version], ["kitchen-sink", 1]);
+  const sink = island(KitchenSinkV1, () => sample);
+  assert.deepEqual([sink.type, sink.version], ["kitchen-sink", 1]);
 });
 
 const rejects = (props: unknown, message: RegExp) =>

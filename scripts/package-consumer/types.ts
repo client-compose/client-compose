@@ -2,21 +2,27 @@
 import type { ReactNode } from "react";
 import { buildRequest, callAction, IslandRegistry, plan, ScreenFetchError, type PlannedIsland } from "@client-compose/client";
 import {
-  composeHttp,
-  createActions,
+  action,
   createComposer,
-  defineAction,
   ForbiddenError,
-  performHttp,
   UnauthenticatedError,
   type PerformResult,
   defineBatchLoader,
-  defineIsland,
-  defineScreen,
+  island,
+  place,
+  placeStatic,
+  reportErrors,
+  screen as composedScreen,
   LoadNotFoundError,
   type ComposeResult,
   type LayoutContext,
+  type Plugin,
+  type Requirement,
 } from "@client-compose/composer";
+import { testComposer, type TestScreen } from "@client-compose/composer/testing";
+import { composerHandler } from "@client-compose/express";
+import { composerPlugin } from "@client-compose/fastify";
+import type { IncomingMessage } from "node:http";
 import { composerCases, type ClientCase } from "@client-compose/conformance";
 import { generate, type CodegenConfig } from "@client-compose/codegen";
 import { createRequestListener } from "@client-compose/node-http";
@@ -48,10 +54,21 @@ interface GreetingV1 {
 const GreetingV1: IslandDescriptor<GreetingV1> = { type: "greeting", version: 1 };
 
 type Ctx = { greet: (id: string) => Promise<string> };
-const island = defineIsland<GreetingV1, Ctx>(GreetingV1, async ({ params, ctx }) => ({ name: await ctx.greet(params.id) }));
-const compose = createComposer<Ctx>([defineScreen<Ctx>({ id: "home", layout: () => [{ key: "g", island: [island] }] })]);
-export const listener = createRequestListener(compose, () => ({ greet: async (id: string) => id }));
-export const result: Promise<ComposeResult> = composeHttp(compose, "home", "{}", { greet: async (id: string) => id });
+const greetingIsland = island<GreetingV1, Ctx>(GreetingV1, async ({ params, ctx }) => ({ name: await ctx.greet(params.id) }));
+const signedIn: Requirement<Ctx> = () => {};
+const home = composedScreen<Ctx>("home", {
+  requires: [signedIn],
+  islands: [place("g", greetingIsland, { when: ({ params }) => params.id !== "" }), placeStatic("s", GreetingV1, { name: "x" })],
+});
+const greeter: Ctx = { greet: async (id: string) => id };
+const tracing: Plugin<Ctx> = { island: (next) => (call) => next(call) };
+const composer = createComposer<Ctx>({ screens: [home], context: () => greeter, use: [tracing, reportErrors(() => {})] });
+export const fetchHandler: (request: Request) => Promise<Response> = composer.fetch;
+export const result: Promise<ComposeResult> = composer.compose({ protocol: 0, screen: "home", client: { platform: "web", appVersion: "1" }, islands: {} }, greeter);
+export const listener = createRequestListener(createComposer<Ctx, IncomingMessage>({ screens: [home], context: () => greeter }));
+export const expressHandlers = composerHandler(createComposer<Ctx, import("express").Request>({ screens: [home], context: () => greeter }));
+export const fastifyPlugin = composerPlugin(createComposer<Ctx, import("fastify").FastifyRequest>({ screens: [home], context: () => greeter }));
+export const tested: Promise<TestScreen> = testComposer(composer).screen("home", { id: "1" });
 
 const registry = new IslandRegistry<string>().register(GreetingV1, (props) => props.name.toUpperCase());
 export const request: ScreenRequest = buildRequest(registry, "home", { platform: "web", appVersion: "1" });
@@ -76,7 +93,7 @@ export const rsc = ServerComposedScreen({ config, screen: "home", fallback: "loa
 // Request-scoped loading.
 const nameById = defineBatchLoader(async (ids: string[]) => new Map(ids.map((id) => [id, `user ${id}`])), { maxBatchSize: 50 });
 const greeting = (rc: LayoutContext<Ctx>, id: string) => rc.load(`greet:${id}`, () => rc.ctx.greet(id));
-export const loadingIsland = defineIsland<GreetingV1, Ctx>(GreetingV1, async (rc) => ({
+export const loadingIsland = island<GreetingV1, Ctx>(GreetingV1, async (rc) => ({
   name: `${await greeting(rc, rc.params.id)} / ${await nameById.load(rc, rc.params.id)}`,
 }));
 export const notFound = (e: unknown): boolean => e instanceof LoadNotFoundError;
@@ -89,12 +106,18 @@ const RenameV1: ActionDescriptor<{ name: string }, { id: string }, RenameError> 
   errors: ["taken"],
   input: { type: "object" },
 };
-export const renameAction = defineAction<{ name: string }, { id: string }, RenameError, Ctx>(RenameV1, async ({ name }, { ctx }) =>
-  name === "taken" ? { error: { code: "taken", details: { suggestion: await ctx.greet(name) } } } : { result: { id: name } },
+export const renameAction = action<{ name: string }, { id: string }, RenameError, Ctx>(
+  RenameV1,
+  async ({ name }, { ctx }) =>
+    name === "taken" ? { error: { code: "taken", details: { suggestion: await ctx.greet(name) } } } : { result: { id: name } },
+  { requires: [signedIn] },
 );
-export const perform = createActions<Ctx>([renameAction]);
-export const performed: Promise<PerformResult> = performHttp(perform, "rename", "{}", { greet: async (id: string) => id });
-export const listenerWithActions = createRequestListener(compose, () => ({ greet: async (id: string) => id }), { actions: perform });
+const withActions = createComposer<Ctx>({ actions: [renameAction], context: () => greeter });
+export const performed: Promise<PerformResult> = withActions.perform(
+  { protocol: 0, action: "rename", version: 1, input: { name: "x" }, client: { platform: "web", appVersion: "1" } },
+  greeter,
+);
+export const renamed = testComposer(withActions).perform(RenameV1, { name: "x" });
 export const called = async (): Promise<string | undefined> => {
   const res = await callAction("", RenameV1, { name: "x" }, { client: { platform: "web", appVersion: "1" } });
   return res.status === "ok" ? res.result.id : res.error.details.suggestion;
