@@ -1,5 +1,14 @@
 # @client-compose/composer
 
+## 0.6.0
+
+### Minor Changes
+
+- [#18](https://github.com/client-compose/client-compose/pull/18) [`9eadbcf`](https://github.com/client-compose/client-compose/commit/9eadbcf16ad2374e8ff1376fe0b778729b73a89e) Thanks [@LewisYearsley](https://github.com/LewisYearsley)! - **Breaking:** requirements receive the request as well as the context: `(ctx, { screen, params, client })`.
+  A screen can now require that what its params refer to exists and that the viewer may see it, and
+  answer 404 or 403 without a layout function. `reportErrors` returns a plain plugin, so it fits any
+  composer without type arguments.
+
 ## 0.5.0
 
 ### Minor Changes
