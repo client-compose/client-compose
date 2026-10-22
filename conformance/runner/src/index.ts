@@ -39,6 +39,41 @@ export interface ClientCase {
   expectSkipped: string[];
 }
 
+/** A response a client is given: a JSON body, or a raw one sent as is. */
+export interface FixtureResponse {
+  status: number;
+  body?: unknown;
+  rawBody?: string;
+}
+
+/** Client fixtures for actions and effects (spec §5, §8.2). See the file's $comment. */
+export interface ClientActionCases {
+  descriptor: { action: string; version: number; errors: string[] };
+  requests: {
+    name: string;
+    input: unknown;
+    idempotencyKey: string;
+    expectPath: string;
+    expectBody: unknown;
+  }[];
+  outcomes: {
+    name: string;
+    response: FixtureResponse;
+    expect:
+      | { outcome: "ok"; result: unknown; effects: unknown }
+      | { outcome: "error"; code: string; details: unknown }
+      | { outcome: "failed"; status: number; code: string | null };
+  }[];
+  screenRefs: {
+    name: string;
+    ref: { screen: string; params?: Record<string, string> };
+    screen: string;
+    params: Record<string, string>;
+    matches: boolean;
+  }[];
+  screenErrors: (FixtureResponse & { name: string; expectCode: string | null })[];
+}
+
 export interface CaseResult {
   name: string;
   passed: boolean;
@@ -49,22 +84,26 @@ const SUITES = {
   composer: "composer/cases.json",
   actions: "composer/action-cases.json",
   client: "client/cases.json",
+  clientActions: "client/action-cases.json",
 } as const;
 
 /**
  * The published package carries the cases in dist/cases/ (copied at build time); in this repo
  * they're read from conformance/.
  */
-function load<T>(suite: keyof typeof SUITES): T {
+function read<T>(suite: keyof typeof SUITES): T {
   const bundled = new URL(`./cases/${suite}.json`, import.meta.url);
   const inRepo = new URL(`../../${SUITES[suite]}`, import.meta.url);
   const file = existsSync(bundled) ? bundled : inRepo;
-  return (JSON.parse(readFileSync(file, "utf8")) as { cases: T }).cases;
+  return JSON.parse(readFileSync(file, "utf8")) as T;
 }
+
+const load = <T>(suite: keyof typeof SUITES): T => read<{ cases: T }>(suite).cases;
 
 export const composerCases = (): ComposerCase[] => load("composer");
 export const actionCases = (): ActionCase[] => load("actions");
 export const clientCases = (): ClientCase[] => load("client");
+export const clientActionCases = (): ClientActionCases => read("clientActions");
 
 /**
  * Sends one screen case to the composer at `baseUrl`. Pass `fetchImpl` to run against a

@@ -191,7 +191,11 @@ export function buildActionRequest<I>(
   };
 }
 
-/** POST an action request. Resolves with the outcome (ok or a declared error); throws ActionFetchError otherwise. */
+/**
+ * POST an action request. Resolves with the outcome the composer sent (ok or an error); throws
+ * ActionFetchError for a non-2xx response or a body that isn't an outcome. Check the outcome against
+ * the action with `checkActionResponse` (callAction does).
+ */
 export async function fetchAction(
   baseUrl: string,
   request: ActionRequest,
@@ -204,8 +208,31 @@ export async function fetchAction(
     headers: { "content-type": "application/json", ...init.headers },
     body: JSON.stringify(request),
   });
-  if (!res.ok) throw new ActionFetchError(res.status, await res.text());
-  return (await res.json()) as ActionResponse;
+  const text = await res.text();
+  if (!res.ok) throw new ActionFetchError(res.status, text);
+  try {
+    return JSON.parse(text) as ActionResponse;
+  } catch {
+    throw new ActionFetchError(res.status, text);
+  }
+}
+
+/**
+ * The response, if it's a result or one of this action's own declared errors. Anything else throws
+ * ActionFetchError (status 200, with the code if there is one): an outcome the client can't read,
+ * or a code the action doesn't declare, such as one added after this app was built (spec §5.1).
+ */
+export function checkActionResponse<I, R, E extends DeclaredError>(
+  action: ActionDescriptor<I, R, E>,
+  response: unknown,
+): ActionResponse<R, E> {
+  const r = response as { status?: unknown; error?: { code?: unknown } } | null;
+  const declared =
+    r?.status === "error" &&
+    typeof r.error?.code === "string" &&
+    action.errors.includes(r.error.code);
+  if (r?.status === "ok" || declared) return response as ActionResponse<R, E>;
+  throw new ActionFetchError(200, JSON.stringify(response));
 }
 
 export interface CallActionOptions {
@@ -236,5 +263,8 @@ export async function callAction<I, R, E extends DeclaredError>(
     options.client,
     options.idempotencyKey ?? newIdempotencyKey(),
   );
-  return (await fetchAction(baseUrl, request, options.init, options.fetch)) as ActionResponse<R, E>;
+  return checkActionResponse(
+    action,
+    await fetchAction(baseUrl, request, options.init, options.fetch),
+  );
 }

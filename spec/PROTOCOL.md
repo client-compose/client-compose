@@ -457,6 +457,11 @@ render output. Each client implementation runs them in its own unit tests, using
 renderer that outputs `"{type}@{version}:{props.v}"` and, when a case sets
 `renderErrors`, an error fallback that outputs `"error:{key}:{error.code}"`.
 
+`conformance/client/action-cases.json` covers actions and effects: the request a client builds,
+how it classifies each kind of response (a result with its effects, a declared error, or a
+failure, which includes error codes the action doesn't declare), how screen references match
+screens (§5.3), and the error code a failed screen request exposes.
+
 ---
 
 ## 9. Request-scoped loading (composer implementations)

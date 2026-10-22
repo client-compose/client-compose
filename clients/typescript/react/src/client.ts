@@ -6,6 +6,7 @@
 
 import {
   buildActionRequest,
+  checkActionResponse,
   fetchAction,
   newIdempotencyKey,
   plan,
@@ -423,7 +424,7 @@ export function useAction<I, R, E extends DeclaredError>(
               { headers: await config.headers?.() },
               config.fetch,
             );
-        outcome = response as ActionResponse<R, E>;
+        outcome = checkActionResponse(action, response);
         if (outcome.status === "ok" && outcome.effects) applyEffects(outcome.effects);
       } catch (error) {
         outcome = { status: "failed", error };
