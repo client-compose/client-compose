@@ -54,7 +54,7 @@ adapter for an existing core is usually under 50 lines.
 
 | Path            | What                                                                    |
 | --------------- | ----------------------------------------------------------------------- |
-| `spec/`         | **The protocol** (`PROTOCOL.md`) and JSON Schemas.                      |
+| `spec/`         | **The protocol** (`PROTOCOL.md`), JSON Schemas, and what every implementation provides (`CAPABILITIES.md`). |
 | `conformance/`  | Language-neutral test suites for composers (over HTTP) and clients (fixtures). |
 | `composers/`    | Composer implementations: `<language>/core` + `<language>/<framework>`. |
 | `clients/`      | Client implementations: `<platform>/core` + optional UI bindings.       |
