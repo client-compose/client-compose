@@ -14,14 +14,15 @@
 // browser.
 
 import {
-  PROTOCOL_VERSION,
   type ActionRequest,
   type ActionResponse,
   type Capabilities,
   type ClientContext,
+  PROTOCOL_VERSION,
   type ScreenRequest,
   type ScreenResponse,
 } from "@client-compose/protocol";
+
 import { ActionFetchError, fetchAction, fetchScreen, ScreenFetchError } from "./index.ts";
 
 /** A screen request from the browser: the server sets the client context. */
@@ -30,7 +31,8 @@ export type ProxiedScreenRequest = Omit<ScreenRequest, "client">;
 export type ProxiedActionRequest = Omit<ActionRequest, "client">;
 
 /** The composer's response, or the status and body it failed with. */
-export type ProxyResult<T> = { ok: true; response: T } | { ok: false; status: number; body: string };
+export type ProxyResult<T> =
+  { ok: true; response: T } | { ok: false; status: number; body: string };
 
 export interface ComposerProxyOptions {
   /** Composer base URL. */
@@ -47,7 +49,10 @@ export interface ComposerProxyOptions {
    * Sees each action's response (ok or a declared error) before the browser does, and returns
    * what the browser gets: e.g. keep a new session in a cookie, and take its token out.
    */
-  onActionResponse?: (request: ActionRequest, response: ActionResponse) => ActionResponse | Promise<ActionResponse>;
+  onActionResponse?: (
+    request: ActionRequest,
+    response: ActionResponse,
+  ) => ActionResponse | Promise<ActionResponse>;
 }
 
 export interface ComposerProxy {
@@ -63,7 +68,9 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 function isCapabilities(value: unknown): value is Capabilities {
   return (
     isRecord(value) &&
-    Object.values(value).every((versions) => Array.isArray(versions) && versions.every((v) => typeof v === "number"))
+    Object.values(value).every(
+      (versions) => Array.isArray(versions) && versions.every((v) => typeof v === "number"),
+    )
   );
 }
 
@@ -110,9 +117,13 @@ export function createComposerProxy(options: ComposerProxyOptions): ComposerProx
     const request: ActionRequest = { ...body, client: await options.client() };
     try {
       const response = await fetchAction(options.baseUrl, request, await init(), options.fetch);
-      return { ok: true, response: (await options.onActionResponse?.(request, response)) ?? response };
+      return {
+        ok: true,
+        response: (await options.onActionResponse?.(request, response)) ?? response,
+      };
     } catch (error) {
-      if (error instanceof ActionFetchError) return { ok: false, status: error.status, body: error.body };
+      if (error instanceof ActionFetchError)
+        return { ok: false, status: error.status, body: error.body };
       throw error;
     }
   }
@@ -121,9 +132,13 @@ export function createComposerProxy(options: ComposerProxyOptions): ComposerProx
     if (!isProxiedScreenRequest(body)) return BAD_REQUEST;
     const request: ScreenRequest = { ...body, client: await options.client() };
     try {
-      return { ok: true, response: await fetchScreen(options.baseUrl, request, await init(), options.fetch) };
+      return {
+        ok: true,
+        response: await fetchScreen(options.baseUrl, request, await init(), options.fetch),
+      };
     } catch (error) {
-      if (error instanceof ScreenFetchError) return { ok: false, status: error.status, body: error.body };
+      if (error instanceof ScreenFetchError)
+        return { ok: false, status: error.status, body: error.body };
       throw error;
     }
   }

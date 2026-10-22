@@ -23,7 +23,9 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
   }
   // Bare imports from the repo sources (e.g. `react`) resolve from this app, so there's one copy of React.
   const fromOutside = !context.originModulePath.startsWith(__dirname + path.sep);
-  const origin = fromOutside ? { ...context, originModulePath: path.join(__dirname, "index.ts") } : context;
+  const origin = fromOutside
+    ? { ...context, originModulePath: path.join(__dirname, "index.ts") }
+    : context;
   return context.resolveRequest(origin, moduleName, platform);
 };
 

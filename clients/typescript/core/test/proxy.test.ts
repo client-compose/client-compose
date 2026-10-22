@@ -1,7 +1,13 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
+import { test } from "node:test";
+
 import type { ActionDescriptor } from "@client-compose/protocol";
-import { createComposerProxy, isProxiedActionRequest, isProxiedScreenRequest } from "../src/proxy.ts";
+
+import {
+  createComposerProxy,
+  isProxiedActionRequest,
+  isProxiedScreenRequest,
+} from "../src/proxy.ts";
 import { actionFailure, actionOk, createFakeGateway, screen, screenError } from "../src/testing.ts";
 
 const SignIn: ActionDescriptor<{ email: string }, { token: string }, never> = {
@@ -11,7 +17,12 @@ const SignIn: ActionDescriptor<{ email: string }, { token: string }, never> = {
   input: { type: "object" },
 };
 const server = { platform: "web", appVersion: "2.0.0", locale: "fr" };
-const actionBody = { protocol: 0, action: "sign-in", version: 1, input: { email: "ada@example.com" } };
+const actionBody = {
+  protocol: 0,
+  action: "sign-in",
+  version: 1,
+  input: { email: "ada@example.com" },
+};
 const screenBody = { protocol: 0, screen: "home", islands: { feed: [1] } };
 
 function proxyFor(gateway: ReturnType<typeof createFakeGateway>) {
@@ -25,8 +36,13 @@ function proxyFor(gateway: ReturnType<typeof createFakeGateway>) {
 }
 
 test("performs actions with the server's client context and headers", async () => {
-  const gateway = createFakeGateway({ actions: { "sign-in": () => actionOk(SignIn, { token: "t" }) } });
-  const result = await proxyFor(gateway).performAction({ ...actionBody, client: { platform: "evil", appVersion: "0" } });
+  const gateway = createFakeGateway({
+    actions: { "sign-in": () => actionOk(SignIn, { token: "t" }) },
+  });
+  const result = await proxyFor(gateway).performAction({
+    ...actionBody,
+    client: { platform: "evil", appVersion: "0" },
+  });
   assert.equal(result.ok && result.response.status, "ok");
   const [sent] = gateway.actionRequests();
   assert.deepEqual(sent?.client, server);
@@ -35,7 +51,9 @@ test("performs actions with the server's client context and headers", async () =
 });
 
 test("lets the server see and change an action's response", async () => {
-  const gateway = createFakeGateway({ actions: { "sign-in": () => actionOk(SignIn, { token: "t" }) } });
+  const gateway = createFakeGateway({
+    actions: { "sign-in": () => actionOk(SignIn, { token: "t" }) },
+  });
   const seen: string[] = [];
   const proxy = createComposerProxy({
     baseUrl: "https://composer.test",
@@ -48,7 +66,9 @@ test("lets the server see and change an action's response", async () => {
   });
   const result = await proxy.performAction(actionBody);
   assert.deepEqual(seen, ["sign-in"]);
-  assert.deepEqual(result.ok && result.response.status === "ok" && result.response.result, { token: "" });
+  assert.deepEqual(result.ok && result.response.status === "ok" && result.response.result, {
+    token: "",
+  });
 });
 
 test("returns the composer's failures as data", async () => {
@@ -74,9 +94,18 @@ test("loads screens with the server's client context", async () => {
 test("answers malformed requests with bad_request, without sending them", async () => {
   const gateway = createFakeGateway();
   const proxy = proxyFor(gateway);
-  for (const body of [undefined, "x", { ...actionBody, protocol: 1 }, { ...actionBody, version: "1" }]) {
+  for (const body of [
+    undefined,
+    "x",
+    { ...actionBody, protocol: 1 },
+    { ...actionBody, version: "1" },
+  ]) {
     const result = await proxy.performAction(body);
-    assert.deepEqual(result, { ok: false, status: 400, body: '{"protocol":0,"error":{"code":"bad_request"}}' });
+    assert.deepEqual(result, {
+      ok: false,
+      status: 400,
+      body: '{"protocol":0,"error":{"code":"bad_request"}}',
+    });
   }
   const screen = await proxy.loadScreen({ ...screenBody, params: { id: 1 } });
   assert.equal(!screen.ok && screen.status, 400);

@@ -1,8 +1,9 @@
 // What this app can render. Props types come from islands.generated.ts (codegen).
 
+import { ReactIslandRegistry } from "@client-compose/react";
 import { useState } from "react";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
-import { ReactIslandRegistry } from "@client-compose/react";
+
 import { FollowButtonV1, PostGridV1, ProfileHeaderV1, ProfileHeaderV2 } from "./islands.generated";
 
 function ProfileHeader(props: { displayName: string; avatarUrl: string; badge?: string }) {
@@ -55,7 +56,13 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     overflow: "hidden",
   },
-  follow: { marginHorizontal: 16, paddingVertical: 10, borderRadius: 8, backgroundColor: "#2952cc", alignItems: "center" },
+  follow: {
+    marginHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: "#2952cc",
+    alignItems: "center",
+  },
   followText: { color: "#fff", fontWeight: "600" },
   // flex-start so each thumbnail's height comes from aspectRatio rather than stretching to the row.
   grid: { flexDirection: "row", flexWrap: "wrap", alignItems: "flex-start", gap: 2, marginTop: 16 },

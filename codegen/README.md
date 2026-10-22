@@ -68,7 +68,7 @@ island type and version, so the registration can't name the wrong island:
 | Go         | `struct` + `IslandType()` / `IslandVersion()` methods         | `cc.Define(func(ctx, r) (ProfileHeaderV2, error) { … })`   |
 | Swift      | `struct … : IslandProps` with nested types                    | `registry.register(ProfileHeaderV2.self) { props, _ in … }` |
 | Kotlin     | `@Serializable data class` + `IslandDescriptor` companion     | `registry.register(ProfileHeaderV2) { props, _ -> … }`     |
-| TypeScript | `interface` + descriptor `const` with the same name           | `registry.register(ProfileHeaderV2, (props) => …)`, `defineIsland(ProfileHeaderV2, resolve)` |
+| TypeScript | `interface` + descriptor `const` with the same name           | `registry.register(ProfileHeaderV2, (props) => …)`, `island(ProfileHeaderV2, resolve)` |
 
 For action `follow-user` v1 (spec §5.1):
 

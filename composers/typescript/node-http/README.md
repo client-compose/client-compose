@@ -1,7 +1,7 @@
 # @client-compose/node-http
 
 `node:http` adapter for the [Client Compose](https://github.com/client-compose/client-compose)
-composer. Serves `POST /screens/{screen}`, and `POST /actions/{action}` when given actions.
+composer. Serves `POST …/screens/{screen}` and `POST …/actions/{action}`, under any prefix.
 
 Tier: **core** · Protocol: **v0** · Node 20+
 
@@ -10,20 +10,20 @@ npm install @client-compose/composer @client-compose/node-http
 ```
 
 ```ts
-import { createServer } from "node:http";
+import { createServer, type IncomingMessage } from "node:http";
+import { createComposer } from "@client-compose/composer";
 import { createRequestListener } from "@client-compose/node-http";
-import { compose, perform } from "./composer"; // createComposer / createActions from @client-compose/composer
 
-createServer(
-  createRequestListener(
-    compose,
-    async (req) => ({ user: await authenticate(req.headers.authorization), services }),
-    { actions: perform },
-  ),
-).listen(8080);
+const composer = createComposer<Ctx, IncomingMessage>({
+  screens,
+  actions,
+  context: async (req) => ({ viewer: await sessions.viewer(req.headers.cookie) }),
+});
+
+createServer(createRequestListener(composer)).listen(8080);
 ```
 
-The second argument builds the per-request context your islands and actions receive as `ctx`.
+`context` receives the `IncomingMessage`. Other paths get 404, and other methods 405.
 
-For other frameworks, see the adapter recipe in
-[`@client-compose/composer`](https://www.npmjs.com/package/@client-compose/composer#serving-it).
+On a runtime with `fetch`'s `Request` and `Response` (Bun, Deno, Workers, Hono, Next.js), you don't
+need an adapter: use `composer.fetch`.

@@ -28,6 +28,7 @@
   },
   "exports": {
     ".": "./src/index.ts",
+    "./testing": "./src/testing.ts",
     "./package.json": "./package.json"
   },
   "files": [
@@ -40,6 +41,9 @@
   "dependencies": {
     "@client-compose/protocol": "workspace:*"
   },
+  "devDependencies": {
+    "@client-compose/conformance": "workspace:*"
+  },
   "publishConfig": {
     "access": "public",
     "main": "./dist/index.js",
@@ -48,6 +52,10 @@
       ".": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
+      },
+      "./testing": {
+        "types": "./dist/testing.d.ts",
+        "default": "./dist/testing.js"
       },
       "./package.json": "./package.json"
     }

@@ -1,11 +1,29 @@
-import { useMemo, useState } from "react";
-import { ActivityIndicator, FlatList, Platform, Pressable, SafeAreaView, StyleSheet, Text, View } from "react-native";
+import {
+  type ClientComposeConfig,
+  ClientComposeProvider,
+  Island,
+  useScreen,
+} from "@client-compose/react";
 import { StatusBar } from "expo-status-bar";
-import { ClientComposeProvider, Island, useScreen, type ClientComposeConfig } from "@client-compose/react";
+import { useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  FlatList,
+  Platform,
+  Pressable,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+
 import { registry } from "./islands";
 
 // The Go composer from ../composer-go (go run .). The Android emulator reaches the host via 10.0.2.2.
-const COMPOSER_URL = Platform.select({ android: "http://10.0.2.2:8080", default: "http://localhost:8080" });
+const COMPOSER_URL = Platform.select({
+  android: "http://10.0.2.2:8080",
+  default: "http://localhost:8080",
+});
 const USERS = ["u_1", "u_2", "u_3"];
 
 export default function App() {
@@ -30,7 +48,11 @@ export default function App() {
         <StatusBar style="dark" />
         <View style={styles.tabs}>
           {USERS.map((u) => (
-            <Pressable key={u} onPress={() => setProfile(u)} style={[styles.tab, u === profile && styles.tabActive]}>
+            <Pressable
+              key={u}
+              onPress={() => setProfile(u)}
+              style={[styles.tab, u === profile && styles.tabActive]}
+            >
               <Text>{u === viewer ? `${u} (me)` : u}</Text>
             </Pressable>
           ))}
@@ -69,7 +91,13 @@ function ProfileScreen({ userId }: { userId: string }) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#fafafa" },
-  tabs: { flexDirection: "row", gap: 8, padding: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: "#ccc" },
+  tabs: {
+    flexDirection: "row",
+    gap: 8,
+    padding: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: "#ccc",
+  },
   tab: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: "#eee" },
   tabActive: { backgroundColor: "#cfdcff" },
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, padding: 24 },

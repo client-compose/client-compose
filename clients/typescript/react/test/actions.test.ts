@@ -1,21 +1,31 @@
 import "./setup.ts";
-import { test } from "node:test";
+
 import assert from "node:assert/strict";
+import { test } from "node:test";
+
+import type {
+  ActionDescriptor,
+  ActionRequest,
+  IslandDescriptor,
+  ScreenRef,
+} from "@client-compose/protocol";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
-import type { ActionDescriptor, ActionRequest, IslandDescriptor, ScreenRef } from "@client-compose/protocol";
+
 import {
   ActionFetchError,
+  type ActionState,
+  type ClientComposeConfig,
   ClientComposeProvider,
   ComposedScreen,
   ReactIslandRegistry,
   useAction,
-  type ActionState,
-  type ClientComposeConfig,
 } from "../src/index.ts";
 
 const Count: IslandDescriptor<{ n: number }> = { type: "count", version: 1 };
-const registry = new ReactIslandRegistry().registerComponent(Count, ({ n }) => createElement("b", null, String(n)));
+const registry = new ReactIslandRegistry().registerComponent(Count, ({ n }) =>
+  createElement("b", null, String(n)),
+);
 
 type FollowError = { code: "blocked" } | { code: "limit"; details: { max: number } };
 const Follow: ActionDescriptor<{ userId: string }, { followers: number }, FollowError> = {
@@ -48,9 +58,19 @@ function fakeComposer(actionResponse: () => Response) {
 }
 
 const okResponse = (effects?: object) =>
-  Response.json({ protocol: 0, action: "follow", version: 1, status: "ok", result: { followers: 7 }, ...(effects && { effects }) });
+  Response.json({
+    protocol: 0,
+    action: "follow",
+    version: 1,
+    status: "ok",
+    result: { followers: 7 },
+    ...(effects && { effects }),
+  });
 
-async function setup(cfg: ClientComposeConfig, screens: { screen: string; params?: Record<string, string> }[]) {
+async function setup(
+  cfg: ClientComposeConfig,
+  screens: { screen: string; params?: Record<string, string> }[],
+) {
   let action!: ActionState<{ userId: string }, { followers: number }, FollowError>;
   function Harness(): ReactNode {
     action = useAction(Follow);
@@ -62,7 +82,9 @@ async function setup(cfg: ClientComposeConfig, screens: { screen: string; params
     ClientComposeProvider,
     { config: cfg },
     createElement(Harness),
-    ...screens.map((s, i) => createElement("section", { key: i }, createElement(ComposedScreen, s))),
+    ...screens.map((s, i) =>
+      createElement("section", { key: i }, createElement(ComposedScreen, s)),
+    ),
   );
   await act(async () => root.render(tree));
   return {
@@ -79,7 +101,10 @@ async function setup(cfg: ClientComposeConfig, screens: { screen: string; params
   };
 }
 
-const baseConfig = (fetchImpl: typeof fetch, extra: Partial<ClientComposeConfig> = {}): ClientComposeConfig => ({
+const baseConfig = (
+  fetchImpl: typeof fetch,
+  extra: Partial<ClientComposeConfig> = {},
+): ClientComposeConfig => ({
   registry,
   baseUrl: "https://composer.test",
   client: { platform: "web", appVersion: "1.0.0" },
@@ -89,7 +114,10 @@ const baseConfig = (fetchImpl: typeof fetch, extra: Partial<ClientComposeConfig>
 
 test("run posts the action with the configured headers and resolves with the result", async () => {
   const c = fakeComposer(() => okResponse());
-  const ui = await setup(baseConfig(c.impl, { headers: () => ({ Authorization: "Bearer t" }) }), []);
+  const ui = await setup(
+    baseConfig(c.impl, { headers: () => ({ Authorization: "Bearer t" }) }),
+    [],
+  );
   const res = await ui.run({ userId: "u1" });
   assert.equal(res.status === "ok" && res.result.followers, 7);
   assert.equal(c.actions[0].url, "https://composer.test/actions/follow");
@@ -102,7 +130,11 @@ test("run posts the action with the configured headers and resolves with the res
 
 test("invalidate reloads the matching screens on show, and only those", async () => {
   const invalidated: ScreenRef[][] = [];
-  const c = fakeComposer(() => okResponse({ invalidate: [{ screen: "profile", params: { userId: "u1" } }, { screen: "feed" }] }));
+  const c = fakeComposer(() =>
+    okResponse({
+      invalidate: [{ screen: "profile", params: { userId: "u1" } }, { screen: "feed" }],
+    }),
+  );
   const ui = await setup(baseConfig(c.impl, { onInvalidate: (refs) => invalidated.push(refs) }), [
     { screen: "profile", params: { userId: "u1" } },
     { screen: "profile", params: { userId: "u2" } },
@@ -112,8 +144,13 @@ test("invalidate reloads the matching screens on show, and only those", async ()
   assert.equal(ui.html(), "<section><b>1</b></section>".repeat(4));
 
   await ui.run({ userId: "u1" });
-  assert.equal(ui.html(), ["<b>2</b>", "<b>1</b>", "<b>2</b>", "<b>1</b>"].map((b) => `<section>${b}</section>`).join(""));
-  assert.deepEqual(invalidated, [[{ screen: "profile", params: { userId: "u1" } }, { screen: "feed" }]]);
+  assert.equal(
+    ui.html(),
+    ["<b>2</b>", "<b>1</b>", "<b>2</b>", "<b>1</b>"].map((b) => `<section>${b}</section>`).join(""),
+  );
+  assert.deepEqual(invalidated, [
+    [{ screen: "profile", params: { userId: "u1" } }, { screen: "feed" }],
+  ]);
   await ui.unmount();
 });
 
@@ -131,7 +168,12 @@ test("invalidate drops cached responses, so the next visit fetches again", async
   const show = (feed: boolean) =>
     act(async () =>
       root.render(
-        createElement(ClientComposeProvider, { config: cfg }, createElement(Harness), feed && createElement(ComposedScreen, { screen: "feed" })),
+        createElement(
+          ClientComposeProvider,
+          { config: cfg },
+          createElement(Harness),
+          feed && createElement(ComposedScreen, { screen: "feed" }),
+        ),
       ),
     );
 
@@ -150,7 +192,9 @@ test("invalidate drops cached responses, so the next visit fetches again", async
 
 test("navigate is passed to onNavigate", async () => {
   const navigated: ScreenRef[] = [];
-  const c = fakeComposer(() => okResponse({ navigate: { screen: "profile", params: { userId: "u1" } } }));
+  const c = fakeComposer(() =>
+    okResponse({ navigate: { screen: "profile", params: { userId: "u1" } } }),
+  );
   const ui = await setup(baseConfig(c.impl, { onNavigate: (ref) => navigated.push(ref) }), []);
   await ui.run({ userId: "u1" });
   assert.deepEqual(navigated, [{ screen: "profile", params: { userId: "u1" } }]);
@@ -160,7 +204,13 @@ test("navigate is passed to onNavigate", async () => {
 test("declared errors are outcomes, and apply no effects", async () => {
   const navigated: ScreenRef[] = [];
   const c = fakeComposer(() =>
-    Response.json({ protocol: 0, action: "follow", version: 1, status: "error", error: { code: "limit", details: { max: 5 } } }),
+    Response.json({
+      protocol: 0,
+      action: "follow",
+      version: 1,
+      status: "error",
+      error: { code: "limit", details: { max: 5 } },
+    }),
   );
   const ui = await setup(baseConfig(c.impl, { onNavigate: (ref) => navigated.push(ref) }), []);
   const res = await ui.run({ userId: "u1" });
@@ -170,10 +220,16 @@ test("declared errors are outcomes, and apply no effects", async () => {
 });
 
 test("a failed call resolves with status failed, and reset forgets it", async () => {
-  const c = fakeComposer(() => Response.json({ protocol: 0, error: { code: "unauthenticated" } }, { status: 401 }));
+  const c = fakeComposer(() =>
+    Response.json({ protocol: 0, error: { code: "unauthenticated" } }, { status: 401 }),
+  );
   const ui = await setup(baseConfig(c.impl), []);
   const res = await ui.run({ userId: "u1" });
-  assert.ok(res.status === "failed" && res.error instanceof ActionFetchError && res.error.code === "unauthenticated");
+  assert.ok(
+    res.status === "failed" &&
+      res.error instanceof ActionFetchError &&
+      res.error.code === "unauthenticated",
+  );
   assert.equal(ui.action().last?.status, "failed");
   await act(async () => ui.action().reset());
   assert.equal(ui.action().last, undefined);
@@ -189,7 +245,13 @@ test("performAction replaces the HTTP call, and pending is true while it runs", 
       performAction: async (request) => {
         seen.push(request);
         await new Promise<void>((resolve) => (release = resolve));
-        return { protocol: 0, action: "follow", version: 1, status: "ok", result: { followers: 1 } };
+        return {
+          protocol: 0,
+          action: "follow",
+          version: 1,
+          status: "ok",
+          result: { followers: 1 },
+        };
       },
     }),
     [],

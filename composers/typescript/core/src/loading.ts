@@ -34,17 +34,22 @@ export class RequestScope {
   }
 
   batchState<K, V>(loader: BatchLoader<K, V>): BatchState<K, V> {
-    let state = this.batches.get(loader as BatchLoader<unknown, unknown>) as BatchState<K, V> | undefined;
+    let state = this.batches.get(loader as BatchLoader<unknown, unknown>) as
+      BatchState<K, V> | undefined;
     if (!state) {
       state = { memo: new Map(), pending: [], timer: undefined };
-      this.batches.set(loader as BatchLoader<unknown, unknown>, state as BatchState<unknown, unknown>);
+      this.batches.set(
+        loader as BatchLoader<unknown, unknown>,
+        state as BatchState<unknown, unknown>,
+      );
     }
     return state;
   }
 }
 
 export function attachScope<T extends object>(target: T, scope: RequestScope): T & LoadContext {
-  return Object.defineProperty(target, scopeSymbol, { value: scope, enumerable: false }) as T & LoadContext;
+  return Object.defineProperty(target, scopeSymbol, { value: scope, enumerable: false }) as T &
+    LoadContext;
 }
 
 function scopeOf(context: LoadContext): RequestScope {
@@ -90,6 +95,11 @@ export interface BatchLoaderOptions<K> {
 export interface BatchLoader<K, V> {
   /** Load one key, batched with every other key requested in the same request and window. */
   load(context: LoadContext, key: K): Promise<V>;
+  /**
+   * Load several keys at once, batched as `load` is, keyed by their `cacheKey`. Rejects if any key
+   * fails, missing keys included.
+   */
+  loadMany(context: LoadContext, keys: readonly K[]): Promise<Map<K, V>>;
 }
 
 interface Pending<K, V> {
@@ -116,7 +126,10 @@ interface BatchState<K, V> {
  *     const user = await userById.load(rc, params.userId);
  */
 export function defineBatchLoader<K, V>(
-  fetch: (keys: K[], signal: AbortSignal) => Promise<ReadonlyMap<K, V> | ReadonlyArray<V | undefined>>,
+  fetch: (
+    keys: K[],
+    signal: AbortSignal,
+  ) => Promise<ReadonlyMap<K, V> | ReadonlyArray<V | undefined>>,
   options: BatchLoaderOptions<K> = {},
 ): BatchLoader<K, V> {
   const cacheKey = options.cacheKey ?? ((key: K) => String(key));
@@ -130,7 +143,9 @@ export function defineBatchLoader<K, V>(
       const existing = state.memo.get(id);
       if (existing) return existing;
 
-      const promise = new Promise<V>((resolve, reject) => state.pending.push({ key, resolve, reject }));
+      const promise = new Promise<V>((resolve, reject) =>
+        state.pending.push({ key, resolve, reject }),
+      );
       promise.catch(() => {});
       state.memo.set(id, promise);
       if (state.pending.length >= maxBatchSize) {
@@ -139,6 +154,10 @@ export function defineBatchLoader<K, V>(
         state.timer = setTimeout(() => flush(scope, state), options.windowMs ?? 0);
       }
       return promise;
+    },
+    async loadMany(context, keys) {
+      const values = await Promise.all(keys.map((key) => loader.load(context, key)));
+      return new Map(keys.map((key, i) => [key, values[i]]));
     },
   };
 
@@ -165,5 +184,6 @@ export function defineBatchLoader<K, V>(
   return loader;
 }
 
-const isMap = <K, V>(value: ReadonlyMap<K, V> | ReadonlyArray<V | undefined>): value is ReadonlyMap<K, V> =>
-  value instanceof Map;
+const isMap = <K, V>(
+  value: ReadonlyMap<K, V> | ReadonlyArray<V | undefined>,
+): value is ReadonlyMap<K, V> => value instanceof Map;

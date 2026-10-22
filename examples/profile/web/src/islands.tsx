@@ -1,8 +1,14 @@
 // What this web app can render. Props types come from islands.generated.ts (codegen).
 
-import { useState } from "react";
 import { ReactIslandRegistry } from "@client-compose/react";
-import { FollowButtonV1, PostGridV1, ProfileHeaderV1, ProfileHeaderV2 } from "./islands.generated.ts";
+import { useState } from "react";
+
+import {
+  FollowButtonV1,
+  PostGridV1,
+  ProfileHeaderV1,
+  ProfileHeaderV2,
+} from "./islands.generated.ts";
 
 function ProfileHeader(props: { displayName: string; avatarUrl: string; badge?: string }) {
   return (

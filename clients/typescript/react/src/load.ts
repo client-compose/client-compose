@@ -3,6 +3,7 @@
 
 import { buildRequest, fetchScreen } from "@client-compose/client";
 import type { ScreenResponse } from "@client-compose/protocol";
+
 import type { ScreenConfig } from "./config.ts";
 
 /**
@@ -23,7 +24,11 @@ export async function loadScreen(
   return fetchScreen(
     config.baseUrl,
     request,
-    { ...config.requestInit, ...init, headers: { ...headers, ...(init.headers as Record<string, string> | undefined) } },
+    {
+      ...config.requestInit,
+      ...init,
+      headers: { ...headers, ...(init.headers as Record<string, string> | undefined) },
+    },
     config.fetch,
   );
 }

@@ -1,0 +1,20 @@
+# Generated, formatted by their own tools, laid out by hand, or not code.
+**/dist/
+**/.next/
+**/node_modules/
+.build/
+build/
+**/*.generated.ts
+codegen/test/golden/
+pnpm-lock.yaml
+CHANGELOG.md
+*.md
+# Fixtures, manifests and schemas are laid out for reading side by side.
+*.json
+# Other languages have their own formatters (gofmt, swift-format, ktlint).
+composers/go/
+clients/swift/
+clients/kotlin/
+examples/profile/android/
+examples/profile/ios/
+examples/profile/composer-go/

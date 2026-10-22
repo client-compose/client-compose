@@ -1,6 +1,8 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
+import { test } from "node:test";
+
 import type { ActionDescriptor, IslandDescriptor } from "@client-compose/protocol";
+
 import { callAction, fetchScreen } from "../src/index.ts";
 import {
   actionError,
@@ -26,7 +28,10 @@ const client = { platform: "web", appVersion: "1.0.0", locale: "en" };
 
 test("answers screen requests from handlers and records them", async () => {
   const gateway = createFakeGateway({
-    screens: { profile: (req) => screen("profile", [island("h", Header, { name: req.params.userId })], { title: "Ada" }) },
+    screens: {
+      profile: (req) =>
+        screen("profile", [island("h", Header, { name: req.params.userId })], { title: "Ada" }),
+    },
   });
   const res = await fetchScreen(
     "https://composer.test",
@@ -53,12 +58,20 @@ test("answers action requests with typed outcomes", async () => {
   const gateway = createFakeGateway({
     actions: {
       rename: (req) =>
-        req.input && typeof req.input === "object" && "name" in req.input && req.input.name === "taken"
+        req.input &&
+        typeof req.input === "object" &&
+        "name" in req.input &&
+        req.input.name === "taken"
           ? actionError(Rename, { code: "taken", details: { suggestion: "taken2" } })
           : actionOk(Rename, { id: "t1" }, { navigate: { screen: "profile" } }),
     },
   });
-  const ok = await callAction("https://composer.test", Rename, { name: "New" }, { client, fetch: gateway.fetch });
+  const ok = await callAction(
+    "https://composer.test",
+    Rename,
+    { name: "New" },
+    { client, fetch: gateway.fetch },
+  );
   assert.deepEqual(ok, {
     protocol: 0,
     action: "rename",
@@ -67,8 +80,16 @@ test("answers action requests with typed outcomes", async () => {
     result: { id: "t1" },
     effects: { navigate: { screen: "profile" } },
   });
-  const taken = await callAction("https://composer.test", Rename, { name: "taken" }, { client, fetch: gateway.fetch });
-  assert.deepEqual(taken.status === "error" && taken.error, { code: "taken", details: { suggestion: "taken2" } });
+  const taken = await callAction(
+    "https://composer.test",
+    Rename,
+    { name: "taken" },
+    { client, fetch: gateway.fetch },
+  );
+  assert.deepEqual(taken.status === "error" && taken.error, {
+    code: "taken",
+    details: { suggestion: "taken2" },
+  });
 
   const requests = gateway.actionRequests();
   assert.deepEqual(
@@ -82,7 +103,10 @@ test("answers action requests with typed outcomes", async () => {
 });
 
 test("failures and errored islands have the protocol's shapes", () => {
-  assert.deepEqual(screenError(404, "not_found"), { status: 404, body: { protocol: 0, error: { code: "not_found" } } });
+  assert.deepEqual(screenError(404, "not_found"), {
+    status: 404,
+    body: { protocol: 0, error: { code: "not_found" } },
+  });
   assert.deepEqual(actionFailure(401, "unauthenticated"), {
     status: 401,
     body: { protocol: 0, error: { code: "unauthenticated" } },
@@ -98,14 +122,18 @@ test("failures and errored islands have the protocol's shapes", () => {
 
 test("other requests go to `other` first; unhandled requests reject", async () => {
   const gateway = createFakeGateway({
-    other: (req) => (req.url.startsWith("https://upload.test") ? { status: 201, body: { ok: true } } : undefined),
+    other: (req) =>
+      req.url.startsWith("https://upload.test") ? { status: 201, body: { ok: true } } : undefined,
   });
   const form = new FormData();
   form.append("file", "x");
   const uploaded = await gateway.fetch("https://upload.test/1", { method: "POST", body: form });
   assert.equal(uploaded.status, 201);
   assert.ok(gateway.requests[0]?.body instanceof FormData);
-  await assert.rejects(gateway.fetch("https://composer.test/screens/missing", { method: "POST", body: "{}" }), /no handler/);
+  await assert.rejects(
+    gateway.fetch("https://composer.test/screens/missing", { method: "POST", body: "{}" }),
+    /no handler/,
+  );
   assert.equal(gateway.requests.length, 2);
 });
 
@@ -113,7 +141,12 @@ test("installFakeGateway answers the global fetch until restored", async () => {
   const original = globalThis.fetch;
   const gateway = installFakeGateway({ screens: { home: () => screen("home", []) } });
   try {
-    const res = await fetchScreen("https://composer.test", { protocol: 0, screen: "home", client, islands: {} });
+    const res = await fetchScreen("https://composer.test", {
+      protocol: 0,
+      screen: "home",
+      client,
+      islands: {},
+    });
     assert.equal(res.screen, "home");
     assert.equal(gateway.screenRequests().length, 1);
   } finally {

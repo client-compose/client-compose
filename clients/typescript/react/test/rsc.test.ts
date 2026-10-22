@@ -1,9 +1,9 @@
 // React Server Components, end to end with React's own RSC renderer: the built package renders a
 // screen on the server (react-server conditions, "use client" modules as client references), and the
 // payload is server-rendered to HTML the way a framework does on first load.
-import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
+import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const here = (path: string) => fileURLToPath(new URL(path, import.meta.url));
@@ -16,14 +16,23 @@ function run(command: string, args: string[], input?: NodeJS.ReadableStream): Pr
     let err = "";
     child.stdout!.on("data", (d) => (out += d));
     child.stderr!.on("data", (d) => (err += d));
-    child.on("close", (code) => (code === 0 ? resolve(out) : reject(new Error(`${args.join(" ")} exited ${code}:\n${err}`))));
+    child.on("close", (code) =>
+      code === 0 ? resolve(out) : reject(new Error(`${args.join(" ")} exited ${code}:\n${err}`)),
+    );
   });
 }
 
 async function renderRsc(mode?: string) {
   const server = spawn(
     process.execPath,
-    ["--conditions", "react-server", "--import", here("rsc/register-loader.mjs"), here("rsc/render-server.mjs"), ...(mode ? [mode] : [])],
+    [
+      "--conditions",
+      "react-server",
+      "--import",
+      here("rsc/register-loader.mjs"),
+      here("rsc/render-server.mjs"),
+      ...(mode ? [mode] : []),
+    ],
     { stdio: ["ignore", "pipe", "pipe"] },
   );
   let serverErr = "";

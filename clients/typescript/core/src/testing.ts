@@ -11,7 +11,6 @@
 // For code that uses the global fetch itself, `installFakeGateway` puts one in its place.
 
 import {
-  PROTOCOL_VERSION,
   type ActionDescriptor,
   type ActionEffects,
   type Capabilities,
@@ -20,6 +19,7 @@ import {
   type IslandDescriptor,
   type IslandEntry,
   type IslandError,
+  PROTOCOL_VERSION,
   type ScreenMeta,
 } from "@client-compose/protocol";
 
@@ -77,7 +77,9 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 function strings(value: unknown): Record<string, string> {
   if (!isRecord(value)) return {};
-  return Object.fromEntries(Object.entries(value).filter((e): e is [string, string] => typeof e[1] === "string"));
+  return Object.fromEntries(
+    Object.entries(value).filter((e): e is [string, string] => typeof e[1] === "string"),
+  );
 }
 
 function capabilities(value: unknown): Capabilities {
@@ -91,7 +93,12 @@ function capabilities(value: unknown): Capabilities {
 }
 
 function clientContext(value: unknown): ClientContext | undefined {
-  if (!isRecord(value) || typeof value.platform !== "string" || typeof value.appVersion !== "string") return undefined;
+  if (
+    !isRecord(value) ||
+    typeof value.platform !== "string" ||
+    typeof value.appVersion !== "string"
+  )
+    return undefined;
   return { ...value, platform: value.platform, appVersion: value.appVersion } as ClientContext;
 }
 
@@ -117,7 +124,8 @@ function headersOf(init: HeadersInit | undefined): Record<string, string> {
 
 function asScreenRequest(request: RecordedRequest): RecordedScreenRequest | undefined {
   const { body } = request;
-  if (!request.url.includes("/screens/") || !isRecord(body) || typeof body.screen !== "string") return undefined;
+  if (!request.url.includes("/screens/") || !isRecord(body) || typeof body.screen !== "string")
+    return undefined;
   return {
     ...request,
     screen: body.screen,
@@ -129,7 +137,8 @@ function asScreenRequest(request: RecordedRequest): RecordedScreenRequest | unde
 
 function asActionRequest(request: RecordedRequest): RecordedActionRequest | undefined {
   const { body } = request;
-  if (!request.url.includes("/actions/") || !isRecord(body) || typeof body.action !== "string") return undefined;
+  if (!request.url.includes("/actions/") || !isRecord(body) || typeof body.action !== "string")
+    return undefined;
   return {
     ...request,
     action: body.action,
@@ -167,7 +176,9 @@ export function createFakeGateway(handlers: FakeGatewayHandlers = {}): FakeGatew
     const actionRequest = asActionRequest(request);
     const actionHandler = actionRequest && handlers.actions?.[actionRequest.action];
     if (actionRequest && actionHandler) return respond(actionHandler(actionRequest));
-    throw new Error(`fake gateway: no handler for ${request.method} ${request.url} ${JSON.stringify(request.body)}`);
+    throw new Error(
+      `fake gateway: no handler for ${request.method} ${request.url} ${JSON.stringify(request.body)}`,
+    );
   }
   return {
     fetch: fakeFetch,
@@ -206,13 +217,24 @@ export function island<P>(key: string, descriptor: IslandDescriptor<P>, props: P
 }
 
 /** An island that failed on the composer (spec §3.4). */
-export function islandError(key: string, descriptor: IslandDescriptor<unknown>, error: IslandError): IslandEntry {
+export function islandError(
+  key: string,
+  descriptor: IslandDescriptor<unknown>,
+  error: IslandError,
+): IslandEntry {
   return { key, type: descriptor.type, version: descriptor.version, status: "error", error };
 }
 
 /** A screen response. */
-export function screen(id: string, islands: IslandEntry<unknown>[], meta?: ScreenMeta): FakeResponse {
-  return { status: 200, body: { protocol: PROTOCOL_VERSION, screen: id, islands, ...(meta && { meta }) } };
+export function screen(
+  id: string,
+  islands: IslandEntry<unknown>[],
+  meta?: ScreenMeta,
+): FakeResponse {
+  return {
+    status: 200,
+    body: { protocol: PROTOCOL_VERSION, screen: id, islands, ...(meta && { meta }) },
+  };
 }
 
 /** A screen request that fails, e.g. `screenError(404, "not_found")` or `screenError(401, "unauthenticated")`. */
@@ -231,7 +253,10 @@ export function actionOk<I, R, E extends DeclaredError>(
 }
 
 /** An action that ended with one of its declared errors. */
-export function actionError<I, R, E extends DeclaredError>(action: ActionDescriptor<I, R, E>, error: E): FakeResponse {
+export function actionError<I, R, E extends DeclaredError>(
+  action: ActionDescriptor<I, R, E>,
+  error: E,
+): FakeResponse {
   const base = { protocol: PROTOCOL_VERSION, action: action.action, version: action.version };
   return { status: 200, body: { ...base, status: "error", error } };
 }

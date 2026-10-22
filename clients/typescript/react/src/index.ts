@@ -5,10 +5,26 @@
 // anywhere, and the hooks and components come from a "use client" module. For rendering a screen
 // in a Server Component, use "@client-compose/react/server". For tests, "@client-compose/react/testing".
 
-export { ReactIslandRegistry } from "./registry.ts";
-export { loadScreen } from "./load.ts";
 export type { ClientComposeConfig, ErrorEntry, ScreenConfig } from "./config.ts";
+export { loadScreen } from "./load.ts";
+export { ReactIslandRegistry } from "./registry.ts";
 // Re-exported so React apps (including codegen output) only need this one package.
+export {
+  type ActionResult,
+  type ActionState,
+  ClientComposeProvider,
+  ComposedScreen,
+  type ComposedScreenProps,
+  Island,
+  IslandBoundary,
+  type ScreenState,
+  useAction,
+  useScreen,
+  type UseScreenOptions,
+} from "./client.ts";
+export { type ProxyFunctions, type ProxyTransport, viaProxy } from "./proxy.ts";
+export { declaredError, isUnexpected } from "./results.ts";
+export { ActionFetchError } from "@client-compose/client";
 export type {
   ActionDescriptor,
   ActionEffects,
@@ -20,19 +36,3 @@ export type {
   ScreenRef,
   ScreenResponse,
 } from "@client-compose/protocol";
-export { ActionFetchError } from "@client-compose/client";
-export { declaredError, isUnexpected } from "./results.ts";
-export { viaProxy, type ProxyFunctions, type ProxyTransport } from "./proxy.ts";
-export {
-  ClientComposeProvider,
-  ComposedScreen,
-  Island,
-  IslandBoundary,
-  useAction,
-  useScreen,
-  type ActionResult,
-  type ActionState,
-  type ComposedScreenProps,
-  type ScreenState,
-  type UseScreenOptions,
-} from "./client.ts";

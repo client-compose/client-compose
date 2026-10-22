@@ -129,6 +129,12 @@ export interface ActionDescriptor<I, R, E extends DeclaredError = DeclaredError>
 }
 
 /** Whether `ref` matches a screen with this id and params (spec §5.3). */
-export function screenRefMatches(ref: ScreenRef, screen: string, params: Record<string, string> = {}): boolean {
-  return ref.screen === screen && Object.entries(ref.params ?? {}).every(([k, v]) => params[k] === v);
+export function screenRefMatches(
+  ref: ScreenRef,
+  screen: string,
+  params: Record<string, string> = {},
+): boolean {
+  return (
+    ref.screen === screen && Object.entries(ref.params ?? {}).every(([k, v]) => params[k] === v)
+  );
 }

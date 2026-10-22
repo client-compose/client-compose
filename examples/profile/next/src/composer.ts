@@ -1,4 +1,5 @@
 import type { ScreenConfig } from "@client-compose/react";
+
 import { registry } from "./islands";
 
 const COMPOSER_URL = process.env.COMPOSER_URL ?? "http://localhost:8080";

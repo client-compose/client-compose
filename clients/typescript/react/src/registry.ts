@@ -1,8 +1,8 @@
 // No hooks or context here: the registry is used by Server Components and client code alike.
 
-import { createElement, type ComponentType, type ReactNode } from "react";
 import { IslandRegistry } from "@client-compose/client";
 import type { IslandDescriptor } from "@client-compose/protocol";
+import { type ComponentType, createElement, type ReactNode } from "react";
 
 /** A registry whose islands render to React nodes. */
 export class ReactIslandRegistry extends IslandRegistry<ReactNode> {
@@ -13,7 +13,10 @@ export class ReactIslandRegistry extends IslandRegistry<ReactNode> {
    * The component is rendered as an element (not called), so it can use hooks, and it can be a
    * Server Component or a Client Component.
    */
-  registerComponent<P>(island: IslandDescriptor<P>, component: ComponentType<P>): this {
-    return this.register(island, (props) => createElement(component as ComponentType<any>, props as any));
+  registerComponent<P extends object>(
+    island: IslandDescriptor<P>,
+    component: ComponentType<P>,
+  ): this {
+    return this.register(island, (props) => createElement(component, props));
   }
 }

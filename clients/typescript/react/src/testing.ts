@@ -11,8 +11,13 @@
 // No test framework or renderer of its own: use it with React Testing Library, React Native
 // Testing Library, or anything else.
 
+import {
+  createFakeGateway,
+  type FakeGateway,
+  type FakeGatewayHandlers,
+} from "@client-compose/client/testing";
 import type { ScreenRef } from "@client-compose/protocol";
-import { createFakeGateway, type FakeGateway, type FakeGatewayHandlers } from "@client-compose/client/testing";
+
 import type { ClientComposeConfig } from "./config.ts";
 
 export * from "@client-compose/client/testing";

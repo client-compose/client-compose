@@ -2,6 +2,7 @@
 // "@client-compose/react/server" entry and writes the RSC payload to stdout.
 import { createElement } from "react";
 import { renderToPipeableStream } from "react-server-dom-webpack/server";
+
 import { ComposedScreen } from "../../dist/server.js";
 import { registry } from "./islands.mjs";
 
@@ -30,17 +31,24 @@ const config = {
 };
 
 // Client references are "<file url>#<export>"; this test loads modules by URL, so map them as-is.
-const clientManifest = new Proxy({}, {
-  get: (_, ref) => {
-    const [id, name] = String(ref).split("#");
-    return { id, chunks: [], name };
+const clientManifest = new Proxy(
+  {},
+  {
+    get: (_, ref) => {
+      const [id, name] = String(ref).split("#");
+      return { id, chunks: [], name };
+    },
   },
-});
+);
 
-const element = createElement("main", null, createElement(ComposedScreen, {
+const element = createElement(
+  "main",
+  null,
+  createElement(ComposedScreen, {
     config,
     screen: "profile",
     fallback: "loading",
     response: preloaded ? Promise.resolve(response) : undefined,
-  }));
+  }),
+);
 renderToPipeableStream(element, clientManifest, { onError: () => {} }).pipe(process.stdout);

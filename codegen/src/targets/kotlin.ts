@@ -1,12 +1,22 @@
-import { camel, words, type EnumDef, type Field, type Island, type ObjectDef, type TypeRef } from "../manifest.ts";
+import {
+  camel,
+  type EnumDef,
+  type Field,
+  type Island,
+  type ObjectDef,
+  type TypeRef,
+  words,
+} from "../manifest.ts";
 
 export interface KotlinOptions {
   package: string;
 }
 
 const RESERVED = new Set(
-  ("as break class continue do else false for fun if in interface is null object package return super this throw " +
-    "true try typealias typeof val var when while").split(" "),
+  (
+    "as break class continue do else false for fun if in interface is null object package return super this throw " +
+    "true try typealias typeof val var when while"
+  ).split(" "),
 );
 
 const ident = (name: string) => (RESERVED.has(name) ? `\`${name}\`` : name);
@@ -50,7 +60,8 @@ export function generateKotlin(islands: Island[], header: string, opts: KotlinOp
     doc(indent, def.description);
     usesSerialName = true;
     body.push(`${indent}@Serializable`, `${indent}enum class ${def.path[def.path.length - 1]} {`);
-    for (const v of def.values) body.push(`${indent}    @SerialName(${JSON.stringify(v)}) ${constant(v)},`);
+    for (const v of def.values)
+      body.push(`${indent}    @SerialName(${JSON.stringify(v)}) ${constant(v)},`);
     body.push(`${indent}}`);
   };
 
@@ -83,7 +94,8 @@ export function generateKotlin(islands: Island[], header: string, opts: KotlinOp
     if (!hasBody) return;
     def.children.forEach((child, i) => {
       if (i > 0) body.push("");
-      child.kind === "enum" ? emitEnum(child, inner) : emitObject(child, inner);
+      if (child.kind === "enum") emitEnum(child, inner);
+      else emitObject(child, inner);
     });
     if (island) {
       if (def.children.length) body.push("");
@@ -109,13 +121,15 @@ export function generateKotlin(islands: Island[], header: string, opts: KotlinOp
     ...(usesSerialName ? ["kotlinx.serialization.SerialName"] : []),
     "kotlinx.serialization.Serializable",
   ];
-  return [
-    header.replace(/^/gm, "// "),
-    "",
-    `package ${opts.package}`,
-    "",
-    ...imports.map((i) => `import ${i}`),
-    "",
-    ...body,
-  ].join("\n") + "\n";
+  return (
+    [
+      header.replace(/^/gm, "// "),
+      "",
+      `package ${opts.package}`,
+      "",
+      ...imports.map((i) => `import ${i}`),
+      "",
+      ...body,
+    ].join("\n") + "\n"
+  );
 }

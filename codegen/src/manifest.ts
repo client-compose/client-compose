@@ -106,7 +106,8 @@ export function loadManifests(dir: string): Island[] {
   const seen = new Map<string, string>();
   for (const i of islands) {
     const id = `${i.type}@${i.version}`;
-    if (seen.has(id)) throw new ManifestError(`${i.source}: ${id} is also defined in ${seen.get(id)}`);
+    if (seen.has(id))
+      throw new ManifestError(`${i.source}: ${id} is also defined in ${seen.get(id)}`);
     seen.set(id, i.source);
   }
   return islands.sort((a, b) => a.type.localeCompare(b.type) || a.version - b.version);
@@ -116,16 +117,25 @@ export function parseManifest(raw: unknown, source: string): Island {
   const m = raw as Schema;
   const at = (msg: string) => new ManifestError(`${source}: ${msg}`);
   if (typeof m !== "object" || m === null) throw at("manifest must be an object");
-  if (typeof m.type !== "string" || !ISLAND_TYPE.test(m.type)) throw at(`"type" must be kebab-case, got ${JSON.stringify(m.type)}`);
-  if (!Number.isInteger(m.version) || (m.version as number) < 1) throw at(`"version" must be a positive integer`);
+  if (typeof m.type !== "string" || !ISLAND_TYPE.test(m.type))
+    throw at(`"type" must be kebab-case, got ${JSON.stringify(m.type)}`);
+  if (!Number.isInteger(m.version) || (m.version as number) < 1)
+    throw at(`"version" must be a positive integer`);
   if (typeof m.props !== "object" || m.props === null || (m.props as Schema).type !== "object") {
     throw at(`"props" must be a JSON Schema with "type": "object"`);
   }
-  if ((m.props as Schema).additionalProperties !== undefined) throw at(`"props" can't use additionalProperties`);
+  if ((m.props as Schema).additionalProperties !== undefined)
+    throw at(`"props" can't use additionalProperties`);
 
   const path = [pascal(m.type), `V${m.version}`];
   const props = lowerObject(m.props as Schema, path, (p, msg) => at(`props${p}: ${msg}`), "");
-  return { type: m.type, version: m.version as number, description: str(m.description), source, props };
+  return {
+    type: m.type,
+    version: m.version as number,
+    description: str(m.description),
+    source,
+    props,
+  };
 }
 
 export function loadActionManifests(dir: string): Action[] {
@@ -133,7 +143,8 @@ export function loadActionManifests(dir: string): Action[] {
   const seen = new Map<string, string>();
   for (const a of actions) {
     const id = `${a.action}@${a.version}`;
-    if (seen.has(id)) throw new ManifestError(`${a.source}: action ${id} is also defined in ${seen.get(id)}`);
+    if (seen.has(id))
+      throw new ManifestError(`${a.source}: action ${id} is also defined in ${seen.get(id)}`);
     seen.set(id, a.source);
   }
   return actions.sort((a, b) => a.action.localeCompare(b.action) || a.version - b.version);
@@ -146,9 +157,21 @@ export function parseActionManifest(raw: unknown, source: string): Action {
   if (typeof m.action !== "string" || !ISLAND_TYPE.test(m.action)) {
     throw at(`"action" must be kebab-case, got ${JSON.stringify(m.action)}`);
   }
-  if (!Number.isInteger(m.version) || (m.version as number) < 1) throw at(`"version" must be a positive integer`);
+  if (!Number.isInteger(m.version) || (m.version as number) < 1)
+    throw at(`"version" must be a positive integer`);
   for (const key of Object.keys(m)) {
-    if (!["action", "version", "description", "input", "result", "errors", "$schema", "$comment"].includes(key)) {
+    if (
+      ![
+        "action",
+        "version",
+        "description",
+        "input",
+        "result",
+        "errors",
+        "$schema",
+        "$comment",
+      ].includes(key)
+    ) {
       throw at(`unknown field ${JSON.stringify(key)}`);
     }
   }
@@ -157,7 +180,8 @@ export function parseActionManifest(raw: unknown, source: string): Action {
     if (typeof schema !== "object" || schema === null || (schema as Schema).type !== "object") {
       throw at(`"${field}" must be a JSON Schema with "type": "object"`);
     }
-    if ((schema as Schema).additionalProperties !== undefined) throw at(`"${field}" can't use additionalProperties`);
+    if ((schema as Schema).additionalProperties !== undefined)
+      throw at(`"${field}" can't use additionalProperties`);
     return lowerObject(schema as Schema, path, (p, msg) => at(`${field}${p}: ${msg}`), "");
   };
 
@@ -172,14 +196,18 @@ export function parseActionManifest(raw: unknown, source: string): Action {
       if (!ERROR_CODE.test(code)) throw at(`error code ${JSON.stringify(code)} must be snake_case`);
       if (typeof def !== "object" || def === null) throw at(`errors.${code} must be an object`);
       for (const key of Object.keys(def)) {
-        if (key !== "description" && key !== "details") throw at(`errors.${code}: unknown field ${JSON.stringify(key)}`);
+        if (key !== "description" && key !== "details")
+          throw at(`errors.${code}: unknown field ${JSON.stringify(key)}`);
       }
       const path = [...base, pascal(code)];
       errors.push({
         code,
         description: str(def.description),
         path,
-        details: def.details === undefined ? undefined : object(`errors.${code}.details`, def.details, path),
+        details:
+          def.details === undefined
+            ? undefined
+            : object(`errors.${code}.details`, def.details, path),
       });
     }
   }
@@ -204,7 +232,9 @@ function stripAnnotations(schema: unknown): unknown {
     // "properties" maps names to schemas: its keys are property names, not keywords.
     out[k] =
       k === "properties"
-        ? Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([n, s]) => [n, stripAnnotations(s)]))
+        ? Object.fromEntries(
+            Object.entries(v as Record<string, unknown>).map(([n, s]) => [n, stripAnnotations(s)]),
+          )
         : stripAnnotations(v);
   }
   return out;
@@ -218,21 +248,42 @@ function lowerObject(
 ): ObjectDef {
   const properties = (schema.properties ?? {}) as Record<string, Schema>;
   const required = (schema.required ?? []) as string[];
-  if (!Array.isArray(required) || required.some((r) => typeof r !== "string")) throw err(ptr, `"required" must be a list of names`);
-  for (const r of required) if (!(r in properties)) throw err(ptr, `"required" lists unknown property ${JSON.stringify(r)}`);
+  if (!Array.isArray(required) || required.some((r) => typeof r !== "string"))
+    throw err(ptr, `"required" must be a list of names`);
+  for (const r of required)
+    if (!(r in properties))
+      throw err(ptr, `"required" lists unknown property ${JSON.stringify(r)}`);
 
-  const def: ObjectDef = { kind: "object", path, fields: [], children: [], description: str(schema.description) };
+  const def: ObjectDef = {
+    kind: "object",
+    path,
+    fields: [],
+    children: [],
+    description: str(schema.description),
+  };
   const childNames = new Set<string>();
   const nameChild = (name: string, p: string) => {
-    if (childNames.has(name)) throw err(p, `two nested types would both be named ${name}; set "title" on one`);
+    if (childNames.has(name))
+      throw err(p, `two nested types would both be named ${name}; set "title" on one`);
     childNames.add(name);
     return [...path, name];
   };
 
   for (const [jsonName, propSchema] of Object.entries(properties)) {
     const p = `${ptr}.${jsonName}`;
-    const type = lowerType(propSchema, p, err, (s, suffix) => nameChild(pascal(str(s.title) ?? jsonName) + (s.title ? "" : suffix), p), def);
-    def.fields.push({ jsonName, type, required: required.includes(jsonName), description: str(propSchema.description) });
+    const type = lowerType(
+      propSchema,
+      p,
+      err,
+      (s, suffix) => nameChild(pascal(str(s.title) ?? jsonName) + (s.title ? "" : suffix), p),
+      def,
+    );
+    def.fields.push({
+      jsonName,
+      type,
+      required: required.includes(jsonName),
+      description: str(propSchema.description),
+    });
   }
   return def;
 }
@@ -247,26 +298,42 @@ function lowerType(
   if (typeof schema !== "object" || schema === null) throw err(ptr, "schema must be an object");
   const type = schema.type;
   if (typeof type !== "string" || !(type in ALLOWED)) {
-    throw err(ptr, `"type" must be one of ${Object.keys(ALLOWED).join(", ")} (type unions and $ref aren't supported)`);
+    throw err(
+      ptr,
+      `"type" must be one of ${Object.keys(ALLOWED).join(", ")} (type unions and $ref aren't supported)`,
+    );
   }
   for (const key of Object.keys(schema)) {
-    if (!ALLOWED[type].has(key) && !ANNOTATIONS.has(key)) throw err(ptr, `unsupported keyword "${key}" for type ${type}`);
+    if (!ALLOWED[type].has(key) && !ANNOTATIONS.has(key))
+      throw err(ptr, `unsupported keyword "${key}" for type ${type}`);
   }
 
   switch (type) {
     case "string": {
       if (schema.enum !== undefined) {
         const values = schema.enum as unknown[];
-        if (!Array.isArray(values) || values.length === 0 || values.some((v) => typeof v !== "string")) {
+        if (
+          !Array.isArray(values) ||
+          values.length === 0 ||
+          values.some((v) => typeof v !== "string")
+        ) {
           throw err(ptr, `"enum" must be a non-empty list of strings`);
         }
         if (new Set(values).size !== values.length) throw err(ptr, `"enum" has duplicate values`);
-        const def: EnumDef = { kind: "enum", path: childPath(schema, ""), values: values as string[], description: str(schema.description) };
+        const def: EnumDef = {
+          kind: "enum",
+          path: childPath(schema, ""),
+          values: values as string[],
+          description: str(schema.description),
+        };
         parent.children.push(def);
         return { kind: "enum", def };
       }
       if (schema.format !== undefined && schema.format !== "uri") {
-        throw err(ptr, `string format ${JSON.stringify(schema.format)} isn't supported (only "uri")`);
+        throw err(
+          ptr,
+          `string format ${JSON.stringify(schema.format)} isn't supported (only "uri")`,
+        );
       }
       return { kind: "string", format: schema.format as "uri" | undefined };
     }
@@ -280,14 +347,29 @@ function lowerType(
     case "boolean":
       return { kind: "boolean" };
     case "array":
-      if (typeof schema.items !== "object" || schema.items === null) throw err(ptr, `arrays need an "items" schema`);
-      return { kind: "array", items: lowerType(schema.items as Schema, `${ptr}[]`, err, (s) => childPath(s, "Item"), parent) };
+      if (typeof schema.items !== "object" || schema.items === null)
+        throw err(ptr, `arrays need an "items" schema`);
+      return {
+        kind: "array",
+        items: lowerType(
+          schema.items as Schema,
+          `${ptr}[]`,
+          err,
+          (s) => childPath(s, "Item"),
+          parent,
+        ),
+      };
     case "object": {
       const ap = schema.additionalProperties;
       if (ap !== undefined) {
-        if (schema.properties !== undefined) throw err(ptr, `use either "properties" or "additionalProperties", not both`);
-        if (typeof ap !== "object" || ap === null) throw err(ptr, `"additionalProperties" must be a schema (maps only)`);
-        return { kind: "map", values: lowerType(ap as Schema, `${ptr}{}`, err, (s) => childPath(s, "Value"), parent) };
+        if (schema.properties !== undefined)
+          throw err(ptr, `use either "properties" or "additionalProperties", not both`);
+        if (typeof ap !== "object" || ap === null)
+          throw err(ptr, `"additionalProperties" must be a schema (maps only)`);
+        return {
+          kind: "map",
+          values: lowerType(ap as Schema, `${ptr}{}`, err, (s) => childPath(s, "Value"), parent),
+        };
       }
       const def = lowerObject(schema, childPath(schema, ""), err, ptr);
       parent.children.push(def);
@@ -309,7 +391,10 @@ export function words(s: string): string[] {
     .map((w) => w.toLowerCase());
 }
 
-export const pascal = (s: string) => words(s).map((w) => w[0].toUpperCase() + w.slice(1)).join("") || "X";
+export const pascal = (s: string) =>
+  words(s)
+    .map((w) => w[0].toUpperCase() + w.slice(1))
+    .join("") || "X";
 
 export const camel = (s: string) => {
   const p = pascal(s);

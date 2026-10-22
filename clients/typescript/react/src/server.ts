@@ -4,18 +4,19 @@
 // client JavaScript is needed for islands that are Server Components. Islands can also be Client
 // Components (files marked "use client"); they hydrate as usual.
 
-import { createElement, Fragment, Suspense, type ReactNode } from "react";
 import { plan } from "@client-compose/client";
 import type { ScreenResponse } from "@client-compose/protocol";
+import { createElement, Fragment, type ReactNode, Suspense } from "react";
+
 // Only components may be imported from the "use client" module here: from a Server Component,
 // they're client references that can be rendered, never called.
 import { IslandBoundary } from "./client.ts";
 import type { ScreenConfig } from "./config.ts";
 import { loadScreen } from "./load.ts";
 
-export { ReactIslandRegistry } from "./registry.ts";
-export { loadScreen } from "./load.ts";
 export type { ErrorEntry, ScreenConfig } from "./config.ts";
+export { loadScreen } from "./load.ts";
+export { ReactIslandRegistry } from "./registry.ts";
 // Re-exported so React apps (including codegen output) only need this one package.
 export type { IslandDescriptor, ScreenMeta, ScreenResponse } from "@client-compose/protocol";
 
@@ -49,7 +50,9 @@ export interface ServerComposedScreenProps {
 /** Fetch a screen on the server and render its islands. A React Server Component. */
 export function ComposedScreen(props: ServerComposedScreenProps): ReactNode {
   const content = createElement(ScreenIslands, props);
-  return props.fallback === undefined ? content : createElement(Suspense, { fallback: props.fallback }, content);
+  return props.fallback === undefined
+    ? content
+    : createElement(Suspense, { fallback: props.fallback }, content);
 }
 
 async function ScreenIslands(props: ServerComposedScreenProps): Promise<ReactNode> {
@@ -63,7 +66,10 @@ async function ScreenIslands(props: ServerComposedScreenProps): Promise<ReactNod
   }
 
   const nodes: ReactNode[] = [];
-  for (const island of plan(config.registry, response, { onError: config.renderIslandError, onSkipped: config.onSkipped })) {
+  for (const island of plan(config.registry, response, {
+    onError: config.renderIslandError,
+    onSkipped: config.onSkipped,
+  })) {
     let node: ReactNode;
     try {
       // Creates the island's element. Errors thrown while the component itself renders are
@@ -76,7 +82,11 @@ async function ScreenIslands(props: ServerComposedScreenProps): Promise<ReactNod
     // As on the client: its own <Suspense> so a server render error stays inside this island, and
     // IslandBoundary to hide it once the browser re-renders it.
     nodes.push(
-      createElement(Suspense, { key: island.key, fallback: null }, createElement(IslandBoundary, { islandKey: island.key }, node)),
+      createElement(
+        Suspense,
+        { key: island.key, fallback: null },
+        createElement(IslandBoundary, { islandKey: island.key }, node),
+      ),
     );
   }
   return props.children ? props.children(nodes, response) : createElement(Fragment, null, ...nodes);

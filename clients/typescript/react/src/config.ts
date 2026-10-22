@@ -1,9 +1,15 @@
 // Configuration shared by the client binding and the Server Component entry. No React runtime
 // imports here, so it's safe to import anywhere.
 
-import type { ReactNode } from "react";
 import type { IslandRegistry, SkipReason } from "@client-compose/client";
-import type { ActionRequest, ActionResponse, ClientContext, IslandEntry, ScreenRef } from "@client-compose/protocol";
+import type {
+  ActionRequest,
+  ActionResponse,
+  ClientContext,
+  IslandEntry,
+  ScreenRef,
+} from "@client-compose/protocol";
+import type { ReactNode } from "react";
 
 export type ErrorEntry = IslandEntry & { status: "error" };
 

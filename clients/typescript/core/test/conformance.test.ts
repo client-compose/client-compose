@@ -1,9 +1,11 @@
 // Shared client conformance fixtures (spec §8.2).
 
-import { test } from "node:test";
 import assert from "node:assert/strict";
+import { test } from "node:test";
+
 import { clientCases } from "@client-compose/conformance";
 import type { ScreenResponse } from "@client-compose/protocol";
+
 import { IslandRegistry, plan } from "../src/index.ts";
 
 for (const c of clientCases().filter((c) => !c.typedOnly)) {
@@ -21,13 +23,19 @@ for (const c of clientCases().filter((c) => !c.typedOnly)) {
       onError: c.renderErrors ? (e) => `error:${e.key}:${e.error.code}` : undefined,
       onSkipped: (e) => skipped.push(e.key),
     });
-    assert.deepEqual(planned.map((p) => p.render()), c.expectRendered);
+    assert.deepEqual(
+      planned.map((p) => p.render()),
+      c.expectRendered,
+    );
     assert.deepEqual(skipped, c.expectSkipped);
   });
 }
 
 test("ScreenFetchError exposes the protocol error code", async () => {
   const { ScreenFetchError } = await import("../src/index.ts");
-  assert.equal(new ScreenFetchError(404, '{"protocol":0,"error":{"code":"not_found"}}').code, "not_found");
+  assert.equal(
+    new ScreenFetchError(404, '{"protocol":0,"error":{"code":"not_found"}}').code,
+    "not_found",
+  );
   assert.equal(new ScreenFetchError(502, "<html>bad gateway</html>").code, undefined);
 });

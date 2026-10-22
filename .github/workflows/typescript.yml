@@ -13,6 +13,10 @@ on:
       - "package.json"
       - "pnpm-*.yaml"
       - "tsconfig.json"
+      - "eslint.config.mjs"
+      - ".prettierrc.json"
+      - ".prettierignore"
+      - "examples/**"
       - "codegen/**"
       - "scripts/**"
       - ".changeset/**"
@@ -33,6 +37,8 @@ jobs:
           go-version: stable
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm format:check
       # Includes client fixtures and composer conformance over HTTP.
       - run: pnpm test
       # Build, pack, lint and install the npm packages, then use them like a consumer would.

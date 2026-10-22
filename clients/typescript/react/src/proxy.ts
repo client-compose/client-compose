@@ -7,6 +7,7 @@
 import { ActionFetchError } from "@client-compose/client";
 import type { ProxyResult } from "@client-compose/client/proxy";
 import type { ActionRequest, ActionResponse, ScreenResponse } from "@client-compose/protocol";
+
 import type { ClientComposeConfig } from "./config.ts";
 
 export interface ProxyFunctions {
@@ -30,9 +31,12 @@ function parseBody(body: BodyInit | null | undefined): unknown {
 /** `fetch` and `performAction` for `ClientComposeConfig` that go through your server. */
 export function viaProxy(proxy: ProxyFunctions): ProxyTransport {
   async function proxiedFetch(_input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-    if (!proxy.loadScreen) throw new Error("viaProxy: no loadScreen given, so the browser can't load screens");
+    if (!proxy.loadScreen)
+      throw new Error("viaProxy: no loadScreen given, so the browser can't load screens");
     const result = await proxy.loadScreen(parseBody(init?.body));
-    return result.ok ? Response.json(result.response) : new Response(result.body, { status: result.status });
+    return result.ok
+      ? Response.json(result.response)
+      : new Response(result.body, { status: result.status });
   }
 
   async function performAction(request: ActionRequest): Promise<ActionResponse> {

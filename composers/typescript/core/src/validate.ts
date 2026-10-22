@@ -17,7 +17,11 @@ export type Validation = { ok: true; value: unknown } | { ok: false; message: st
  * property counts as absent. On success, `value` is a copy with those nulls removed, so handlers
  * see what their types say.
  */
-export function validate(schema: Record<string, unknown>, value: unknown, path = "input"): Validation {
+export function validate(
+  schema: Record<string, unknown>,
+  value: unknown,
+  path = "input",
+): Validation {
   try {
     return { ok: true, value: check(schema as unknown as Schema, value, path) };
   } catch (err) {
@@ -40,15 +44,18 @@ function check(s: Schema, v: unknown, path: string): unknown {
       const obj = v as Record<string, unknown>;
       const out: Record<string, unknown> = {};
       if (s.additionalProperties) {
-        for (const [k, item] of Object.entries(obj)) out[k] = check(s.additionalProperties, item, `${path}.${k}`);
+        for (const [k, item] of Object.entries(obj))
+          out[k] = check(s.additionalProperties, item, `${path}.${k}`);
         return out;
       }
       for (const name of s.required ?? []) {
-        if (obj[name] === undefined || obj[name] === null) throw new Invalid(`${path}.${name}: required`);
+        if (obj[name] === undefined || obj[name] === null)
+          throw new Invalid(`${path}.${name}: required`);
       }
       for (const [k, item] of Object.entries(obj)) {
         const prop = s.properties?.[k];
-        if (!prop) out[k] = item; // unknown: ignored, but passed through untouched
+        if (!prop)
+          out[k] = item; // unknown: ignored, but passed through untouched
         else if (item !== null && item !== undefined) out[k] = check(prop, item, `${path}.${k}`);
       }
       return out;
@@ -75,7 +82,9 @@ function check(s: Schema, v: unknown, path: string): unknown {
       if (typeof v !== "boolean") return fail("a boolean");
       return v;
   }
-  throw new Invalid(`${path}: unsupported schema type ${JSON.stringify((s as { type: unknown }).type)}`);
+  throw new Invalid(
+    `${path}: unsupported schema type ${JSON.stringify((s as { type: unknown }).type)}`,
+  );
 }
 
 function isAbsoluteUri(v: string): boolean {

@@ -1,8 +1,14 @@
 "use client";
 
+import {
+  type ClientComposeConfig,
+  ClientComposeProvider,
+  ComposedScreen,
+  type ScreenResponse,
+} from "@client-compose/react";
 import Link from "next/link";
 import { useMemo } from "react";
-import { ClientComposeProvider, ComposedScreen, type ClientComposeConfig, type ScreenResponse } from "@client-compose/react";
+
 import { registry } from "./islands";
 
 const USERS = ["u_1", "u_2", "u_3"];
@@ -12,7 +18,11 @@ const USERS = ["u_1", "u_2", "u_3"];
  * passes it in as initialResponse. The HTML is complete, hydration doesn't refetch, and later
  * navigations fetch from the browser.
  */
-export function ClientProfile(props: { viewer: string; userId: string; initialResponse: ScreenResponse }) {
+export function ClientProfile(props: {
+  viewer: string;
+  userId: string;
+  initialResponse: ScreenResponse;
+}) {
   const config = useMemo<ClientComposeConfig>(
     () => ({
       registry,
@@ -28,7 +38,11 @@ export function ClientProfile(props: { viewer: string; userId: string; initialRe
     <ClientComposeProvider config={config}>
       <nav>
         {USERS.map((u) => (
-          <Link key={u} href={`/ssr/${u}?as=${props.viewer}`} className={u === props.userId ? "active" : ""}>
+          <Link
+            key={u}
+            href={`/ssr/${u}?as=${props.viewer}`}
+            className={u === props.userId ? "active" : ""}
+          >
             {u}
           </Link>
         ))}
