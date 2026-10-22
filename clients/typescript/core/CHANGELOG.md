@@ -1,5 +1,12 @@
 # @client-compose/client
 
+## 0.5.1
+
+### Patch Changes
+
+- [#16](https://github.com/client-compose/client-compose/pull/16) [`d736b2f`](https://github.com/client-compose/client-compose/commit/d736b2ff986f36257d40775e9ee55b7423f81c61) Thanks [@LewisYearsley](https://github.com/LewisYearsley)! - Tighter types: `IslandRenderer` and island entries default their props to `unknown` instead of
+  `any`, and `registerComponent` takes props that are objects (as generated props types are).
+
 ## 0.5.0
 
 ### Minor Changes
