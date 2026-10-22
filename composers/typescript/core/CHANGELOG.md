@@ -1,5 +1,21 @@
 # @client-compose/composer
 
+## 0.7.0
+
+### Minor Changes
+
+- [#26](https://github.com/client-compose/client-compose/pull/26) [`4435c94`](https://github.com/client-compose/client-compose/commit/4435c942acfe8bc37485f7defe6b2dd4d6b58816) Thanks [@LewisYearsley](https://github.com/LewisYearsley)! - An optional cache adapter (CMP-18). Give the composer a `cache` (your own `get`/`set`, over Redis or
+  anything else) and islands opting in with `island(Descriptor, resolve, { cache: { ttlMs, key } })`
+  are served from it while fresh. Without a cache, nothing changes. Failures are never cached, and a
+  cache that errors is reported (`kind: "cache"`) and bypassed. `memoryCache()` in
+  `@client-compose/composer/testing` is an in-memory one for tests.
+
+- [#27](https://github.com/client-compose/client-compose/pull/27) [`4df6813`](https://github.com/client-compose/client-compose/commit/4df6813fe5b31734b6769c804f871646c06866a4) Thanks [@LewisYearsley](https://github.com/LewisYearsley)! - An optional idempotency adapter (CMP-19). Give the composer `idempotency: { store, scope }` (your own
+  `begin`/`finish`/`release`, over Redis or anything else) and it honours action idempotency keys: a
+  retry returns the first outcome instead of running again, a duplicate in flight waits for it, and
+  failures release the key. Without it, keys pass through to actions as before.
+  `memoryIdempotencyStore()` in `@client-compose/composer/testing` is an in-memory one for tests.
+
 ## 0.6.0
 
 ### Minor Changes
