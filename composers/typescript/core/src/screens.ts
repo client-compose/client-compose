@@ -2,6 +2,7 @@
 
 import type { ClientContext, IslandDescriptor, ScreenMeta } from "@client-compose/protocol";
 
+import type { IslandCache } from "./adapters.ts";
 import type { LoadContext } from "./loading.ts";
 import type { Requirement } from "./plugins.ts";
 
@@ -33,6 +34,18 @@ export interface Island<Ctx, P = unknown> {
   type: string;
   version: number;
   resolve: (rc: ResolveContext<Ctx>) => Promise<P> | P;
+  /** Cache the island's props, when the composer has a `Cache` (CMP-18). */
+  cache?: IslandCache<Ctx>;
+}
+
+export interface IslandOptions<Ctx> {
+  /**
+   * Cache the island's props when the composer has a `Cache`:
+   *
+   *     island(TrendingV1, resolveTrending, { cache: { ttlMs: 300_000, key: () => "all" } })
+   *     island(FeedV1, resolveFeed, { cache: { ttlMs: 30_000, key: ({ ctx, params }) => `${ctx.viewer?.id}:${params.page}` } })
+   */
+  cache?: IslandCache<Ctx>;
 }
 
 /**
@@ -46,8 +59,9 @@ export interface Island<Ctx, P = unknown> {
 export function island<P, Ctx = unknown>(
   descriptor: IslandDescriptor<P>,
   resolve: (rc: ResolveContext<Ctx>) => Promise<P> | P,
+  options: IslandOptions<Ctx> = {},
 ): Island<Ctx, P> {
-  return { type: descriptor.type, version: descriptor.version, resolve };
+  return { type: descriptor.type, version: descriptor.version, resolve, ...options };
 }
 
 /** An island on a screen. Build one with `place` or `placeStatic`. */

@@ -62,6 +62,8 @@ const (
 	MetaFailed    FailureKind = "meta"
 	ActionFailed  FailureKind = "action"
 	ContextFailed FailureKind = "context"
+	// CacheFailed is the Cache adapter failing. The island resolved anyway.
+	CacheFailed FailureKind = "cache"
 )
 
 // Failure is something that went wrong while answering a request.
@@ -69,7 +71,7 @@ type Failure struct {
 	Kind FailureKind
 	// Screen is set for island, layout and meta failures.
 	Screen string
-	// Key and Type are set for island failures.
+	// Key and Type are set for island and cache failures.
 	Key, Type string
 	// Action and Version are set for action failures.
 	Action  string

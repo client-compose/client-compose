@@ -8,6 +8,7 @@ export {
   type ActionOptions,
   type ActionOutcome,
 } from "./actions.ts";
+export { type Cache, type IslandCache } from "./adapters.ts";
 export {
   type Composer,
   type ComposerConfig,
@@ -41,6 +42,7 @@ export type { ComposeResult, PerformResult } from "./results.ts";
 export {
   type Island,
   island,
+  type IslandOptions,
   type LayoutContext,
   negotiate,
   place,

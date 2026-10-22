@@ -158,6 +158,37 @@ const tracing: Plugin<Ctx> = {
 
 `reportErrors(fn)` is a plugin with just an `error` hook.
 
+## Caching islands (optional)
+
+To keep an island's props between requests, give the composer a `Cache` and opt islands in. The
+cache is your own: implement `get` and `set` with whatever you run. Without `cache`, nothing is
+cached and every island resolves on every request.
+
+```ts
+// Your adapter, e.g. over node-redis:
+const redisCache: Cache = {
+  get: async (key) => (await redis.get(key)) ?? undefined,
+  set: async (key, value, ttlMs) => {
+    await redis.set(key, value, { PX: ttlMs });
+  },
+};
+
+// Islands say how long, and what their props depend on:
+const Trending = island(TrendingV1, resolveTrending, { cache: { ttlMs: 300_000, key: () => "all" } });
+const Feed = island(FeedV1, resolveFeed, {
+  cache: { ttlMs: 30_000, key: ({ ctx, params }) => `${ctx.viewer?.id}:${params.page}` }, // personalised
+});
+
+const composer = createComposer({ screens, cache: redisCache });
+```
+
+- The key function returns what the props depend on; the composer adds the island's type and
+  version. Return undefined to skip the cache for this request.
+- Failures are never cached.
+- If the cache errors, the island resolves anyway and the error reaches plugins as a `"cache"`
+  failure, so a cache outage never breaks a screen.
+- In tests, `memoryCache()` from `@client-compose/composer/testing` is an in-memory `Cache`.
+
 ## Serving it
 
 `composer.fetch` is a fetch-standard handler. It answers POST requests whose path ends in
