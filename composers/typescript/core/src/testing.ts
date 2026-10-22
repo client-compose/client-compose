@@ -21,6 +21,7 @@ import {
   type ScreenResponse,
 } from "@client-compose/protocol";
 
+import type { Cache } from "./adapters.ts";
 import type { Composer } from "./composer.ts";
 
 export interface TestComposerOptions<Req> {
@@ -183,4 +184,18 @@ function declared(descriptors: IslandDescriptor<unknown>[]): Capabilities {
   for (const d of descriptors) (out[d.type] ??= []).push(d.version);
   for (const versions of Object.values(out)) versions.sort((a, b) => a - b);
   return out;
+}
+
+/** An in-memory `Cache` for tests, with the keys it holds. Entries expire after their TTL. */
+export function memoryCache(): Cache & { keys(): string[] } {
+  const entries = new Map<string, { value: string; expires: number }>();
+  const live = (key: string) => {
+    const entry = entries.get(key);
+    return entry && entry.expires > Date.now() ? entry : undefined;
+  };
+  return {
+    get: (key) => live(key)?.value,
+    set: (key, value, ttlMs) => void entries.set(key, { value, expires: Date.now() + ttlMs }),
+    keys: () => [...entries.keys()].filter((key) => live(key)),
+  };
 }

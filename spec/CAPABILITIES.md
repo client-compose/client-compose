@@ -56,6 +56,8 @@ them to say what they add.
 | CMP-15 | **App context.** One function turns the incoming request into the app's own context (the viewer, their locale, a tenant), which every layout, island and action receives. | §3 |
 | CMP-16 | **Requirements.** Screens and actions declare what they need, such as a signed-in viewer, a role, or (for screens) that what the params refer to exists and the viewer may see it. The composer answers 401, 403 or 404 before any of their islands or handler runs. Requirements see the app context (CMP-15) and the request. | §4.3 |
 | CMP-17 | **Plugins.** Integrations hook into a composer through a small, documented set of extension points (see [The composer as a platform](#the-composer-as-a-platform)), never by forking or wrapping the core. | — |
+| CMP-18 | **Cache adapter.** An optional cache the app supplies; islands opt in with a TTL and a key (see [Adapters](#adapters)). | — |
+| CMP-19 | **Idempotency adapter.** An optional store the app supplies, so retried actions return their first outcome (see [Adapters](#adapters)). | §5.2 |
 
 ## The composer as a platform
 
@@ -64,8 +66,9 @@ fetching. It gives libraries good places to plug in, which is why Redux and Reac
 to it without React depending on them. The composer should be that for the layer between apps and
 services. Its core does one job: compose screens and run actions, safely, in parallel, with
 negotiation and failure isolation. Everything around that job (who the viewer is, where data comes
-from, what gets cached and where, how it's traced) arrives through extension points, as packages
-you choose.
+from, what gets cached and where, how it's traced) is your app's decision, and reaches the composer
+through extension points and adapters you supply. The composer assumes nothing about your auth,
+your data stores or your tracing.
 
 ### Declarative first
 
@@ -89,8 +92,9 @@ const profile = screen("profile", {
 const composer = createComposer({
   screens: [profile],
   actions: [followUser],
-  context: async (request) => ({ viewer: await sessions.viewer(request) }),
-  use: [tracing(), islandCache({ store: redisStore(redis) }), reportErrors(sentry)],
+  context: async (request) => ({ viewer: await sessions.viewer(request) }), // your auth
+  cache: redisCache, // optional: your Cache adapter
+  use: [tracing, reportErrors(sentry)], // your plugins
 });
 
 export default { fetch: composer.fetch }; // Bun, Deno, Workers, Hono, Next.js route handlers
@@ -100,7 +104,7 @@ export default { fetch: composer.fetch }; // Bun, Deno, Workers, Hono, Next.js r
 // Go
 profile := cc.Screen{
 	ID:       "profile",
-	Requires: []cc.Requirement{auth.SignedIn},
+	Requires: []cc.Requirement{signedIn},
 	Meta:     profileMeta,
 	Islands: []cc.Placement{
 		{Key: "header", Versions: cc.Versions(header), Required: true},
@@ -113,8 +117,9 @@ profile := cc.Screen{
 composer := cc.New(cc.Config{
 	Screens: []cc.Screen{profile},
 	Actions: []cc.Action{followUser},
-	Context: sessions.Viewer, // func(context.Context, *http.Request) (context.Context, error)
-	Use:     []cc.Plugin{otelcc.Tracing(), cachecc.Islands(rediscc.Store(rdb)), sentrycc.Errors()},
+	Context: sessions.Viewer, // your auth: func(context.Context, *http.Request) (context.Context, error)
+	Cache:   redisCache,      // optional: your cc.Cache adapter
+	Use:     []cc.Plugin{tracing, cc.ReportErrors(logFailure)}, // your plugins
 })
 
 http.Handle("/compose/", http.StripPrefix("/compose", composer)) // a Composer is an http.Handler
@@ -146,26 +151,29 @@ in `use`, and conformance runs with them installed, so a plugin can't break the 
 is also the right way for an app to share its own conventions across screens, as Flavr's gateway
 `kit` does today.
 
-### Integrations
+### Adapters
 
-The core depends on nothing but the standard library. Integrations are separate packages (npm) and
-modules (Go), so an app only pulls in what it uses. The first set:
+Some features need somewhere to keep things between requests. For those, the composer defines a
+small interface, your app implements it with whatever it already runs (Redis, Memcached, a SQL
+table, an in-process map), and you pass it in. **Every adapter is optional**: without one, the
+feature is simply off, and nothing else changes. The composer ships no implementations except
+in-memory ones in its test kits, so apps can test the behaviour without running a store.
 
-| Integration | What it gives you | Go | TypeScript |
+| Adapter | Interface | Without it | With it |
 | --- | --- | --- | --- |
-| **Auth** | context from a bearer token, session cookie or JWT; `signedIn` and role requirements | `auth` | `@client-compose/auth` |
-| **Island cache** | cache an island's props across requests, by a key the island declares; memory and Redis stores | `cache`, `redis` | `@client-compose/cache`, `@client-compose/redis` |
-| **Idempotency** | actions with an idempotency key return their first outcome on retry; memory and Redis stores | `idempotency`, `redis` | `@client-compose/idempotency`, `@client-compose/redis` |
-| **Tracing** | OpenTelemetry spans for screens, islands, loads and actions | `otel` | `@client-compose/otel` |
+| **Cache** (CMP-18) | `get(key)` and `set(key, value, ttl)`, bytes or strings in and out | islands resolve on every request | islands that opt in (a TTL and a key function you write) are served from the cache while fresh. Failures are never cached, and a cache that errors is reported and bypassed, so an outage never breaks a screen. |
+| **Idempotency store** (CMP-19) | `begin`, `finish` and `release` for a key, plus a scope function (e.g. the viewer's id) | the idempotency key passes through to your action, as it always has | a retried action returns its first outcome instead of running again; a duplicate in flight waits for it; failures release the key so a retry runs. A store that errors is reported, and the action runs. |
+
+Auth, data loading and observability need no new adapters: they already have their extension
+points. Auth is your `context` function plus requirements, data loading is `load` and batch loaders
+calling your services, and observability is a plugin wrapping screens, islands and actions.
 
 A note on caching. The protocol says caching across requests belongs in the services a composer
-calls, because only they know what a result depends on (§9). The island cache doesn't change that
-rule: it's opt-in per island, and the island declares its key. A personalised island has to put the
-viewer in its key, and an island with no key isn't cached. It exists because many apps have no
-service layer of their own: the composer *is* their backend.
-
-Anyone can write an integration against the extension points. First-party ones live in this repo,
-pass conformance with themselves installed, and follow the same versioning as the cores.
+calls, because only they know what a result depends on (§9). The island cache doesn't change that:
+it's opt-in per island, and your key function says what the result depends on. A personalised
+island has to put the viewer in its key; an island with no key, or a key function that returns
+nothing for this request, isn't cached. It exists because many apps have no service layer of their
+own: the composer *is* their backend.
 
 ## Client core
 
@@ -235,6 +243,7 @@ What makes these feel like one toolkit rather than six libraries:
 | Screen | `cc.Screen{ID, Islands, Requires, Meta}` | `screen(id, { islands, requires, meta })` | | | |
 | Placement | `cc.Placement{Key, Versions, Required, When}` | `place(key, Island, { required, when })` | | | |
 | Plugin | `cc.Plugin` | `Plugin` | | | |
+| Adapters | `cc.Cache`, *`cc.IdempotencyStore`* | `Cache`, *`IdempotencyStore`* | | | |
 | Island version | `cc.Define(fn)` | `island(Props, fn)` | | | |
 | Action version | `cc.DefineAction(fn)` | `action(Action, fn)` | | | |
 | Shared load | `cc.Load(ctx, key, fn)` | `rc.load(key, fn)` | | | |
@@ -265,7 +274,8 @@ Names in *italics* don't exist yet; the parity work below adds them.
 | CMP-15 app context | ✅ `Config.Context` | ✅ `context` |
 | CMP-16 requirements | ✅ `Requires` | ✅ `requires` |
 | CMP-17 plugins | ✅ `cc.Plugin` | ✅ `Plugin` |
-| Integrations | ✗ | ✗ |
+| CMP-18 cache adapter | ✅ `Config.Cache`, `Island.CacheFor` | ✅ `cache`, `island(…, { cache })` |
+| CMP-19 idempotency adapter | ✗ | ✗ |
 
 ### Clients
 
@@ -312,8 +322,8 @@ In order, each as its own pull request:
    Fastify adapters (CMP-12). Test kits for both (CMP-13). Candidates from Flavr, the first
    production app: a static placement (an island whose props are known up front) and loading many
    keys from a batch loader at once. Flavr moves to the new Go API in the same round.
-3. **Integrations.** Auth, the island cache, idempotency, Redis stores and OpenTelemetry, in Go and
-   TypeScript.
+3. **Adapters.** Optional cache and idempotency adapters in Go and TypeScript (CMP-18, CMP-19), with
+   in-memory implementations in the test kits. Your app supplies the real ones.
 4. **Conformance.** Client fixtures for actions and effects: outcomes, declared and unknown error
    codes, reference matching for `invalidate` (CLI-9).
 5. **Swift and SwiftUI.** CLI-2 and CLI-4 to CLI-8, UI-1 to UI-9, and TL-2.

@@ -50,10 +50,11 @@ export type ResolveFn<Ctx> = (call: IslandCall<Ctx>) => Promise<unknown>;
 
 /** Something that went wrong while answering a request. */
 export interface Failure {
-  kind: "island" | "layout" | "meta" | "action" | "context";
+  /** "cache" is the Cache adapter failing; the island resolved anyway. */
+  kind: "island" | "layout" | "meta" | "action" | "context" | "cache";
   /** Set for island, layout and meta failures. */
   screen?: string;
-  /** Set for island failures. */
+  /** Set for island and cache failures. */
   key?: string;
   type?: string;
   /** Set for action failures. */

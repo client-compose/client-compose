@@ -9,6 +9,7 @@ import {
 } from "@client-compose/protocol";
 
 import { type Action, isActionRequestShape, performAction, protocolError } from "./actions.ts";
+import { type Cache, resolveCached } from "./adapters.ts";
 import { attachScope, RequestScope } from "./loading.ts";
 import type { ComposeFn, Failure, PerformFn, Plugin, ResolveFn } from "./plugins.ts";
 import { type ComposeResult, fail, type PerformResult } from "./results.ts";
@@ -32,6 +33,11 @@ export interface ComposerConfig<Ctx, Req = Request> {
   context?: (request: Req) => Ctx | Promise<Ctx>;
   /** Plugins, outermost first. */
   use?: Plugin<Ctx, Req>[];
+  /**
+   * Serves islands that opt in with `cache` (CMP-18). Without it, every island resolves on every
+   * request.
+   */
+  cache?: Cache;
   /** Each island's timeout unless its placement sets one. Default 2000. */
   defaultTimeoutMs?: number;
 }
@@ -106,7 +112,7 @@ export function createComposer<Ctx = undefined, Req = Request>(
     }
   };
 
-  let resolveChain: ResolveFn<Ctx> = (call) => Promise.resolve(call.island.resolve(call.rc));
+  let resolveChain: ResolveFn<Ctx> = (call) => resolveCached(config.cache, call, report);
   let composeChain: ComposeFn<Ctx> = (req, ctx) =>
     composeScreen(screens.get(req.screen)!, req, ctx);
   let performChain: PerformFn<Ctx> = (req, ctx) =>

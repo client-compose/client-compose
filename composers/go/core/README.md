@@ -154,6 +154,44 @@ cc.ReportErrors(func(ctx context.Context, f cc.Failure) {
 })
 ```
 
+## Caching islands (optional)
+
+To keep an island's props between requests, give the composer a `cc.Cache` and opt islands in with
+`CacheFor`. The cache is your own: implement `Get` and `Set` with whatever you run. Without
+`Config.Cache`, nothing is cached and every island resolves on every request.
+
+```go
+// Your adapter, e.g. over go-redis:
+type redisCache struct{ rdb *redis.Client }
+
+func (c redisCache) Get(ctx context.Context, key string) ([]byte, bool, error) {
+	v, err := c.rdb.Get(ctx, key).Bytes()
+	if errors.Is(err, redis.Nil) {
+		return nil, false, nil
+	}
+	return v, err == nil, err
+}
+
+func (c redisCache) Set(ctx context.Context, key string, value []byte, ttl time.Duration) error {
+	return c.rdb.Set(ctx, key, value, ttl).Err()
+}
+
+// Islands say how long, and what their props depend on:
+trending := cc.Define(resolveTrending).CacheFor(5*time.Minute, func(context.Context, cc.Request) string { return "all" })
+feed := cc.Define(resolveFeed).CacheFor(30*time.Second, func(ctx context.Context, r cc.Request) string {
+	return viewerID(ctx) + ":" + r.Params["page"] // personalised: the viewer is in the key
+})
+
+composer := cc.New(cc.Config{Screens: screens, Cache: redisCache{rdb}})
+```
+
+- The key function returns what the props depend on; the composer adds the island's type and
+  version. Return `""` to skip the cache for this request.
+- Failures are never cached.
+- If the cache errors, the island resolves anyway and the error reaches plugins as a `CacheFailed`
+  failure, so a cache outage never breaks a screen.
+- In tests, `cctest.NewMemoryCache()` is an in-memory `cc.Cache`.
+
 ## Mounting
 
 A `*cc.Composer` is an `http.Handler` serving `POST /screens/{screen}` and `POST /actions/{action}`.

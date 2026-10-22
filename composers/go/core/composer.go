@@ -24,6 +24,8 @@ type Island struct {
 	Type    string
 	Version int
 	resolve func(ctx context.Context, r Request) (any, error)
+	// cache, if set with CacheFor, caches the island's props when the composer has a Cache.
+	cache *islandCache
 }
 
 // NewIsland defines how to resolve the props for one version of an island, for props types that
@@ -105,6 +107,9 @@ type Config struct {
 	Context func(ctx context.Context, r *http.Request) (context.Context, error)
 	// Use lists plugins, outermost first.
 	Use []Plugin
+	// Cache, if set, serves islands that opt in with Island.CacheFor (CMP-18). Without it, every
+	// island resolves on every request.
+	Cache Cache
 	// DefaultTimeout is each island's timeout unless its placement sets one. Default 2s.
 	DefaultTimeout time.Duration
 }
@@ -122,6 +127,7 @@ type Composer struct {
 	screens        map[string]Screen
 	actions        map[string]map[int]Action
 	plugins        []Plugin
+	cache          Cache
 	defaultTimeout time.Duration
 	mux            *http.ServeMux
 	compose        ComposeFunc
@@ -136,6 +142,7 @@ func New(cfg Config) *Composer {
 		screens:        map[string]Screen{},
 		actions:        map[string]map[int]Action{},
 		defaultTimeout: cfg.DefaultTimeout,
+		cache:          cfg.Cache,
 	}
 	if c.defaultTimeout == 0 {
 		c.defaultTimeout = 2 * time.Second
@@ -163,7 +170,7 @@ func New(cfg Config) *Composer {
 	}
 	c.plugins = append(c.plugins, cfg.Use...)
 
-	c.compose, c.perform, c.resolve = c.composeScreen, c.performAction, resolveIsland
+	c.compose, c.perform, c.resolve = c.composeScreen, c.performAction, c.resolveIsland
 	for i := len(c.plugins) - 1; i >= 0; i-- {
 		p := c.plugins[i]
 		if p.Screen != nil {
@@ -343,10 +350,6 @@ func (c *Composer) meta(ctx context.Context, screen Screen, r Request) (out *Scr
 		return nil // nothing to say: omit meta
 	}
 	return &meta
-}
-
-func resolveIsland(ctx context.Context, call IslandCall) (any, error) {
-	return call.Island.resolve(ctx, call.Request)
 }
 
 func (c *Composer) resolveEntry(parent context.Context, p Placement, island Island, r Request) IslandEntry {
