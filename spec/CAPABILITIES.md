@@ -243,7 +243,7 @@ What makes these feel like one toolkit rather than six libraries:
 | Screen | `cc.Screen{ID, Islands, Requires, Meta}` | `screen(id, { islands, requires, meta })` | | | |
 | Placement | `cc.Placement{Key, Versions, Required, When}` | `place(key, Island, { required, when })` | | | |
 | Plugin | `cc.Plugin` | `Plugin` | | | |
-| Adapters | `cc.Cache`, *`cc.IdempotencyStore`* | `Cache`, *`IdempotencyStore`* | | | |
+| Adapters | `cc.Cache`, `cc.IdempotencyStore` | `Cache`, `IdempotencyStore` | | | |
 | Island version | `cc.Define(fn)` | `island(Props, fn)` | | | |
 | Action version | `cc.DefineAction(fn)` | `action(Action, fn)` | | | |
 | Shared load | `cc.Load(ctx, key, fn)` | `rc.load(key, fn)` | | | |
@@ -275,7 +275,7 @@ Names in *italics* don't exist yet; the parity work below adds them.
 | CMP-16 requirements | ✅ `Requires` | ✅ `requires` |
 | CMP-17 plugins | ✅ `cc.Plugin` | ✅ `Plugin` |
 | CMP-18 cache adapter | ✅ `Config.Cache`, `Island.CacheFor` | ✅ `cache`, `island(…, { cache })` |
-| CMP-19 idempotency adapter | ✗ | ✗ |
+| CMP-19 idempotency adapter | ✅ `Config.Idempotency` | ✅ `idempotency` |
 
 ### Clients
 

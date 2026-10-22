@@ -54,3 +54,47 @@ func (m *MemoryCache) Keys() []string {
 	}
 	return keys
 }
+
+// MemoryIdempotencyStore is an in-memory cc.IdempotencyStore for tests: pass it in
+// Config.Idempotency to test actions that are retried.
+type MemoryIdempotencyStore struct {
+	mu      sync.Mutex
+	entries map[string]idempotencyEntry
+}
+
+type idempotencyEntry struct {
+	outcome []byte // nil while the call is running
+	expires time.Time
+}
+
+// NewMemoryIdempotencyStore returns an empty store.
+func NewMemoryIdempotencyStore() *MemoryIdempotencyStore {
+	return &MemoryIdempotencyStore{entries: map[string]idempotencyEntry{}}
+}
+
+// Begin implements cc.IdempotencyStore.
+func (m *MemoryIdempotencyStore) Begin(_ context.Context, key string, ttl time.Duration) ([]byte, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if e, ok := m.entries[key]; ok && time.Now().Before(e.expires) {
+		return e.outcome, false, nil
+	}
+	m.entries[key] = idempotencyEntry{expires: time.Now().Add(ttl)}
+	return nil, true, nil
+}
+
+// Finish implements cc.IdempotencyStore.
+func (m *MemoryIdempotencyStore) Finish(_ context.Context, key string, outcome []byte, ttl time.Duration) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.entries[key] = idempotencyEntry{outcome: append([]byte(nil), outcome...), expires: time.Now().Add(ttl)}
+	return nil
+}
+
+// Release implements cc.IdempotencyStore.
+func (m *MemoryIdempotencyStore) Release(_ context.Context, key string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.entries, key)
+	return nil
+}

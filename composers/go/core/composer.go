@@ -110,6 +110,9 @@ type Config struct {
 	// Cache, if set, serves islands that opt in with Island.CacheFor (CMP-18). Without it, every
 	// island resolves on every request.
 	Cache Cache
+	// Idempotency, if set, runs each action at most once per scope and idempotency key (CMP-19).
+	// Without it, keys pass through to actions.
+	Idempotency *Idempotency
 	// DefaultTimeout is each island's timeout unless its placement sets one. Default 2s.
 	DefaultTimeout time.Duration
 }
@@ -128,6 +131,7 @@ type Composer struct {
 	actions        map[string]map[int]Action
 	plugins        []Plugin
 	cache          Cache
+	idempotency    *Idempotency
 	defaultTimeout time.Duration
 	mux            *http.ServeMux
 	compose        ComposeFunc
@@ -136,13 +140,27 @@ type Composer struct {
 }
 
 // New builds a composer. It panics on mistakes in the config: two screens with one id, an action
-// version registered twice, or a screen with both or neither of Islands and Layout.
+// version registered twice, a screen with both or neither of Islands and Layout, or Idempotency
+// without a Store or Scope.
 func New(cfg Config) *Composer {
 	c := &Composer{
 		screens:        map[string]Screen{},
 		actions:        map[string]map[int]Action{},
 		defaultTimeout: cfg.DefaultTimeout,
 		cache:          cfg.Cache,
+	}
+	if idem := cfg.Idempotency; idem != nil {
+		if idem.Store == nil || idem.Scope == nil {
+			panic("clientcompose: Idempotency needs a Store and a Scope")
+		}
+		settings := *idem
+		if settings.TTL == 0 {
+			settings.TTL = 24 * time.Hour
+		}
+		if settings.Wait == 0 {
+			settings.Wait = 10 * time.Second
+		}
+		c.idempotency = &settings
 	}
 	if c.defaultTimeout == 0 {
 		c.defaultTimeout = 2 * time.Second
@@ -170,7 +188,7 @@ func New(cfg Config) *Composer {
 	}
 	c.plugins = append(c.plugins, cfg.Use...)
 
-	c.compose, c.perform, c.resolve = c.composeScreen, c.performAction, c.resolveIsland
+	c.compose, c.perform, c.resolve = c.composeScreen, c.performIdempotent, c.resolveIsland
 	for i := len(c.plugins) - 1; i >= 0; i-- {
 		p := c.plugins[i]
 		if p.Screen != nil {

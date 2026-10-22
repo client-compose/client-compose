@@ -10,6 +10,12 @@ export {
 } from "./actions.ts";
 export { type Cache, type IslandCache } from "./adapters.ts";
 export {
+  type Cache,
+  type Idempotency,
+  type IdempotencyStore,
+  type IslandCache,
+} from "./adapters.ts";
+export {
   type Composer,
   type ComposerConfig,
   createComposer,

@@ -50,14 +50,17 @@ export type ResolveFn<Ctx> = (call: IslandCall<Ctx>) => Promise<unknown>;
 
 /** Something that went wrong while answering a request. */
 export interface Failure {
-  /** "cache" is the Cache adapter failing; the island resolved anyway. */
-  kind: "island" | "layout" | "meta" | "action" | "context" | "cache";
+  /**
+   * "cache" is the Cache adapter failing (the island resolved anyway); "idempotency" is the
+   * IdempotencyStore failing (the action ran anyway) or a duplicate giving up waiting.
+   */
+  kind: "island" | "layout" | "meta" | "action" | "context" | "cache" | "idempotency";
   /** Set for island, layout and meta failures. */
   screen?: string;
   /** Set for island and cache failures. */
   key?: string;
   type?: string;
-  /** Set for action failures. */
+  /** Set for action and idempotency failures. */
   action?: string;
   version?: number;
   error: unknown;

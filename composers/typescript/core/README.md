@@ -189,6 +189,35 @@ const composer = createComposer({ screens, cache: redisCache });
   failure, so a cache outage never breaks a screen.
 - In tests, `memoryCache()` from `@client-compose/composer/testing` is an in-memory `Cache`.
 
+## Retried actions (optional)
+
+Apps send an idempotency key with each action, and reuse it when they retry the same intent. Give
+the composer an `IdempotencyStore` and it honours those keys for every action: the first call runs,
+and a retry gets the first outcome back instead of running again. The store is your own; without
+`idempotency`, keys just pass through to your actions as `idempotencyKey`.
+
+```ts
+const composer = createComposer<Ctx>({
+  actions,
+  idempotency: {
+    store: redisIdempotency, // your adapter: begin, finish, release
+    scope: (ctx) => ctx.viewer?.id ?? "", // whose keys these are
+  },
+});
+```
+
+- With Redis, `begin` is a `SET NX` of a "running" marker (returning the outcome if one is stored),
+  `finish` a `SET` of the outcome, and `release` a `DEL`.
+- `scope` is required, so one caller can never replay another's key. Return `""` for actions anyone
+  may share.
+- Only completed outcomes are kept: results and declared errors. A failure releases the key, so a
+  retry runs again.
+- A duplicate that arrives while the first call is running waits for it (`waitMs`, default 10s).
+- Outcomes are kept for `ttlMs` (default 24h).
+- If the store errors, the action runs anyway and the error reaches plugins as an `"idempotency"`
+  failure.
+- In tests, `memoryIdempotencyStore()` from `@client-compose/composer/testing` is an in-memory store.
+
 ## Serving it
 
 `composer.fetch` is a fetch-standard handler. It answers POST requests whose path ends in
