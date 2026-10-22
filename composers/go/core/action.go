@@ -70,15 +70,26 @@ func (a Action) declares(err declaredError) bool {
 type Action struct {
 	Name    string
 	Version int
-	schema  *schema
-	errors  []string
-	run     func(ctx context.Context, call Call, input json.RawMessage) (any, Effects, error)
+	// requires must all hold before the input is validated and the handler runs.
+	requires []Requirement
+	schema   *schema
+	errors   []string
+	run      func(ctx context.Context, call Call, input json.RawMessage) (any, Effects, error)
+}
+
+// Requires returns the action with requirements that must hold before it runs (401 or 403
+// otherwise):
+//
+//	follow := cc.DefineAction(followUser).Requires(signedIn)
+func (a Action) Requires(requirements ...Requirement) Action {
+	a.requires = append(append([]Requirement(nil), a.requires...), requirements...)
+	return a
 }
 
 // DefineAction defines how to perform one action version, using its generated types. Return the
 // generated error types for this version's declared errors, and ErrNotFound, ErrUnauthenticated or ErrForbidden
 // (possibly wrapped) for those protocol errors. Any other error is a failure: the client gets 500
-// action_failed and the composer's action error handler is called.
+// action_failed, and plugins' Error hooks are told.
 //
 //	follow := cc.DefineAction(func(ctx context.Context, call cc.Call, in FollowUserV1Input) (FollowUserV1Result, cc.Effects, error) {
 //		...
@@ -103,28 +114,6 @@ func DefineAction[I ActionInput[R], R any](handle func(ctx context.Context, call
 			return handle(ctx, call, input)
 		},
 	}
-}
-
-// WithActions registers actions alongside the composer's screens. Registering one action version
-// twice panics.
-func WithActions(actions ...Action) Option {
-	return func(c *Composer) {
-		for _, a := range actions {
-			if c.actions[a.Name] == nil {
-				c.actions[a.Name] = map[int]Action{}
-			}
-			if _, dup := c.actions[a.Name][a.Version]; dup {
-				panic(fmt.Sprintf("clientcompose: action %s v%d registered twice", a.Name, a.Version))
-			}
-			c.actions[a.Name][a.Version] = a
-		}
-	}
-}
-
-// WithActionErrorHandler is called when an action fails with an error that isn't a declared error
-// or protocol error (the client gets 500 action_failed).
-func WithActionErrorHandler(fn func(ctx context.Context, action string, version int, err error)) Option {
-	return func(c *Composer) { c.onActionError = fn }
 }
 
 // ActionRequest is the body a client POSTs to /actions/{action}.
@@ -155,7 +144,8 @@ type ActionResponse struct {
 	Error    *ActionError `json:"error,omitempty"`
 }
 
-// Perform runs an action. Most callers use Handler or PerformHTTP instead.
+// Perform performs an action in-process, through the plugins' Action hooks. The context should
+// already carry what Config.Context would add. Most callers serve HTTP instead; tests use cctest.
 func (c *Composer) Perform(ctx context.Context, req ActionRequest) Result {
 	if req.Protocol == nil || *req.Protocol != ProtocolVersion {
 		return fail(http.StatusBadRequest, "unsupported_protocol", fmt.Sprintf("composer speaks protocol %d", ProtocolVersion))
@@ -164,16 +154,27 @@ func (c *Composer) Perform(ctx context.Context, req ActionRequest) Result {
 	if !ok {
 		return fail(http.StatusNotFound, "unknown_action", req.Action)
 	}
-	action, ok := versions[req.Version]
-	if !ok {
+	if _, ok := versions[req.Version]; !ok {
 		return fail(http.StatusNotFound, "unsupported_action_version", fmt.Sprintf("%s v%d", req.Action, req.Version))
+	}
+	return c.perform(ctx, req)
+}
+
+func (c *Composer) performAction(ctx context.Context, req ActionRequest) Result {
+	action := c.actions[req.Action][req.Version]
+	ctx, endRequest := withRequestScope(ctx)
+	defer endRequest()
+
+	if err := check(ctx, action.requires); err != nil {
+		if res, ok := protocolError(err); ok {
+			return res
+		}
+		c.report(ctx, Failure{Kind: ActionFailed, Action: action.Name, Version: action.Version, Err: err})
+		return fail(http.StatusInternalServerError, "action_failed", "")
 	}
 	if err := validateJSON(action.schema, req.Input); err != nil {
 		return fail(http.StatusBadRequest, "invalid_input", err.Error())
 	}
-
-	ctx, endRequest := withRequestScope(ctx)
-	defer endRequest()
 	call := Call{IdempotencyKey: req.IdempotencyKey}
 	if req.Client != nil {
 		call.Client = *req.Client
@@ -196,21 +197,15 @@ func (c *Composer) Perform(ctx context.Context, req ActionRequest) Result {
 	}
 
 	var declared declaredError
-	switch {
-	case errors.As(err, &declared) && action.declares(declared):
+	if errors.As(err, &declared) && action.declares(declared) {
 		resp := respond("error")
 		resp.Error = &ActionError{Code: declared.ActionErrorCode(), Details: declared.ActionErrorDetails()}
 		return Result{http.StatusOK, resp}
-	case errors.Is(err, ErrNotFound):
-		return fail(http.StatusNotFound, "not_found", "")
-	case errors.Is(err, ErrUnauthenticated):
-		return fail(http.StatusUnauthorized, "unauthenticated", "")
-	case errors.Is(err, ErrForbidden):
-		return fail(http.StatusForbidden, "forbidden", "")
 	}
-	if c.onActionError != nil {
-		c.onActionError(ctx, action.Name, action.Version, err)
+	if res, ok := protocolError(err); ok {
+		return res
 	}
+	c.report(ctx, Failure{Kind: ActionFailed, Action: action.Name, Version: action.Version, Err: err})
 	return fail(http.StatusInternalServerError, "action_failed", "")
 }
 

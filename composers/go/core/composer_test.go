@@ -24,15 +24,13 @@ func TestNegotiatePicksHighestCommonVersion(t *testing.T) {
 }
 
 func TestPanickingIslandIsIsolated(t *testing.T) {
-	c := New([]Screen{{
+	c := New(Config{Screens: []Screen{{
 		ID: "s",
-		Layout: func(context.Context, Request) ([]Placement, error) {
-			return []Placement{{Key: "boom", Versions: []Island{
-				NewIsland("x", 1, func(context.Context, Request) (struct{}, error) { panic("oh no") }),
-			}}}, nil
-		},
-	}})
-	srv := httptest.NewServer(c.Handler())
+		Islands: []Placement{{Key: "boom", Versions: Versions(
+			NewIsland("x", 1, func(context.Context, Request) (struct{}, error) { panic("oh no") }),
+		)}},
+	}}})
+	srv := httptest.NewServer(c)
 	defer srv.Close()
 
 	res, err := http.Post(srv.URL+"/screens/s", "application/json", strings.NewReader(
