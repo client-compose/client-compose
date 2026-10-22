@@ -3,10 +3,15 @@
 
 package dev.clientcompose.golden
 
+import dev.clientcompose.ActionDescriptor
+import dev.clientcompose.DeclaredError
 import dev.clientcompose.IslandDescriptor
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 
 /** An island with no props. */
 @Serializable
@@ -69,4 +74,95 @@ data class KitchenSinkV1(
         override val version: Int = 1
         override val propsSerializer: KSerializer<KitchenSinkV1> get() = serializer()
     }
+}
+
+/** An action with empty input and result, and no declared errors. */
+object PingV1 : ActionDescriptor<PingV1.Input, PingV1.Result, Nothing> {
+    override val action: String = "ping"
+    override val version: Int = 1
+    override val inputSerializer: KSerializer<Input> get() = Input.serializer()
+    override val resultSerializer: KSerializer<Result> get() = Result.serializer()
+    override val errorCodes: List<String> = listOf()
+
+    override fun decodeError(code: String, details: JsonElement?, json: Json): Nothing =
+        throw IllegalArgumentException("ping v1 declares no errors, got $code")
+
+    override fun encodeErrorDetails(error: Nothing, json: Json): JsonElement? = null
+
+    /** The input of "ping" v1. */
+    @Serializable
+    class Input
+
+    /** The result of "ping" v1. */
+    @Serializable
+    class Result
+}
+
+/** Renames a thing. */
+object RenameThingV1 : ActionDescriptor<RenameThingV1.Input, RenameThingV1.Result, RenameThingV1.Error> {
+    override val action: String = "rename-thing"
+    override val version: Int = 1
+    override val inputSerializer: KSerializer<Input> get() = Input.serializer()
+    override val resultSerializer: KSerializer<Result> get() = Result.serializer()
+    override val errorCodes: List<String> = listOf("name_taken", "locked")
+
+    override fun decodeError(code: String, details: JsonElement?, json: Json): Error = when (code) {
+        "name_taken" -> Error.NameTaken(json.decodeFromJsonElement(RenameThingV1.NameTaken.serializer(), details ?: JsonNull))
+        "locked" -> Error.Locked
+        else -> throw IllegalArgumentException("rename-thing v1 doesn't declare $code")
+    }
+
+    override fun encodeErrorDetails(error: Error, json: Json): JsonElement? = when (error) {
+        is Error.NameTaken -> json.encodeToJsonElement(RenameThingV1.NameTaken.serializer(), error.details)
+        Error.Locked -> null
+    }
+
+    /** The input of "rename-thing" v1. */
+    @Serializable
+    data class Input(
+        val thingId: String,
+        /** The new name. */
+        val name: String,
+        val visibility: Visibility? = null,
+    ) {
+        @Serializable
+        enum class Visibility {
+            @SerialName("public") PUBLIC,
+            @SerialName("private") PRIVATE,
+        }
+    }
+
+    /** The result of "rename-thing" v1. */
+    @Serializable
+    data class Result(
+        val thing: Thing,
+    ) {
+        @Serializable
+        data class Thing(
+            val id: String,
+            val name: String,
+        )
+    }
+
+    /**
+     * The errors "rename-thing" v1 declares. A newer composer may send codes this app doesn't know:
+     * `ComposeClient.perform` throws those as `ActionFailure`.
+     */
+    sealed interface Error : DeclaredError {
+        /** Another thing already has that name. */
+        data class NameTaken(val details: RenameThingV1.NameTaken) : Error {
+            override val code: String get() = "name_taken"
+        }
+
+        /** The thing can't be renamed right now. */
+        data object Locked : Error {
+            override val code: String get() = "locked"
+        }
+    }
+
+    /** The details of "name_taken". */
+    @Serializable
+    data class NameTaken(
+        val suggestions: List<String>,
+    )
 }

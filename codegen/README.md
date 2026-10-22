@@ -51,9 +51,8 @@ downloaded through a browser needs `xattr -d com.apple.quarantine <file>` before
 }
 ```
 
-`actions` is optional: a directory of action manifests (spec §5). Actions are generated for the Go,
-TypeScript and Swift targets; Kotlin gets island types only, for now. A config may also have only
-`actions`.
+`actions` is optional: a directory of action manifests (spec §5), generated for every target. A
+config may also have only `actions`.
 
 In a Go project, a `//go:generate client-compose-codegen <config>` (or `npx @client-compose/codegen <config>`) line lets `go generate` run it
 (see [`examples/profile/composer-go/main.go`](https://github.com/client-compose/client-compose/blob/main/examples/profile/composer-go/main.go)).
@@ -76,6 +75,7 @@ For action `follow-user` v1 (spec §5.1):
 | ---------- | --------- | ------- |
 | Go         | `FollowUserV1Input` (tied to its action, version, input schema and result type), `FollowUserV1Result`, and one error type per declared error, e.g. `FollowUserV1Blocked` | `cc.DefineAction(func(ctx, call, in FollowUserV1Input) (FollowUserV1Result, cc.Effects, error) { … })`, returning `FollowUserV1Blocked{}` as the error |
 | TypeScript | `FollowUserV1Input`, `FollowUserV1Result`, the `FollowUserV1Error` union, and the `FollowUserV1` descriptor | `action(FollowUserV1, perform)` in the composer, `callAction(…, FollowUserV1, input)` or `useAction(FollowUserV1)` in apps |
+| Kotlin     | `object FollowUserV1 : ActionDescriptor<…>` holding `Input`, `Result`, and a sealed `Error` with a subclass per declared error (`Error.Blocked`, or `Error.LimitReached(details)`) | `client.perform(FollowUserV1, FollowUserV1.Input(userId = id))` or `rememberAction(FollowUserV1)` |
 | Swift      | `enum FollowUserV1: ActionDescriptor` holding `Input`, `Result`, and a `DeclaredError` enum with a case per declared error (`.blocked`, or `.limitReached(LimitReached)` with its details) | `client.perform(FollowUserV1.self, .init(userId: id))` or `@ComposeAction(FollowUserV1.self)` |
 
 ## Supported schema subset

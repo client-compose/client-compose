@@ -3,9 +3,13 @@
 
 package com.example.profile
 
+import dev.clientcompose.ActionDescriptor
+import dev.clientcompose.DeclaredError
 import dev.clientcompose.IslandDescriptor
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 
 /** Follow/unfollow toggle. The client calls the follow API itself; the composer only supplies initial state. */
 @Serializable
@@ -65,5 +69,49 @@ data class ProfileHeaderV2(
         override val type: String = "profile-header"
         override val version: Int = 2
         override val propsSerializer: KSerializer<ProfileHeaderV2> get() = serializer()
+    }
+}
+
+/** Follow or unfollow a user. */
+object FollowUserV1 : ActionDescriptor<FollowUserV1.Input, FollowUserV1.Result, FollowUserV1.Error> {
+    override val action: String = "follow-user"
+    override val version: Int = 1
+    override val inputSerializer: KSerializer<Input> get() = Input.serializer()
+    override val resultSerializer: KSerializer<Result> get() = Result.serializer()
+    override val errorCodes: List<String> = listOf("blocked")
+
+    override fun decodeError(code: String, details: JsonElement?, json: Json): Error = when (code) {
+        "blocked" -> Error.Blocked
+        else -> throw IllegalArgumentException("follow-user v1 doesn't declare $code")
+    }
+
+    override fun encodeErrorDetails(error: Error, json: Json): JsonElement? = when (error) {
+        Error.Blocked -> null
+    }
+
+    /** The input of "follow-user" v1. */
+    @Serializable
+    data class Input(
+        val userId: String,
+        /** true to follow, false to unfollow. */
+        val follow: Boolean,
+    )
+
+    /** The result of "follow-user" v1. */
+    @Serializable
+    data class Result(
+        /** The user's followers now. */
+        val followers: Int,
+    )
+
+    /**
+     * The errors "follow-user" v1 declares. A newer composer may send codes this app doesn't know:
+     * `ComposeClient.perform` throws those as `ActionFailure`.
+     */
+    sealed interface Error : DeclaredError {
+        /** The user has blocked the viewer. */
+        data object Blocked : Error {
+            override val code: String get() = "blocked"
+        }
     }
 }

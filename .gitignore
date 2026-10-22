@@ -8,3 +8,6 @@ build/
 .kotlin/
 .idea/
 *.tsbuildinfo
+
+# Android SDK location, per machine
+local.properties

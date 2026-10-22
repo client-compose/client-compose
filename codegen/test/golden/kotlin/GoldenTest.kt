@@ -29,4 +29,20 @@ class GoldenTest {
             .register(DividerV1) { _, _ -> "divider" }
         assertEquals(mapOf("kitchen-sink" to listOf(1), "divider" to listOf(1)), registry.capabilities)
     }
+
+    @Test
+    fun actionTypesEncodeInputAndDecodeErrors() {
+        val input = ClientComposeJson.encodeToString(RenameThingV1.inputSerializer, RenameThingV1.Input(thingId = "t1", name = "New", visibility = RenameThingV1.Input.Visibility.PRIVATE))
+        assertEquals("""{"thingId":"t1","name":"New","visibility":"private"}""", input)
+        assertEquals("""{"thingId":"t1","name":"New"}""", ClientComposeJson.encodeToString(RenameThingV1.inputSerializer, RenameThingV1.Input(thingId = "t1", name = "New")))
+
+        val details = ClientComposeJson.parseToJsonElement("""{"suggestions":["New 2"]}""")
+        val taken = RenameThingV1.decodeError("name_taken", details, ClientComposeJson)
+        assertEquals(RenameThingV1.Error.NameTaken(RenameThingV1.NameTaken(listOf("New 2"))), taken)
+        assertEquals("name_taken", taken.code)
+        assertEquals(details, RenameThingV1.encodeErrorDetails(taken, ClientComposeJson))
+        assertEquals(RenameThingV1.Error.Locked, RenameThingV1.decodeError("locked", null, ClientComposeJson))
+        assertEquals(listOf("name_taken", "locked"), RenameThingV1.errorCodes)
+        assertEquals(emptyList(), PingV1.errorCodes)
+    }
 }
