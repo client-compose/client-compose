@@ -1,5 +1,13 @@
 # @client-compose/codegen
 
+## 0.4.0
+
+### Minor Changes
+
+- [#21](https://github.com/client-compose/client-compose/pull/21) [`5f172ba`](https://github.com/client-compose/client-compose/commit/5f172ba2bf48a2fbd61d3c260f1f590fd4390bf8) Thanks [@LewisYearsley](https://github.com/LewisYearsley)! - The Swift target generates actions: an `enum FollowUserV1: ActionDescriptor` holding `Input`,
+  `Result` and a `DeclaredError` enum with a case per declared error. Generated Swift structs are now
+  `Codable` with a memberwise `init`, so apps and tests can build them, also when `access` is `public`.
+
 ## 0.3.0
 
 ### Minor Changes
