@@ -1,5 +1,12 @@
 # @client-compose/codegen
 
+## 0.5.0
+
+### Minor Changes
+
+- [#24](https://github.com/client-compose/client-compose/pull/24) [`79da1c5`](https://github.com/client-compose/client-compose/commit/79da1c514ec047a4b9da6c93e3922f20f2729fa2) Thanks [@LewisYearsley](https://github.com/LewisYearsley)! - The Kotlin target generates actions: an `object FollowUserV1 : ActionDescriptor<…>` holding `Input`,
+  `Result` and a sealed `Error` with a subclass per declared error.
+
 ## 0.4.0
 
 ### Minor Changes
