@@ -44,7 +44,7 @@ const greeting = { type: "greeting", version: 1 };
 const Greet = {
   action: "greet",
   version: 1,
-  errors: [],
+  errors: ["nope"],
   input: { type: "object", required: ["name"], properties: { name: { type: "string" } } },
 };
 const composer = createComposer({
