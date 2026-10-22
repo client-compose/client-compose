@@ -24,7 +24,7 @@ func composeIslands(t *testing.T, layout func(ctx context.Context), timeout time
 			Versions: []Island{NewIsland(typ, 1, func(ctx context.Context, _ Request) (any, error) { return fn(ctx) })},
 		})
 	}
-	c := New([]Screen{{
+	c := New(Config{Screens: []Screen{{
 		ID: "s",
 		Layout: func(ctx context.Context, _ Request) ([]Placement, error) {
 			if layout != nil {
@@ -32,7 +32,7 @@ func composeIslands(t *testing.T, layout func(ctx context.Context), timeout time
 			}
 			return placements, nil
 		},
-	}})
+	}}})
 	protocol := ProtocolVersion
 	res := c.Compose(context.Background(), ScreenRequest{Protocol: &protocol, Screen: "s", Client: &ClientContext{}, Islands: caps})
 	body, ok := res.Body.(ScreenResponse)
@@ -198,23 +198,28 @@ func TestLayoutNotFoundAndMetaFailure(t *testing.T) {
 	req := ScreenRequest{Protocol: &protocol, Screen: "s", Client: &ClientContext{}, Islands: map[string][]int{"x": {1}}}
 
 	// A batch loader's missing key in the layout is a 404 not_found.
-	notFound := New([]Screen{{ID: "s", Layout: func(ctx context.Context, r Request) ([]Placement, error) {
+	notFound := New(Config{Screens: []Screen{{ID: "s", Layout: func(ctx context.Context, r Request) ([]Placement, error) {
 		_, err := users.Load(ctx, "missing")
 		return nil, err
-	}}})
+	}}}})
 	if res := notFound.Compose(context.Background(), req); res.Status != 404 || res.Body.(ErrorResponse).Error.Code != "not_found" {
 		t.Fatalf("got %+v", res)
 	}
 
 	// A failing Meta drops the meta, not the islands.
 	var metaErr error
-	c := New([]Screen{{
-		ID:   "s",
-		Meta: func(context.Context, Request) (ScreenMeta, error) { return ScreenMeta{}, errors.New("meta broke") },
-		Layout: func(context.Context, Request) ([]Placement, error) {
-			return []Placement{{Key: "k", Versions: []Island{NewIsland("x", 1, func(context.Context, Request) (int, error) { return 1, nil })}}}, nil
-		},
-	}}, WithMetaErrorHandler(func(_ context.Context, _ string, err error) { metaErr = err }))
+	c := New(Config{
+		Screens: []Screen{{
+			ID:      "s",
+			Meta:    func(context.Context, Request) (ScreenMeta, error) { return ScreenMeta{}, errors.New("meta broke") },
+			Islands: []Placement{{Key: "k", Versions: Versions(NewIsland("x", 1, func(context.Context, Request) (int, error) { return 1, nil }))}},
+		}},
+		Use: []Plugin{ReportErrors(func(_ context.Context, f Failure) {
+			if f.Kind == MetaFailed {
+				metaErr = f.Err
+			}
+		})},
+	})
 	res := c.Compose(context.Background(), req)
 	body := res.Body.(ScreenResponse)
 	if res.Status != 200 || body.Meta != nil || len(body.Islands) != 1 || metaErr == nil {

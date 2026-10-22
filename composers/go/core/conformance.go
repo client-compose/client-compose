@@ -28,6 +28,7 @@ type mockPlacement struct {
 // ConformanceScreen is the test-only `__conformance` screen (spec §8.1).
 // Never register it in production.
 func ConformanceScreen() Screen {
+	// Its islands come from the request, so it has a Layout rather than declared Islands.
 	return Screen{
 		ID: "__conformance",
 		Meta: func(_ context.Context, r Request) (ScreenMeta, error) {

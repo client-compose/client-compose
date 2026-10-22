@@ -9,9 +9,58 @@ import (
 
 const maxBodyBytes = 1 << 20
 
-// ComposeHTTP parses and validates a raw request body, then composes (spec §8.1 error
-// codes). Framework adapters (chi, gin, echo...) only need to call this.
-func (c *Composer) ComposeHTTP(ctx context.Context, pathScreen string, body io.Reader) Result {
+// ServeHTTP serves POST /screens/{screen} and POST /actions/{action}. Mount the composer at your
+// root, or under a prefix with http.StripPrefix. Other routers take an http.Handler too: chi's
+// Mount, gin.WrapH, echo.WrapHandler.
+func (c *Composer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	c.mux.ServeHTTP(w, r)
+}
+
+func (c *Composer) routes() *http.ServeMux {
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /screens/{screen}", func(w http.ResponseWriter, r *http.Request) {
+		ctx, res, ok := c.context(r, LayoutFailed)
+		if ok {
+			res = c.composeHTTP(ctx, r.PathValue("screen"), r.Body)
+		}
+		writeResult(w, res)
+	})
+	mux.HandleFunc("POST /actions/{action}", func(w http.ResponseWriter, r *http.Request) {
+		ctx, res, ok := c.context(r, ActionFailed)
+		if ok {
+			res = c.performHTTP(ctx, r.PathValue("action"), r.Body)
+		}
+		writeResult(w, res)
+	})
+	return mux
+}
+
+// context runs the context hooks, in order. If one fails, it returns the response to send instead.
+func (c *Composer) context(r *http.Request, kind FailureKind) (context.Context, Result, bool) {
+	ctx := r.Context()
+	for _, p := range c.plugins {
+		if p.Context == nil {
+			continue
+		}
+		next, err := p.Context(ctx, r)
+		if err != nil {
+			if res, ok := protocolError(err); ok {
+				return ctx, res, false
+			}
+			c.report(ctx, Failure{Kind: ContextFailed, Err: err})
+			code := "layout_failed"
+			if kind == ActionFailed {
+				code = "action_failed"
+			}
+			return ctx, fail(http.StatusInternalServerError, code, ""), false
+		}
+		ctx = next
+	}
+	return ctx, Result{}, true
+}
+
+// composeHTTP parses and checks a raw request body, then composes (spec §8.1 error codes).
+func (c *Composer) composeHTTP(ctx context.Context, pathScreen string, body io.Reader) Result {
 	var req ScreenRequest
 	if err := json.NewDecoder(io.LimitReader(body, maxBodyBytes)).Decode(&req); err != nil {
 		return fail(http.StatusBadRequest, "bad_request", "body is not valid JSON")
@@ -28,9 +77,9 @@ func (c *Composer) ComposeHTTP(ctx context.Context, pathScreen string, body io.R
 	return c.Compose(ctx, req)
 }
 
-// PerformHTTP parses and validates a raw action request body, then performs the action (spec §8.1
+// performHTTP parses and checks a raw action request body, then performs the action (spec §8.1
 // error codes).
-func (c *Composer) PerformHTTP(ctx context.Context, pathAction string, body io.Reader) Result {
+func (c *Composer) performHTTP(ctx context.Context, pathAction string, body io.Reader) Result {
 	var req ActionRequest
 	if err := json.NewDecoder(io.LimitReader(body, maxBodyBytes)).Decode(&req); err != nil {
 		return fail(http.StatusBadRequest, "bad_request", "body is not valid JSON")
@@ -47,21 +96,7 @@ func (c *Composer) PerformHTTP(ctx context.Context, pathAction string, body io.R
 	return c.Perform(ctx, req)
 }
 
-// Handler serves POST /screens/{screen} and POST /actions/{action} using net/http. Mount it at
-// your root or strip a prefix with http.StripPrefix.
-func (c *Composer) Handler() http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("POST /screens/{screen}", func(w http.ResponseWriter, r *http.Request) {
-		WriteResult(w, c.ComposeHTTP(r.Context(), r.PathValue("screen"), r.Body))
-	})
-	mux.HandleFunc("POST /actions/{action}", func(w http.ResponseWriter, r *http.Request) {
-		WriteResult(w, c.PerformHTTP(r.Context(), r.PathValue("action"), r.Body))
-	})
-	return mux
-}
-
-// WriteResult writes a Result as a JSON response.
-func WriteResult(w http.ResponseWriter, res Result) {
+func writeResult(w http.ResponseWriter, res Result) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(res.Status)
 	_ = json.NewEncoder(w).Encode(res.Body)

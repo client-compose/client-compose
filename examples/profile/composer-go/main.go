@@ -40,15 +40,14 @@ func fakeServices() Services {
 	}
 }
 
-// --- Viewer identity (normally your auth middleware) ---------------------------------
+// --- Viewer identity (normally a session or a token) ---------------------------------
 
 type viewerKey struct{}
 
-func withViewer(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), viewerKey{}, r.Header.Get("X-User-Id"))
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
+// viewerContext is the composer's context function: it runs once per request, before anything
+// else, and everything on the screen sees the viewer it adds.
+func viewerContext(ctx context.Context, r *http.Request) (context.Context, error) {
+	return context.WithValue(ctx, viewerKey{}, r.Header.Get("X-User-Id")), nil
 }
 
 func viewer(ctx context.Context) string {
@@ -106,34 +105,33 @@ func profileScreen(s Services) cc.Screen {
 		return grid, err
 	})
 
+	// Server-side decision: no follow button on your own profile, or when signed out.
+	someoneElses := func(ctx context.Context, r cc.Request) bool {
+		return viewer(ctx) != "" && viewer(ctx) != r.Params["userId"]
+	}
+
 	return cc.Screen{
-		ID:          "profile",
-		CacheMaxAge: 30 * time.Second,
-		Layout: func(ctx context.Context, r cc.Request) ([]cc.Placement, error) {
-			placements := []cc.Placement{
-				{Key: "header", Versions: []cc.Island{headerV1, headerV2}, Required: true},
-			}
-			// Server-side decision: no follow button on your own profile.
-			if viewer(ctx) != "" && viewer(ctx) != r.Params["userId"] {
-				placements = append(placements, cc.Placement{Key: "follow", Versions: []cc.Island{followButton}})
-			}
-			placements = append(placements, cc.Placement{Key: "posts", Versions: []cc.Island{postGrid}, Timeout: 500 * time.Millisecond})
-			return placements, nil
+		ID: "profile",
+		Islands: []cc.Placement{
+			{Key: "header", Versions: cc.Versions(headerV1, headerV2), Required: true},
+			{Key: "follow", Versions: cc.Versions(followButton), When: someoneElses},
+			{Key: "posts", Versions: cc.Versions(postGrid), Timeout: 500 * time.Millisecond},
 		},
+		CacheMaxAge: 30 * time.Second,
 	}
 }
 
-func newHandler(s Services) http.Handler {
-	composer := cc.New(
-		[]cc.Screen{profileScreen(s)},
-		cc.WithIslandErrorHandler(func(_ context.Context, key, typ string, err error) {
-			log.Printf("island %s (%s) failed: %v", key, typ, err)
-		}),
-	)
-	return withViewer(composer.Handler())
+func newComposer(s Services) *cc.Composer {
+	return cc.New(cc.Config{
+		Screens: []cc.Screen{profileScreen(s)},
+		Context: viewerContext,
+		Use: []cc.Plugin{cc.ReportErrors(func(_ context.Context, f cc.Failure) {
+			log.Printf("%s failed (screen %s, island %s): %v", f.Kind, f.Screen, f.Key, f.Err)
+		})},
+	})
 }
 
 func main() {
 	log.Println("profile composer on :8080")
-	log.Fatal(http.ListenAndServe(":8080", newHandler(fakeServices())))
+	log.Fatal(http.ListenAndServe(":8080", newComposer(fakeServices())))
 }
