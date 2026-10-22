@@ -6,6 +6,9 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
 public const val PROTOCOL_VERSION: Int = 0
@@ -78,4 +81,32 @@ public data class ScreenResponse(
 public val ClientComposeJson: Json = Json {
     ignoreUnknownKeys = true
     explicitNulls = false
+}
+
+/** Refers to screens: those with this id whose params include all of [params] (spec §5.3). */
+@Serializable
+public data class ScreenRef(
+    val screen: String,
+    val params: Map<String, String> = emptyMap(),
+) {
+    /** Whether this reference matches a screen with this id and params. */
+    public fun matches(screen: String, params: Map<String, String>): Boolean =
+        screen == this.screen && this.params.all { (key, value) -> params[key] == value }
+}
+
+/** What a successful action changed (spec §5.3). Unknown effects are ignored. */
+@Serializable
+public data class ActionEffects(
+    /** Screens whose content may have changed: dropped from the cache, and reloaded where they're on show. */
+    val invalidate: List<ScreenRef> = emptyList(),
+    /** A screen to show next: passed to the client's `onNavigate`. */
+    val navigate: ScreenRef? = null,
+)
+
+/** The protocol error code in a failed response's body, if it has one (spec §4.3). */
+internal fun errorCode(body: String): String? = try {
+    val error = ClientComposeJson.parseToJsonElement(body).jsonObject["error"]?.jsonObject
+    error?.get("code")?.jsonPrimitive?.contentOrNull
+} catch (e: IllegalArgumentException) {
+    null // not JSON, or not an object
 }

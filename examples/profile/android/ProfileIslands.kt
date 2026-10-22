@@ -1,12 +1,9 @@
 // Android side of the profile example: island props, Compose UI, registry and screen.
-// Dependencies: dev.clientcompose:core, OkHttp, Coil (coil-compose), kotlinx.serialization,
-// androidx.lifecycle:lifecycle-viewmodel-compose.
+// Dependencies: dev.clientcompose:compose, OkHttp, Coil (coil-compose), kotlinx.serialization.
 
 package com.example.profile
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -15,12 +12,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
 import dev.clientcompose.*
+import dev.clientcompose.compose.*
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl
 import okhttp3.MediaType.Companion.toMediaType
@@ -29,10 +24,8 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
 // --- Registry: what this app version can render ----------------------------------------
-// ProfileHeaderV1, ProfileHeaderV2, FollowButtonV1 and PostGridV1 come from
-// Islands.generated.kt, generated from ../islands (see ../client-compose.codegen.json).
-
-typealias IslandContent = @Composable () -> Unit
+// ProfileHeaderV1, ProfileHeaderV2, FollowButtonV1, PostGridV1 and FollowUserV1 come from
+// Islands.generated.kt, generated from ../islands and ../actions (see ../client-compose.codegen.json).
 
 val islandRegistry = IslandRegistry<IslandContent>()
     .register(ProfileHeaderV1) { p, _ -> { ProfileHeader(p.displayName, p.avatarUrl, badge = null) } }
@@ -40,63 +33,54 @@ val islandRegistry = IslandRegistry<IslandContent>()
     .register(FollowButtonV1) { p, _ -> { FollowButton(p.userId, p.isFollowing) } }
     .register(PostGridV1) { p, _ -> { PostGrid(p.posts) } }
 
-// --- Transport: the core doesn't pick an HTTP library ----------------------------------
+// --- Client: one for the app ------------------------------------------------------------
+// HttpUrlConnectionTransport needs no dependencies; here's OkHttp instead, in a few lines.
 
-class OkHttpTransport(private val http: OkHttpClient, private val baseUrl: HttpUrl) : ScreenTransport {
-    override suspend fun post(path: String, body: String): TransportResponse = withContext(Dispatchers.IO) {
-        val request = Request.Builder()
-            .url(baseUrl.resolve(path)!!)
-            .post(body.toRequestBody("application/json".toMediaType()))
-            .build()
-        http.newCall(request).execute().use { TransportResponse(it.code, it.body?.string().orEmpty()) }
-    }
+class OkHttpTransport(private val http: OkHttpClient, private val baseUrl: HttpUrl) : Transport {
+    override suspend fun post(path: String, body: String, headers: Map<String, String>): TransportResponse =
+        withContext(Dispatchers.IO) {
+            val request = Request.Builder()
+                .url(baseUrl.resolve(path)!!)
+                .apply { headers.forEach { (name, value) -> header(name, value) } }
+                .post(body.toRequestBody("application/json".toMediaType()))
+                .build()
+            http.newCall(request).execute().use { TransportResponse(it.code, it.body?.string().orEmpty()) }
+        }
 }
+
+fun composeClient(http: OkHttpClient, session: Session, navigate: (ScreenRef) -> Unit) = ComposeClient(
+    transport = OkHttpTransport(http, HttpUrl.Builder().scheme("https").host("api.example.com").addPathSegment("compose").addPathSegment("").build()),
+    context = ClientContext(appVersion = BuildConfig.VERSION_NAME),
+    headers = { mapOf("Authorization" to "Bearer ${session.token()}") },
+    onNavigate = navigate,
+)
+
+// In your Activity: setContent { ProvideCompose(client, islandRegistry) { AppNavHost() } }
 
 // --- Screen ----------------------------------------------------------------------------
 
-class ProfileViewModel(private val client: ScreenClient, private val userId: String) : ViewModel() {
-    sealed interface State {
-        data object Loading : State
-        data class Loaded(val islands: List<PlannedIsland<IslandContent>>) : State
-        data class Failed(val error: Throwable) : State
-    }
-
-    var state by mutableStateOf<State>(State.Loading)
-        private set
-
-    init { load() }
-
-    fun load() {
-        state = State.Loading
-        viewModelScope.launch {
-            state = try {
-                val request = islandRegistry.request(
-                    screen = "profile",
-                    client = ClientContext(appVersion = BuildConfig.VERSION_NAME),
-                    params = mapOf("userId" to userId),
-                )
-                val response = client.fetch(request)
-                State.Loaded(islandRegistry.plan(response, onSkipped = { entry, reason ->
-                    android.util.Log.w("ClientCompose", "skipped ${entry.key}: $reason")
-                }))
-            } catch (e: Exception) {
-                State.Failed(e)
-            }
-        }
-    }
-}
-
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ProfileScreen(viewModel: ProfileViewModel) {
-    when (val state = viewModel.state) {
-        ProfileViewModel.State.Loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
-        is ProfileViewModel.State.Failed -> Column(Modifier.fillMaxSize(), Arrangement.Center, Alignment.CenterHorizontally) {
-            Text("Couldn't load this profile")
-            Button(onClick = viewModel::load) { Text("Try again") }
-        }
-        is ProfileViewModel.State.Loaded -> LazyColumn(Modifier.fillMaxSize()) {
-            items(state.islands, key = { it.key }) { island -> island.output() }
-        }
+fun ProfileScreen(userId: String) {
+    var title by remember { mutableStateOf("") }
+    Scaffold(topBar = { TopAppBar(title = { Text(title) }) }) { padding ->
+        // The screen's title comes from the composer; following someone reloads it by itself.
+        ComposedScreen(
+            "profile",
+            mapOf("userId" to userId),
+            modifier = Modifier.padding(padding),
+            onMeta = { title = it?.title.orEmpty() },
+            failure = { error, retry ->
+                Column(Modifier.fillMaxSize(), Arrangement.Center, Alignment.CenterHorizontally) {
+                    if ((error as? ScreenException)?.isNotFound == true) {
+                        Text("This profile doesn't exist")
+                    } else {
+                        Text("Couldn't load this profile")
+                        Button(onClick = retry) { Text("Try again") }
+                    }
+                }
+            },
+        )
     }
 }
 
@@ -121,11 +105,15 @@ fun ProfileHeader(name: String, avatarUrl: String, badge: String?) {
 }
 
 @Composable
-fun FollowButton(userId: String, initiallyFollowing: Boolean) {
-    var following by remember(userId) { mutableStateOf(initiallyFollowing) }
-    // Interactivity stays on the client: call your follow API directly here.
-    Button(onClick = { following = !following }, modifier = Modifier.padding(horizontal = 16.dp)) {
-        Text(if (following) "Following" else "Follow")
+fun FollowButton(userId: String, isFollowing: Boolean) {
+    val follow = rememberAction(FollowUserV1)
+    Column(Modifier.padding(horizontal = 16.dp)) {
+        // The composer says the profile changed, so it reloads with the new state.
+        Button(onClick = { follow.run(FollowUserV1.Input(userId = userId, follow = !isFollowing)) }, enabled = !follow.pending) {
+            Text(if (isFollowing) "Following" else "Follow")
+        }
+        if (follow.last.declaredError == FollowUserV1.Error.Blocked) Text("You can't follow this person")
+        else if (follow.last.failed) Text("Something went wrong")
     }
 }
 
@@ -147,4 +135,10 @@ fun PostGrid(posts: List<PostGridV1.Post>) {
             }
         }
     }
+}
+
+// --- Stand-in for your app's own session --------------------------------------------------
+
+interface Session {
+    suspend fun token(): String
 }

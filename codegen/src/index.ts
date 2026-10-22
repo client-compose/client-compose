@@ -47,7 +47,7 @@ type OneOrMany<T> = T | T[];
 export interface CodegenConfig {
   /** Directory of island manifests. Optional when the config only generates actions. */
   manifests?: string;
-  /** Directory of action manifests (spec §5). Generated for the Go, TypeScript and Swift targets. */
+  /** Directory of action manifests (spec §5). Generated for every target. */
   actions?: string;
   targets: {
     go?: OneOrMany<GoOptions & { out: string }>;
@@ -144,10 +144,9 @@ export function generate(configPath: string): GeneratedFile[] {
   for (const t of list(kotlin)) {
     files.push({
       path: resolve(base, t.out),
-      contents: generateKotlin(islands, header, required(t, "package", "kotlin")),
+      contents: generateKotlin(islands, header, required(t, "package", "kotlin"), actions),
     });
   }
-  // Kotlin gets island types only, for now.
   for (const t of list(typescript)) {
     files.push({
       path: resolve(base, t.out),

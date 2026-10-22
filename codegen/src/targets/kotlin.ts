@@ -1,4 +1,5 @@
 import {
+  type Action,
   camel,
   type EnumDef,
   type Field,
@@ -25,7 +26,14 @@ const constant = (value: string) => {
   return /^[0-9]/.test(c) ? `_${c}` : c;
 };
 
-export function generateKotlin(islands: Island[], header: string, opts: KotlinOptions): string {
+const pascalCase = (code: string) => camel(code).replace(/^./, (c) => c.toUpperCase());
+
+export function generateKotlin(
+  islands: Island[],
+  header: string,
+  opts: KotlinOptions,
+  actions: Action[] = [],
+): string {
   const body: string[] = [];
   let usesSerialName = false;
 
@@ -77,9 +85,9 @@ export function generateKotlin(islands: Island[], header: string, opts: KotlinOp
     body.push(`${indent}${annotation}val ${ident(name)}: ${type},`);
   };
 
-  const emitObject = (def: ObjectDef, indent: string, island?: Island) => {
+  const emitObject = (def: ObjectDef, indent: string, island?: Island, description?: string) => {
     const name = island ? def.path.join("") : def.path[def.path.length - 1];
-    doc(indent, island?.description ?? def.description);
+    doc(indent, island?.description ?? description ?? def.description);
     body.push(`${indent}@Serializable`);
     const head = def.fields.length ? `${indent}data class ${name}(` : `${indent}class ${name}`;
     const inner = indent + "    ";
@@ -110,16 +118,111 @@ export function generateKotlin(islands: Island[], header: string, opts: KotlinOp
     body.push(`${indent}}`);
   };
 
+  const emitAction = (action: Action) => {
+    const name = action.input.path.slice(0, -1).join("");
+    const label = `${JSON.stringify(action.action)} v${action.version}`;
+    const errorType = action.errors.length ? "Error" : "Nothing";
+    const i = "    ";
+    doc("", action.description);
+    body.push(
+      `object ${name} : ActionDescriptor<${name}.Input, ${name}.Result, ${action.errors.length ? `${name}.Error` : "Nothing"}> {`,
+      `${i}override val action: String = ${JSON.stringify(action.action)}`,
+      `${i}override val version: Int = ${action.version}`,
+      `${i}override val inputSerializer: KSerializer<Input> get() = Input.serializer()`,
+      `${i}override val resultSerializer: KSerializer<Result> get() = Result.serializer()`,
+      `${i}override val errorCodes: List<String> = listOf(${action.errors.map((e) => JSON.stringify(e.code)).join(", ")})`,
+      "",
+    );
+    if (action.errors.length === 0) {
+      body.push(
+        `${i}override fun decodeError(code: String, details: JsonElement?, json: Json): Nothing =`,
+        `${i}    throw IllegalArgumentException("${action.action} v${action.version} declares no errors, got $code")`,
+        "",
+        `${i}override fun encodeErrorDetails(error: Nothing, json: Json): JsonElement? = null`,
+      );
+    } else {
+      const sub = (code: string) => `Error.${pascalCase(code)}`;
+      body.push(
+        `${i}override fun decodeError(code: String, details: JsonElement?, json: Json): Error = when (code) {`,
+      );
+      for (const e of action.errors) {
+        const value = e.details
+          ? `${sub(e.code)}(json.decodeFromJsonElement(${name}.${e.path[e.path.length - 1]}.serializer(), details ?: JsonNull))`
+          : sub(e.code);
+        body.push(`${i}    ${JSON.stringify(e.code)} -> ${value}`);
+      }
+      body.push(
+        `${i}    else -> throw IllegalArgumentException("${action.action} v${action.version} doesn't declare $code")`,
+        `${i}}`,
+        "",
+        `${i}override fun encodeErrorDetails(error: Error, json: Json): JsonElement? = when (error) {`,
+      );
+      for (const e of action.errors) {
+        body.push(
+          e.details
+            ? `${i}    is ${sub(e.code)} -> json.encodeToJsonElement(${name}.${e.path[e.path.length - 1]}.serializer(), error.details)`
+            : `${i}    ${sub(e.code)} -> null`,
+        );
+      }
+      body.push(`${i}}`);
+    }
+    body.push("");
+    emitObject(action.input, i, undefined, `The input of ${label}.`);
+    body.push("");
+    emitObject(action.result, i, undefined, `The result of ${label}.`);
+    if (action.errors.length) {
+      body.push(
+        "",
+        `${i}/**`,
+        `${i} * The errors ${label} declares. A newer composer may send codes this app doesn't know:`,
+        `${i} * \`ComposeClient.perform\` throws those as \`ActionFailure\`.`,
+        `${i} */`,
+        `${i}sealed interface ${errorType} : DeclaredError {`,
+      );
+      action.errors.forEach((e, n) => {
+        if (n > 0) body.push("");
+        doc(`${i}    `, e.description);
+        const cls = pascalCase(e.code);
+        body.push(
+          e.details
+            ? `${i}    data class ${cls}(val details: ${name}.${e.path[e.path.length - 1]}) : Error {`
+            : `${i}    data object ${cls} : Error {`,
+          `${i}        override val code: String get() = ${JSON.stringify(e.code)}`,
+          `${i}    }`,
+        );
+      });
+      body.push(`${i}}`);
+      for (const e of action.errors) {
+        if (!e.details) continue;
+        body.push("");
+        emitObject(e.details, i, undefined, `The details of ${JSON.stringify(e.code)}.`);
+      }
+    }
+    body.push("}");
+  };
+
   islands.forEach((island, i) => {
     if (i > 0) body.push("");
     emitObject(island.props, "", island);
   });
+  for (const action of actions) {
+    body.push("");
+    emitAction(action);
+  }
 
   const imports = [
-    "dev.clientcompose.IslandDescriptor",
+    ...(actions.length ? ["dev.clientcompose.ActionDescriptor"] : []),
+    ...(actions.some((a) => a.errors.length) ? ["dev.clientcompose.DeclaredError"] : []),
+    ...(islands.length ? ["dev.clientcompose.IslandDescriptor"] : []),
     "kotlinx.serialization.KSerializer",
     ...(usesSerialName ? ["kotlinx.serialization.SerialName"] : []),
     "kotlinx.serialization.Serializable",
+    ...(actions.length
+      ? ["kotlinx.serialization.json.Json", "kotlinx.serialization.json.JsonElement"]
+      : []),
+    ...(actions.some((a) => a.errors.some((e) => e.details))
+      ? ["kotlinx.serialization.json.JsonNull"]
+      : []),
   ];
   return (
     [
