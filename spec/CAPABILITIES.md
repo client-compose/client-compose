@@ -54,7 +54,7 @@ them to say what they add.
 | CMP-13 | **In-process testing.** Call a screen or action from a test without a server, with every island declared, and read the outcome as typed values. | — |
 | CMP-14 | **Conformance server.** A test-only binary that passes the composer suite. | §8.1 |
 | CMP-15 | **App context.** One function turns the incoming request into the app's own context (the viewer, their locale, a tenant), which every layout, island and action receives. | §3 |
-| CMP-16 | **Requirements.** Screens and actions declare what they need, such as a signed-in viewer or a role, and the composer answers 401 or 403 before any of their code runs. What "signed in" means comes from the app context (CMP-15). | §4.3 |
+| CMP-16 | **Requirements.** Screens and actions declare what they need, such as a signed-in viewer, a role, or (for screens) that what the params refer to exists and the viewer may see it. The composer answers 401, 403 or 404 before any of their islands or handler runs. Requirements see the app context (CMP-15) and the request. | §4.3 |
 | CMP-17 | **Plugins.** Integrations hook into a composer through a small, documented set of extension points (see [The composer as a platform](#the-composer-as-a-platform)), never by forking or wrapping the core. | — |
 
 ## The composer as a platform

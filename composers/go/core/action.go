@@ -165,7 +165,11 @@ func (c *Composer) performAction(ctx context.Context, req ActionRequest) Result 
 	ctx, endRequest := withRequestScope(ctx)
 	defer endRequest()
 
-	if err := check(ctx, action.requires); err != nil {
+	var client ClientContext
+	if req.Client != nil {
+		client = *req.Client
+	}
+	if err := check(ctx, action.requires, Request{Client: client, Params: map[string]string{}}); err != nil {
 		if res, ok := protocolError(err); ok {
 			return res
 		}

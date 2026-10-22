@@ -34,6 +34,7 @@ export {
   type Plugin,
   reportErrors,
   type Requirement,
+  type RequirementRequest,
   type ResolveFn,
 } from "./plugins.ts";
 export type { ComposeResult, PerformResult } from "./results.ts";

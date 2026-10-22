@@ -1,20 +1,34 @@
 // Extension points (spec/CAPABILITIES.md): requirements, plugins and failure reports.
 
-import type { ActionRequest, ScreenRequest } from "@client-compose/protocol";
+import type { ActionRequest, ClientContext, ScreenRequest } from "@client-compose/protocol";
 
 import type { ComposeResult, PerformResult } from "./results.ts";
 import type { Island, ResolveContext } from "./screens.ts";
 
+/** What a requirement sees of the request besides the context. */
+export interface RequirementRequest {
+  /** The screen being composed; undefined for an action. */
+  screen?: string;
+  /** The screen's params; empty for an action, which checks its input itself. */
+  params: Record<string, string>;
+  client: ClientContext;
+}
+
 /**
- * Must hold before a screen's layout or an action's handler runs (CMP-16). Throw
- * UnauthenticatedError or ForbiddenError and the client gets 401 or 403. Requirements usually read
- * what your `context` function put on the context:
+ * Must hold before a screen's islands or an action's handler run (CMP-16). Throw
+ * UnauthenticatedError, ForbiddenError or NotFoundError and the client gets 401, 403 or 404.
+ * Requirements read what your `context` function put on the context and, for screens, the params:
  *
  *     const signedIn: Requirement<Ctx> = (ctx) => {
  *       if (!ctx.viewer) throw new UnauthenticatedError();
  *     };
+ *
+ *     // 404 for a recipe that doesn't exist, 403 unless the viewer may edit it.
+ *     const editsRecipe: Requirement<Ctx> = async (ctx, { params }) => {
+ *       await recipes.editable(ctx.viewer, params.recipeId);
+ *     };
  */
-export type Requirement<Ctx> = (ctx: Ctx) => void | Promise<void>;
+export type Requirement<Ctx> = (ctx: Ctx, request: RequirementRequest) => void | Promise<void>;
 
 /** Composes a screen. */
 export type ComposeFn<Ctx> = (req: ScreenRequest, ctx: Ctx) => Promise<ComposeResult>;
@@ -79,9 +93,12 @@ export interface Plugin<Ctx, Req = unknown> {
   error?: (failure: Failure) => void;
 }
 
-/** A plugin that passes every failure to `report`, e.g. to log it. */
-export function reportErrors<Ctx, Req = unknown>(
-  report: (failure: Failure) => void,
-): Plugin<Ctx, Req> {
+/**
+ * A plugin that passes every failure to `report`, e.g. to log it. It has only an `error` hook, so it
+ * fits any composer whatever its context and request types.
+ */
+export function reportErrors(report: (failure: Failure) => void): {
+  error: (failure: Failure) => void;
+} {
   return { error: report };
 }

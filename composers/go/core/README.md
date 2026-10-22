@@ -50,7 +50,9 @@ A screen lists its islands in order. Each placement can say:
   sent; if there's none, the island is left out (`cc.Versions(v1, v2)`).
 - `Required`: the screen fails without it.
 - `Timeout`: overrides `Config.DefaultTimeout` (2s).
-- `When`: decides per request whether it appears, e.g. no follow button on your own profile.
+- `When`: decides per request whether it appears, e.g. no follow button on your own profile. It
+  can load data (sharing loads with the islands), and its errors are handled like a layout's: a
+  `cc.ErrNotFound` answers 404.
 
 `cc.Static(key, props)` places an island whose props are known up front: a form, a heading.
 
@@ -78,17 +80,27 @@ func viewerContext(ctx context.Context, r *http.Request) (context.Context, error
 }
 ```
 
-A `cc.Requirement` checks that context before a screen or action runs. Return `cc.ErrUnauthenticated`
-or `cc.ErrForbidden` and the app gets 401 or 403, without your layout or handler running:
+A `cc.Requirement` checks the context and the request before a screen or action runs. Return
+`cc.ErrUnauthenticated`, `cc.ErrForbidden` or `cc.ErrNotFound` and the app gets 401, 403 or 404,
+without your islands or handler running:
 
 ```go
-var signedIn cc.Requirement = func(ctx context.Context) error {
+var signedIn cc.Requirement = func(ctx context.Context, _ cc.Request) error {
 	if _, ok := viewerFrom(ctx); !ok {
 		return cc.ErrUnauthenticated
 	}
 	return nil
 }
+
+// A screen for editing a recipe: 404 if there's no such recipe, 403 unless the viewer may edit it.
+editsRecipe := func(ctx context.Context, r cc.Request) error {
+	_, err := recipes.Editable(ctx, r.Params["recipeId"])
+	return err
+}
 ```
+
+Requirements run in order, so put `signedIn` first. An action's requirements see its client context
+but no params; check its input in the action itself.
 
 Islands and actions can also return those errors (wrapped or not) when they find out late.
 

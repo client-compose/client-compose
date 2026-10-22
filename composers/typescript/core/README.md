@@ -55,7 +55,9 @@ A screen lists its islands in order. `place(key, versions, options)` puts one th
   if there's none, the island is left out.
 - **`required`**: the screen fails without it.
 - **`timeoutMs`**: overrides `defaultTimeoutMs` (2000).
-- **`when`**: decides per request whether it appears, e.g. no follow button on your own profile.
+- **`when`**: decides per request whether it appears, e.g. no follow button on your own profile. It
+  can load data (sharing loads with the islands), and what it throws is handled like a layout's:
+  `NotFoundError` answers 404.
 
 `placeStatic(key, Descriptor, props)` places an island whose props are known up front: a form, a
 heading.
@@ -82,14 +84,23 @@ request: a fetch `Request` by default, or whatever your adapter passes (an Expre
 a node:http `IncomingMessage`). Say which with the composer's second type parameter:
 `createComposer<Ctx, express.Request>(…)`.
 
-A requirement checks the context before a screen or action runs. Throw `UnauthenticatedError` or
-`ForbiddenError` and the app gets 401 or 403, without your layout or action running:
+A requirement checks the context and the request before a screen or action runs. Throw
+`UnauthenticatedError`, `ForbiddenError` or `NotFoundError` and the app gets 401, 403 or 404,
+without your islands or action running:
 
 ```ts
 const signedIn: Requirement<Ctx> = (ctx) => {
   if (!ctx.viewer) throw new UnauthenticatedError();
 };
+
+// A screen for editing a recipe: 404 if there's no such recipe, 403 unless the viewer may edit it.
+const editsRecipe: Requirement<Ctx> = async (ctx, { params }) => {
+  await recipes.editable(ctx.viewer, params.recipeId);
+};
 ```
+
+Requirements run in order, so put `signedIn` first. An action's requirements see its client context
+but no params; check its input in the action itself.
 
 Islands and actions can throw those errors too, when they find out late.
 

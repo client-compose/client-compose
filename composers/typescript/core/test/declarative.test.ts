@@ -7,9 +7,11 @@ import {
   createComposer,
   defineBatchLoader,
   type Failure,
+  ForbiddenError,
   island,
   type IslandDescriptor,
   LoadNotFoundError,
+  NotFoundError,
   place,
   placeStatic,
   type Plugin,
@@ -89,6 +91,50 @@ test("requirements and the context function answer 401 before anything runs", as
   assert.equal(ran, false);
   const done = await app.perform(ConformanceV1, { outcome: "ok", echo: "hi" }, as("ada"));
   assert.deepEqual([done.status, done.result], ["ok", { echo: "hi", version: 1 }]);
+});
+
+test("requirements see params, and `when` can fail like a layout", async () => {
+  const ownProfileOnly: Requirement<Ctx> = (ctx, { params }) => {
+    if (params.userId === "nobody") throw new NotFoundError();
+    if (ctx.viewer !== params.userId) throw new ForbiddenError();
+  };
+  const profile = screen<Ctx>("profile", {
+    requires: [signedIn, ownProfileOnly],
+    islands: [
+      place("header", header),
+      {
+        ...placeStatic("edit", FormV1, { label: "Edit" }),
+        when: ({ params }) => {
+          if (params.form === "gone") throw new NotFoundError();
+          if (params.form === "broken") throw new Error("forms service down");
+          return true;
+        },
+      },
+    ],
+  });
+  const failures: Failure[] = [];
+  const app = testComposer(
+    createComposer({
+      screens: [profile],
+      context: viewerFrom,
+      use: [reportErrors((f) => failures.push(f))],
+    }),
+  );
+  const cases: [Record<string, string>, number, string | undefined][] = [
+    [{ userId: "ada" }, 200, undefined],
+    [{ userId: "grace" }, 403, "forbidden"],
+    [{ userId: "nobody" }, 404, "not_found"],
+    [{ userId: "ada", form: "gone" }, 404, "not_found"],
+    [{ userId: "ada", form: "broken" }, 500, "layout_failed"],
+  ];
+  for (const [params, status, error] of cases) {
+    const s = await app.screen("profile", params, as("ada"));
+    assert.deepEqual([s.status, s.error], [status, error], JSON.stringify(params));
+  }
+  assert.deepEqual(
+    failures.map((f) => [f.kind, (f.error as Error).message]),
+    [["layout", "forms service down"]],
+  );
 });
 
 test("plugins wrap in order, add context, and hear failures", async () => {
