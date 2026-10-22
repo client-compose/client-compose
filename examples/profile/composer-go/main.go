@@ -106,8 +106,8 @@ func profileScreen(s Services) cc.Screen {
 	})
 
 	// Server-side decision: no follow button on your own profile, or when signed out.
-	someoneElses := func(ctx context.Context, r cc.Request) bool {
-		return viewer(ctx) != "" && viewer(ctx) != r.Params["userId"]
+	someoneElses := func(ctx context.Context, r cc.Request) (bool, error) {
+		return viewer(ctx) != "" && viewer(ctx) != r.Params["userId"], nil
 	}
 
 	return cc.Screen{

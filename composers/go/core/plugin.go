@@ -82,21 +82,30 @@ func ReportErrors(report func(ctx context.Context, f Failure)) Plugin {
 	return Plugin{Error: report}
 }
 
-// A Requirement must hold before a screen's layout or an action's handler runs (CMP-16). Return
-// an error wrapping ErrUnauthenticated or ErrForbidden; the client gets 401 or 403. Requirements
-// usually read what a Context function put on the context:
+// A Requirement must hold before a screen's islands or an action's handler run (CMP-16). Return an
+// error wrapping ErrUnauthenticated, ErrForbidden or ErrNotFound; the client gets 401, 403 or 404.
+// Requirements read what a Context function put on the context, and, for screens, the request's
+// params:
 //
-//	var signedIn cc.Requirement = func(ctx context.Context) error {
+//	var signedIn cc.Requirement = func(ctx context.Context, _ cc.Request) error {
 //		if _, ok := viewerFrom(ctx); !ok {
 //			return cc.ErrUnauthenticated
 //		}
 //		return nil
 //	}
-type Requirement func(ctx context.Context) error
+//
+//	// 404 for a recipe that doesn't exist, 403 unless the viewer may edit it.
+//	editsRecipe := func(ctx context.Context, r cc.Request) error {
+//		_, err := recipes.Editable(ctx, r.Params["recipeId"])
+//		return err
+//	}
+//
+// For an action, the request has its client context but no params: check the input in the action.
+type Requirement func(ctx context.Context, r Request) error
 
-func check(ctx context.Context, requirements []Requirement) error {
+func check(ctx context.Context, requirements []Requirement, req Request) error {
 	for _, r := range requirements {
-		if err := r(ctx); err != nil {
+		if err := r(ctx, req); err != nil {
 			return err
 		}
 	}

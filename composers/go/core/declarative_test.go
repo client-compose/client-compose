@@ -33,7 +33,7 @@ func (formV1) IslandVersion() int { return 1 }
 type viewerKey struct{}
 
 // signedIn and the context function are what an auth integration would provide.
-var signedIn cc.Requirement = func(ctx context.Context) error {
+var signedIn cc.Requirement = func(ctx context.Context, _ cc.Request) error {
 	if _, ok := ctx.Value(viewerKey{}).(string); !ok {
 		return cc.ErrUnauthenticated
 	}
@@ -65,7 +65,9 @@ func profileScreen() cc.Screen {
 }
 
 func TestDeclaredScreens(t *testing.T) {
-	ownProfile := func(ctx context.Context, r cc.Request) bool { return ctx.Value(viewerKey{}) == r.Params["userId"] }
+	ownProfile := func(ctx context.Context, r cc.Request) (bool, error) {
+		return ctx.Value(viewerKey{}) == r.Params["userId"], nil
+	}
 	screen := profileScreen()
 	screen.Islands[1].When = ownProfile
 	app := cctest.New(t, cc.New(cc.Config{Screens: []cc.Screen{screen}, Context: viewerFromHeader}))
@@ -111,6 +113,56 @@ func TestRequirementsAndContext(t *testing.T) {
 	}
 	if out := cctest.Perform(app, input, cctest.Header("Authorization", "ada")); out.Status != "ok" || out.Result.Echo != "hi" {
 		t.Fatalf("action signed in: %+v", out)
+	}
+}
+
+func TestRequirementsSeeParamsAndWhenCanFail(t *testing.T) {
+	// The viewer may only see their own profile; missing profiles are 404s.
+	ownProfileOnly := func(ctx context.Context, r cc.Request) error {
+		switch id := r.Params["userId"]; {
+		case id == "nobody":
+			return fmt.Errorf("profile %s: %w", id, cc.ErrNotFound)
+		case ctx.Value(viewerKey{}) != id:
+			return cc.ErrForbidden
+		}
+		return nil
+	}
+	screen := profileScreen()
+	screen.Requires = []cc.Requirement{signedIn, ownProfileOnly}
+	screen.Islands[1].When = func(_ context.Context, r cc.Request) (bool, error) {
+		switch r.Params["form"] {
+		case "gone":
+			return false, cc.ErrNotFound
+		case "broken":
+			return false, errors.New("forms service down")
+		}
+		return true, nil
+	}
+	var failures []cc.Failure
+	app := cctest.New(t, cc.New(cc.Config{
+		Screens: []cc.Screen{screen},
+		Context: viewerFromHeader,
+		Use:     []cc.Plugin{cc.ReportErrors(func(_ context.Context, f cc.Failure) { failures = append(failures, f) })},
+	}))
+	ada := cctest.Header("Authorization", "ada")
+
+	for _, tc := range []struct {
+		params cctest.Params
+		status int
+		error  string
+	}{
+		{cctest.Params{"userId": "ada"}, 200, ""},
+		{cctest.Params{"userId": "grace"}, 403, "forbidden"},
+		{cctest.Params{"userId": "nobody"}, 404, "not_found"},
+		{cctest.Params{"userId": "ada", "form": "gone"}, 404, "not_found"},
+		{cctest.Params{"userId": "ada", "form": "broken"}, 500, "layout_failed"},
+	} {
+		if s := app.Screen("profile", tc.params, ada); s.Status != tc.status || s.Error != tc.error {
+			t.Errorf("%v: %d %s, want %d %s", tc.params, s.Status, s.Error, tc.status, tc.error)
+		}
+	}
+	if len(failures) != 1 || failures[0].Kind != cc.LayoutFailed || failures[0].Err.Error() != "forms service down" {
+		t.Fatalf("failures %+v", failures)
 	}
 }
 
@@ -161,7 +213,7 @@ func TestPluginsWrapInOrderAndHearFailures(t *testing.T) {
 
 func TestConfigMistakesPanic(t *testing.T) {
 	for name, cfg := range map[string]cc.Config{
-		"two screens with one id": {Screens: []cc.Screen{profileScreen(), profileScreen()}},
+		"two screens with one id":      {Screens: []cc.Screen{profileScreen(), profileScreen()}},
 		"neither islands nor a layout": {Screens: []cc.Screen{{ID: "empty"}}},
 		"both islands and a layout": {Screens: []cc.Screen{{
 			ID:      "both",

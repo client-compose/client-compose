@@ -216,7 +216,9 @@ export function createComposer<Ctx = undefined, Req = Request>(
     screen: Screen<Ctx>,
     lc: LayoutContext<Ctx>,
   ): Promise<Placement<Ctx>[]> {
-    for (const requirement of screen.requires ?? []) await requirement(lc.ctx);
+    for (const requirement of screen.requires ?? []) {
+      await requirement(lc.ctx, { screen: lc.screen, params: lc.params, client: lc.client });
+    }
     if (screen.layout) return screen.layout(lc);
     const shown = await Promise.all(
       (screen.islands ?? []).map(async (p) => !p.when || (await p.when(lc))),

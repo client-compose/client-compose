@@ -94,7 +94,9 @@ export async function performAction<Ctx>(
   const reportFailure = (error: unknown) =>
     report({ kind: "action", action: descriptor.action, version: descriptor.version, error });
   try {
-    for (const requirement of handler.requires ?? []) await requirement(ctx);
+    for (const requirement of handler.requires ?? []) {
+      await requirement(ctx, { params: {}, client: req.client });
+    }
   } catch (err) {
     const res = protocolError(err);
     if (res) return res;

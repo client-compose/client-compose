@@ -66,8 +66,10 @@ type Placement struct {
 	Required bool
 	// Timeout overrides Config.DefaultTimeout for this island.
 	Timeout time.Duration
-	// When, if set, decides per request whether the island appears.
-	When func(ctx context.Context, r Request) bool
+	// When, if set, decides per request whether the island appears. Its loads are shared with the
+	// islands'. An error is handled like a Layout's: ErrNotFound, ErrUnauthenticated and ErrForbidden
+	// answer 404, 401 and 403, and anything else fails the screen.
+	When func(ctx context.Context, r Request) (bool, error)
 }
 
 // Static places an island whose props are known up front: a form, a button, a heading.
@@ -302,14 +304,20 @@ func (c *Composer) placements(ctx context.Context, screen Screen, r Request) (ou
 			err = fmt.Errorf("layout panicked: %v", rec)
 		}
 	}()
-	if err := check(ctx, screen.Requires); err != nil {
+	if err := check(ctx, screen.Requires, r); err != nil {
 		return nil, err
 	}
 	if screen.Layout != nil {
 		return screen.Layout(ctx, r)
 	}
 	for _, p := range screen.Islands {
-		if p.When == nil || p.When(ctx, r) {
+		show := true
+		if p.When != nil {
+			if show, err = p.When(ctx, r); err != nil {
+				return nil, err
+			}
+		}
+		if show {
 			out = append(out, p)
 		}
 	}
