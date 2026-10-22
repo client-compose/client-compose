@@ -240,3 +240,31 @@ func (l *BatchLoader[K, V]) fetchSafely(ctx context.Context, keys []K) (values m
 	}()
 	return l.fetch(ctx, keys)
 }
+
+// LoadMany returns the values for keys, batched as Load does, so they share one fetch with each
+// other and with every other island's keys. It fails if any key fails, missing keys included.
+func (l *BatchLoader[K, V]) LoadMany(ctx context.Context, keys []K) (map[K]V, error) {
+	out := make(map[K]V, len(keys))
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	errs := make([]error, len(keys))
+	for i, key := range keys {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			v, err := l.Load(ctx, key)
+			if err != nil {
+				errs[i] = fmt.Errorf("%v: %w", key, err)
+				return
+			}
+			mu.Lock()
+			out[key] = v
+			mu.Unlock()
+		}()
+	}
+	wg.Wait()
+	if err := errors.Join(errs...); err != nil {
+		return nil, err
+	}
+	return out, nil
+}

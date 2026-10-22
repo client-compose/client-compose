@@ -15,10 +15,10 @@ import (
 func main() {
 	addr := flag.String("addr", ":4100", "listen address")
 	flag.Parse()
-	c := clientcompose.New(
-		[]clientcompose.Screen{clientcompose.ConformanceScreen()},
-		clientcompose.WithActions(clientcompose.ConformanceActions()...),
-	)
+	c := clientcompose.New(clientcompose.Config{
+		Screens: []clientcompose.Screen{clientcompose.ConformanceScreen()},
+		Actions: clientcompose.ConformanceActions(),
+	})
 	log.Printf("conformance server on %s", *addr)
-	log.Fatal(http.ListenAndServe(*addr, c.Handler()))
+	log.Fatal(http.ListenAndServe(*addr, c))
 }

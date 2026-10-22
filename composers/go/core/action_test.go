@@ -15,7 +15,7 @@ func perform(t *testing.T, c *Composer, input string) (int, map[string]any) {
 	t.Helper()
 	body := `{"protocol":0,"action":"conformance","version":1,"client":{"platform":"web","appVersion":"1"},"input":` + input + `}`
 	rec := httptest.NewRecorder()
-	c.Handler().ServeHTTP(rec, httptest.NewRequest("POST", "/actions/conformance", strings.NewReader(body)))
+	c.ServeHTTP(rec, httptest.NewRequest("POST", "/actions/conformance", strings.NewReader(body)))
 	var out map[string]any
 	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
 		t.Fatalf("decode %q: %v", rec.Body.String(), err)
@@ -31,8 +31,8 @@ func errorCode(body map[string]any) string {
 
 type handler func(context.Context, Call, ca.ConformanceV1Input) (ca.ConformanceV1Result, Effects, error)
 
-func composerWith(h handler, opts ...Option) *Composer {
-	return New(nil, append([]Option{WithActions(DefineAction(h))}, opts...)...)
+func composerWith(h handler, plugins ...Plugin) *Composer {
+	return New(Config{Actions: []Action{DefineAction(h)}, Use: plugins})
 }
 
 func TestActionPanicIsAFailureAndIsReported(t *testing.T) {
@@ -41,8 +41,8 @@ func TestActionPanicIsAFailureAndIsReported(t *testing.T) {
 		func(context.Context, Call, ca.ConformanceV1Input) (ca.ConformanceV1Result, Effects, error) {
 			panic("boom")
 		},
-		WithActionErrorHandler(func(_ context.Context, action string, version int, err error) {
-			reported = fmt.Errorf("%s v%d: %w", action, version, err)
+		ReportErrors(func(_ context.Context, f Failure) {
+			reported = fmt.Errorf("%s v%d: %w", f.Action, f.Version, f.Err)
 		}),
 	)
 	status, body := perform(t, c, `{"outcome":"ok","echo":"x"}`)
@@ -91,7 +91,7 @@ func TestActionsShareRequestScopedLoads(t *testing.T) {
 }
 
 func TestEmptyResultIsAnObject(t *testing.T) {
-	c := New(nil, WithActions(ConformanceActions()...))
+	c := New(Config{Actions: ConformanceActions()})
 	res := c.Perform(context.Background(), ActionRequest{
 		Protocol: new(int), Action: "conformance", Version: 1, Input: json.RawMessage(`{"outcome":"ok","echo":""}`),
 	})
@@ -108,14 +108,14 @@ func TestRegisteringAnActionVersionTwicePanics(t *testing.T) {
 		}
 	}()
 	actions := ConformanceActions()
-	New(nil, WithActions(actions[0], actions[0]))
+	New(Config{Actions: []Action{actions[0], actions[0]}})
 }
 
 func TestLayoutAuthErrors(t *testing.T) {
 	for want, err := range map[int]error{401: ErrUnauthenticated, 403: ErrForbidden} {
-		c := New([]Screen{{ID: "s", Layout: func(context.Context, Request) ([]Placement, error) {
+		c := New(Config{Screens: []Screen{{ID: "s", Layout: func(context.Context, Request) ([]Placement, error) {
 			return nil, fmt.Errorf("checking session: %w", err)
-		}}})
+		}}}})
 		res := c.Compose(context.Background(), ScreenRequest{Protocol: new(int), Screen: "s", Client: &ClientContext{}})
 		if res.Status != want {
 			t.Errorf("%v: status %d, want %d", err, res.Status, want)

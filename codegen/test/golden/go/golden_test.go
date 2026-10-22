@@ -60,9 +60,16 @@ func TestDefineActionWithGeneratedTypes(t *testing.T) {
 	if rename.Name != "rename-thing" || rename.Version != 1 {
 		t.Fatalf("got %s v%d", rename.Name, rename.Version)
 	}
-	c := cc.New(nil, cc.WithActions(rename, cc.DefineAction(func(context.Context, cc.Call, PingV1Input) (PingV1Result, cc.Effects, error) {
+	c := cc.New(cc.Config{Actions: []cc.Action{rename, cc.DefineAction(func(context.Context, cc.Call, PingV1Input) (PingV1Result, cc.Effects, error) {
 		return PingV1Result{}, cc.Effects{}, nil
-	})))
+	})}})
+	perform := func(body string) cc.Result {
+		var req cc.ActionRequest
+		if err := json.Unmarshal([]byte(body), &req); err != nil {
+			t.Fatal(err)
+		}
+		return c.Perform(context.Background(), req)
+	}
 
 	for input, want := range map[string]string{
 		`{"thingId":"t1","name":"New"}`:                      `"status":"ok","result":{"thing":{"id":"t1","name":"New"}},"effects":{"invalidate":[{"screen":"thing","params":{"thingId":"t1"}}]}`,
@@ -71,13 +78,13 @@ func TestDefineActionWithGeneratedTypes(t *testing.T) {
 		`{"thingId":"t1","name":"x","visibility":"secret"}`:  `"code":"invalid_input","message":"input.visibility: expected one of public, private"`,
 	} {
 		body := `{"protocol":0,"action":"rename-thing","version":1,"client":{"platform":"web","appVersion":"1"},"input":` + input + `}`
-		res := c.PerformHTTP(context.Background(), "rename-thing", strings.NewReader(body))
+		res := perform(body)
 		out, _ := json.Marshal(res.Body)
 		if !strings.Contains(string(out), want) {
 			t.Errorf("%s:\n got %s\nwant %s", input, out, want)
 		}
 	}
-	res := c.PerformHTTP(context.Background(), "ping", strings.NewReader(`{"protocol":0,"action":"ping","version":1,"client":{"platform":"web","appVersion":"1"},"input":{}}`))
+	res := perform(`{"protocol":0,"action":"ping","version":1,"client":{"platform":"web","appVersion":"1"},"input":{}}`)
 	if out, _ := json.Marshal(res.Body); !strings.Contains(string(out), `"result":{}`) {
 		t.Errorf("ping: %s", out)
 	}

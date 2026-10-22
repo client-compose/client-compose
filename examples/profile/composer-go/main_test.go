@@ -2,70 +2,46 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"net/http"
-	"net/http/httptest"
-	"strings"
+	"slices"
 	"sync/atomic"
 	"testing"
+
+	"github.com/client-compose/client-compose/composers/go/core/cctest"
 )
 
-type island struct {
-	Key     string         `json:"key"`
-	Version int            `json:"version"`
-	Status  string         `json:"status"`
-	Props   map[string]any `json:"props"`
-}
+var profile = cctest.Params{"userId": "u_1"}
 
-func fetchProfile(t *testing.T, h http.Handler, viewerID, capabilities string) []island {
-	t.Helper()
-	body := `{"protocol":0,"screen":"profile","params":{"userId":"u_1"},` +
-		`"client":{"platform":"android","appVersion":"1.0.0"},"islands":` + capabilities + `}`
-	req := httptest.NewRequest("POST", "/screens/profile", strings.NewReader(body))
-	req.Header.Set("X-User-Id", viewerID)
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-	if rec.Code != 200 {
-		t.Fatalf("status %d: %s", rec.Code, rec.Body)
-	}
-	var res struct{ Islands []island }
-	if err := json.Unmarshal(rec.Body.Bytes(), &res); err != nil {
-		t.Fatal(err)
-	}
-	return res.Islands
-}
+// signedInAs is the header the example's context function reads the viewer from.
+func signedInAs(id string) cctest.RequestOption { return cctest.Header("X-User-Id", id) }
 
-func keys(islands []island) string {
-	var ks []string
-	for _, i := range islands {
-		ks = append(ks, i.Key)
-	}
-	return strings.Join(ks, ",")
+// newApp is an app built today: it declares every island the composer places.
+func newApp(t *testing.T, s Services) *cctest.App {
+	return cctest.New(t, newComposer(s))
 }
 
 func TestNewAppGetsLatestHeader(t *testing.T) {
-	got := fetchProfile(t, newHandler(fakeServices()), "u_2",
-		`{"profile-header":[1,2],"follow-button":[1],"post-grid":[1]}`)
-	if keys(got) != "header,follow,posts" || got[0].Version != 2 || got[0].Props["badge"] != "PRO" {
-		t.Fatalf("unexpected %+v", got)
+	got := newApp(t, fakeServices()).Screen("profile", profile, signedInAs("u_2"))
+	header := cctest.Props[ProfileHeaderV2](t, got, "header")
+	if !slices.Equal(got.Keys(), []string{"header", "follow", "posts"}) || header.Badge == nil || *header.Badge != "PRO" {
+		t.Fatalf("unexpected %+v", got.Response.Islands)
 	}
 }
 
 // The point of the protocol: an app version that shipped before v2 of the header and
 // before the follow button existed still gets a screen it can fully render.
 func TestOldAppStillWorks(t *testing.T) {
-	got := fetchProfile(t, newHandler(fakeServices()), "u_2", `{"profile-header":[1],"post-grid":[1]}`)
-	if keys(got) != "header,posts" || got[0].Version != 1 {
-		t.Fatalf("unexpected %+v", got)
+	old := cctest.New(t, newComposer(fakeServices()), cctest.Declare(ProfileHeaderV1{}, PostGridV1{}))
+	got := old.Screen("profile", profile, signedInAs("u_2"))
+	if !slices.Equal(got.Keys(), []string{"header", "posts"}) || cctest.Props[ProfileHeaderV1](t, got, "header").DisplayName == "" {
+		t.Fatalf("unexpected %+v", got.Response.Islands)
 	}
 }
 
 func TestNoFollowButtonOnOwnProfile(t *testing.T) {
-	got := fetchProfile(t, newHandler(fakeServices()), "u_1",
-		`{"profile-header":[1,2],"follow-button":[1],"post-grid":[1]}`)
-	if keys(got) != "header,posts" {
-		t.Fatalf("unexpected %+v", got)
+	got := newApp(t, fakeServices()).Screen("profile", profile, signedInAs("u_1"))
+	if !slices.Equal(got.Keys(), []string{"header", "posts"}) {
+		t.Fatalf("unexpected %v", got.Keys())
 	}
 }
 
@@ -77,9 +53,9 @@ func TestHeaderAndFollowButtonShareOneUserLookup(t *testing.T) {
 		calls.Add(1)
 		return getUser(ctx, id)
 	}
-	got := fetchProfile(t, newHandler(s), "u_2", `{"profile-header":[2],"follow-button":[1],"post-grid":[1]}`)
-	if keys(got) != "header,follow,posts" || got[1].Props["displayName"] != "Ada Lovelace" {
-		t.Fatalf("unexpected %+v", got)
+	got := newApp(t, s).Screen("profile", profile, signedInAs("u_2"))
+	if name := cctest.Props[FollowButtonV1](t, got, "follow").DisplayName; name == nil || *name != "Ada Lovelace" {
+		t.Fatalf("unexpected %+v", got.Response.Islands)
 	}
 	if calls.Load() != 1 {
 		t.Fatalf("GetUser called %d times, want 1", calls.Load())
@@ -89,8 +65,9 @@ func TestHeaderAndFollowButtonShareOneUserLookup(t *testing.T) {
 func TestPostsOutageDoesNotBreakScreen(t *testing.T) {
 	s := fakeServices()
 	s.RecentPosts = func(context.Context, string) ([]Post, error) { return nil, errors.New("posts service down") }
-	got := fetchProfile(t, newHandler(s), "u_2", `{"profile-header":[2],"post-grid":[1]}`)
-	if keys(got) != "header,posts" || got[0].Status != "ok" || got[1].Status != "error" {
-		t.Fatalf("unexpected %+v", got)
+	got := newApp(t, s).Screen("profile", profile, signedInAs("u_2"))
+	posts, _ := got.Island("posts")
+	if got.Status != 200 || posts.Status != "error" {
+		t.Fatalf("unexpected %+v", got.Response.Islands)
 	}
 }
