@@ -35,6 +35,11 @@ public enum JSONValue: Codable, Sendable, Equatable {
         }
     }
 
+    /// The JSON a value encodes to.
+    public init<T: Encodable>(encoding value: T) throws {
+        self = try JSONDecoder().decode(JSONValue.self, from: JSONEncoder().encode(value))
+    }
+
     /// Decode this value into a concrete type.
     public func decode<T: Decodable>(_ type: T.Type, using decoder: JSONDecoder = JSONDecoder()) throws -> T {
         try decoder.decode(T.self, from: JSONEncoder().encode(self))

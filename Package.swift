@@ -10,6 +10,7 @@ let package = Package(
     products: [
         .library(name: "ClientCompose", targets: ["ClientCompose"]),
         .library(name: "ClientComposeSwiftUI", targets: ["ClientComposeSwiftUI"]),
+        .library(name: "ClientComposeTesting", targets: ["ClientComposeTesting"]),
     ],
     targets: [
         .target(name: "ClientCompose", path: "clients/swift/Sources/ClientCompose"),
@@ -18,9 +19,14 @@ let package = Package(
             dependencies: ["ClientCompose"],
             path: "clients/swift/Sources/ClientComposeSwiftUI"
         ),
+        .target(
+            name: "ClientComposeTesting",
+            dependencies: ["ClientCompose"],
+            path: "clients/swift/Sources/ClientComposeTesting"
+        ),
         .testTarget(
             name: "ClientComposeTests",
-            dependencies: ["ClientCompose"],
+            dependencies: ["ClientCompose", "ClientComposeSwiftUI", "ClientComposeTesting"],
             path: "clients/swift/Tests/ClientComposeTests"
         ),
         // Compiles and exercises codegen's golden Swift output.

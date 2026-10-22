@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	cc "github.com/client-compose/client-compose/composers/go/core"
 	"github.com/client-compose/client-compose/composers/go/core/cctest"
 )
 
@@ -59,6 +60,22 @@ func TestHeaderAndFollowButtonShareOneUserLookup(t *testing.T) {
 	}
 	if calls.Load() != 1 {
 		t.Fatalf("GetUser called %d times, want 1", calls.Load())
+	}
+}
+
+func TestFollowingInvalidatesTheProfile(t *testing.T) {
+	app := newApp(t, fakeServices())
+	followed := cctest.Perform(app, FollowUserV1Input{UserID: "u_1", Follow: true}, signedInAs("u_2"))
+	want := cc.ScreenRef{Screen: "profile", Params: map[string]string{"userId": "u_1"}}
+	if followed.Status != "ok" || followed.Result.Followers != 1043 || len(followed.Effects.Invalidate) != 1 ||
+		followed.Effects.Invalidate[0].Screen != want.Screen || followed.Effects.Invalidate[0].Params["userId"] != "u_1" {
+		t.Fatalf("followed: %+v", followed)
+	}
+	if blocked := cctest.Perform(app, FollowUserV1Input{UserID: "u_blocker", Follow: true}, signedInAs("u_2")); blocked.Error != "blocked" {
+		t.Fatalf("blocked: %+v", blocked)
+	}
+	if signedOut := cctest.Perform(app, FollowUserV1Input{UserID: "u_1", Follow: true}); signedOut.Error != "unauthenticated" {
+		t.Fatalf("signed out: %+v", signedOut)
 	}
 }
 

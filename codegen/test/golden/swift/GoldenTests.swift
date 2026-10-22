@@ -25,4 +25,22 @@ final class GoldenTests: XCTestCase {
             .register(DividerV1.self) { _, _ in "divider" }
         XCTAssertEqual(registry.capabilities, ["kitchen-sink": [1], "divider": [1]])
     }
+
+    func testActionTypesEncodeInputAndDecodeErrors() throws {
+        let input = RenameThingV1.Input(thingId: "t1", name: "New", visibility: .private)
+        let json = try JSONDecoder().decode([String: String].self, from: JSONEncoder().encode(input))
+        XCTAssertEqual(json, ["thingId": "t1", "name": "New", "visibility": "private"])
+        let withoutOptional = try JSONDecoder().decode([String: String].self, from: JSONEncoder().encode(RenameThingV1.Input(thingId: "t1", name: "New")))
+        XCTAssertNil(withoutOptional["visibility"])
+
+        let taken = try RenameThingV1.DeclaredError(code: "name_taken", details: .object(["suggestions": .array([.string("New 2")])]))
+        XCTAssertEqual(taken, .nameTaken(.init(suggestions: ["New 2"])))
+        XCTAssertEqual(taken.code, "name_taken")
+        XCTAssertEqual(taken.details, .object(["suggestions": .array([.string("New 2")])]))
+        XCTAssertEqual(try RenameThingV1.DeclaredError(code: "locked", details: nil), .locked)
+        XCTAssertThrowsError(try RenameThingV1.DeclaredError(code: "archived", details: nil))
+        XCTAssertEqual(RenameThingV1.DeclaredError.codes, ["name_taken", "locked"])
+        XCTAssertEqual(PingV1.DeclaredError.codes, [])
+        XCTAssertEqual(RenameThingV1.action, "rename-thing")
+    }
 }

@@ -238,12 +238,12 @@ What makes these feel like one toolkit rather than six libraries:
 | Island version | `cc.Define(fn)` | `island(Props, fn)` | | | |
 | Action version | `cc.DefineAction(fn)` | `action(Action, fn)` | | | |
 | Shared load | `cc.Load(ctx, key, fn)` | `rc.load(key, fn)` | | | |
-| Client | | | `ClientComposeConfig` | *`ComposeClient`* | *`ComposeClient`* |
+| Client | | | `ClientComposeConfig` | `ComposeClient` | *`ComposeClient`* |
 | Register | | | `registry.registerComponent(Props, C)` | `registry.register(Props.self) { … }` | `registry.register(Props) { … }` |
 | Screen view | | | `<ComposedScreen>` | `ComposedScreen` | *`ComposedScreen()`* |
-| Screen state | | | `useScreen` | *`ScreenModel`* | *`ScreenState`* (`StateFlow`) |
-| Action | | | `useAction(Action)` | *`client.perform(Action.self, input)`* | *`client.perform(Action, input)`* |
-| Test kit | `cctest` | `@client-compose/composer/testing` | `@client-compose/react/testing` | *`ClientComposeTesting`* | *`client-compose-testing`* |
+| Screen state | | | `useScreen` | `ScreenModel` | *`ScreenState`* (`StateFlow`) |
+| Action | | | `useAction(Action)` | `client.perform(Action.self, input)`, `@ComposeAction(Action.self)` | *`client.perform(Action, input)`* |
+| Test kit | `cctest` | `@client-compose/composer/testing` | `@client-compose/react/testing` | `ClientComposeTesting` | *`client-compose-testing`* |
 
 Names in *italics* don't exist yet; the parity work below adds them.
 
@@ -272,23 +272,23 @@ Names in *italics* don't exist yet; the parity work below adds them.
 | | TypeScript / React | Swift / SwiftUI | Kotlin / Compose |
 | --- | --- | --- | --- |
 | CLI-1 registry | ✅ | ✅ | ✅ |
-| CLI-2 transport | ✅ | ◐ fixed headers only | ✅ pluggable |
+| CLI-2 transport | ✅ | ✅ async headers, pluggable `Transport` | ✅ pluggable |
 | CLI-3 planning | ✅ | ✅ | ✅ |
-| CLI-4 screen errors | ✅ `ScreenFetchError.code` | ◐ status and body | ◐ status and body |
-| CLI-5 actions | ✅ | ✗ | ✗ |
-| CLI-6 effects | ✅ | ✗ | ✗ |
-| CLI-7 cache | ✅ (in the binding) | ✗ | ✗ |
-| CLI-8 test kit | ✅ | ✗ | ✗ |
-| CLI-9 conformance | ✅ rendering, actions and effects | ◐ rendering only | ◐ rendering only |
-| UI-1 composed screen | ✅ | ◐ no not-found slot or container control | ✗ no Compose binding |
-| UI-2 screen state | ✅ `useScreen` | ✗ | ✗ |
-| UI-3 action state | ✅ `useAction` | ✗ | ✗ |
-| UI-4 invalidation | ✅ | ✗ | ✗ |
-| UI-5 navigation hook | ✅ | ✗ | ✗ |
+| CLI-4 screen errors | ✅ `ScreenFetchError.code` | ✅ `ScreenError.code` | ◐ status and body |
+| CLI-5 actions | ✅ | ✅ | ✗ |
+| CLI-6 effects | ✅ | ✅ | ✗ |
+| CLI-7 cache | ✅ (in the binding) | ✅ | ✗ |
+| CLI-8 test kit | ✅ | ✅ `FakeComposer` | ✗ |
+| CLI-9 conformance | ✅ rendering, actions and effects | ✅ rendering, actions and effects | ◐ rendering only |
+| UI-1 composed screen | ✅ | ✅ not found through `ScreenError` in the failure slot | ✗ no Compose binding |
+| UI-2 screen state | ✅ `useScreen` | ✅ `ScreenModel` | ✗ |
+| UI-3 action state | ✅ `useAction` | ✅ `@ComposeAction` | ✗ |
+| UI-4 invalidation | ✅ | ✅ | ✗ |
+| UI-5 navigation hook | ✅ | ✅ `onNavigate` | ✗ |
 | UI-6 crash isolation | ✅ error boundaries | ◐ decode failures only | ◐ decode failures only |
-| UI-7 meta | ✅ | ✗ decoded, not exposed | ✗ |
+| UI-7 meta | ✅ | ✅ navigation title, `ScreenModel.meta` | ✗ |
 | UI-8 cancellation | ✅ | ✅ `.task` | ✗ |
-| UI-9 testing | ✅ | ✗ | ✗ |
+| UI-9 testing | ✅ | ✅ `FakeComposer` with `ScreenModel` and `ActionModel` | ✗ |
 
 Swift can't catch a crashing view the way React can, so UI-6 there means decode failures and
 anything thrown while building an island's view.
@@ -298,7 +298,7 @@ anything thrown while building an island's view.
 | | Go | TypeScript | Swift | Kotlin |
 | --- | --- | --- | --- | --- |
 | TL-1 props | ✅ | ✅ | ✅ | ✅ |
-| TL-2 actions | ✅ | ✅ | ✗ | ✗ |
+| TL-2 actions | ✅ | ✅ | ✅ | ✗ |
 
 TL-3 to TL-5 are language-neutral and done.
 

@@ -80,3 +80,69 @@ public struct ScreenResponse: Decodable, Sendable {
     public let meta: ScreenMeta?
     public let cache: CacheHint?
 }
+
+/// Refers to screens: those with this id whose params include all of `params` (spec §5.3).
+public struct ScreenRef: Codable, Sendable, Hashable {
+    public let screen: String
+    public let params: [String: String]
+
+    public init(screen: String, params: [String: String] = [:]) {
+        self.screen = screen
+        self.params = params
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        screen = try c.decode(String.self, forKey: .screen)
+        params = try c.decodeIfPresent([String: String].self, forKey: .params) ?? [:]
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(screen, forKey: .screen)
+        if !params.isEmpty { try c.encode(params, forKey: .params) }
+    }
+
+    private enum CodingKeys: String, CodingKey { case screen, params }
+
+    /// Whether this reference matches a screen with this id and params.
+    public func matches(screen: String, params: [String: String]) -> Bool {
+        screen == self.screen && self.params.allSatisfy { params[$0.key] == $0.value }
+    }
+}
+
+/// What a successful action changed (spec §5.3). Unknown effects are ignored.
+public struct ActionEffects: Decodable, Sendable, Equatable {
+    /// Screens whose content may have changed. The client drops them from its cache and reloads the
+    /// ones on show.
+    public let invalidate: [ScreenRef]
+    /// A screen to show next. The client passes it to your navigation handler.
+    public let navigate: ScreenRef?
+
+    public init(invalidate: [ScreenRef] = [], navigate: ScreenRef? = nil) {
+        self.invalidate = invalidate
+        self.navigate = navigate
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        invalidate = try c.decodeIfPresent([ScreenRef].self, forKey: .invalidate) ?? []
+        navigate = try c.decodeIfPresent(ScreenRef.self, forKey: .navigate)
+    }
+
+    private enum CodingKeys: String, CodingKey { case invalidate, navigate }
+}
+
+/// The body of a failed screen or action request (spec §4.3).
+struct ErrorBody: Decodable {
+    struct Detail: Decodable {
+        let code: String?
+    }
+
+    let error: Detail?
+
+    /// The protocol error code in a response body, if it has one.
+    static func code(in data: Data) -> String? {
+        (try? JSONDecoder().decode(ErrorBody.self, from: data))?.error?.code
+    }
+}
