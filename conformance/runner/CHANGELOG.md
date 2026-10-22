@@ -1,5 +1,12 @@
 # @client-compose/conformance
 
+## 0.5.0
+
+### Minor Changes
+
+- [#16](https://github.com/client-compose/client-compose/pull/16) [`d736b2f`](https://github.com/client-compose/client-compose/commit/d736b2ff986f36257d40775e9ee55b7423f81c61) Thanks [@LewisYearsley](https://github.com/LewisYearsley)! - `runComposerCase`, `runActionCase` and `runComposerConformance` take an optional `fetch`, so the suite
+  can run in-process against a fetch-standard handler such as `composer.fetch`.
+
 ## 0.4.0
 
 ### Minor Changes
