@@ -171,6 +171,34 @@ export default async function Page({ params }: { params: Promise<{ userId: strin
   server. Errors thrown inside a Server Component island are re-thrown in the browser and caught
   there; to report those, put a `<ClientComposeProvider>` with `onRenderError` above the page.
 
+## Islands with pages
+
+A paged island (spec §4.5) gets its first page as props, and `next` in its entry while there are
+more. `usePages` fetches them, in the island's own component, from the screen it's on:
+
+```tsx
+function Results(props: ResultListV1) {
+  const { pages, status, loadMore } = usePages(props);
+  const items = pages.flatMap((page) => page.items);
+  return (
+    <FlatList
+      data={items}
+      renderItem={renderResult}
+      onEndReached={loadMore}
+      ListFooterComponent={status === "loading" ? <Spinner /> : null}
+    />
+  );
+}
+```
+
+`status` is `more`, `loading`, `end` or `failed` (with `error`: the island's error from the
+composer, or the request's; `loadMore` tries again). When the island is rendered with new props
+(the screen reloaded, or opened with other params) it starts again from them. On the web through
+your server, give `viaProxy` a `loadIsland` that calls `proxy.loadIsland`.
+
+In tests, answer island requests from `handlers.islands["{screen}/{key}"]` with
+`islandResponse(screen, island(key, ResultListV1, props, next))`.
+
 ## Actions
 
 **`useAction`** performs an action (spec §5) with its generated descriptor. `run` never rejects:

@@ -8,7 +8,15 @@ import {
   isProxiedActionRequest,
   isProxiedScreenRequest,
 } from "../src/proxy.ts";
-import { actionFailure, actionOk, createFakeGateway, screen, screenError } from "../src/testing.ts";
+import {
+  actionFailure,
+  actionOk,
+  createFakeGateway,
+  island,
+  islandResponse,
+  screen,
+  screenError,
+} from "../src/testing.ts";
 
 const SignIn: ActionDescriptor<{ email: string }, { token: string }, never> = {
   action: "sign-in",
@@ -118,4 +126,44 @@ test("guards accept requests with or without optional fields", () => {
   assert.ok(!isProxiedActionRequest({ protocol: 0, action: "a", version: 1 }));
   assert.ok(isProxiedScreenRequest({ ...screenBody, params: { id: "1" } }));
   assert.ok(!isProxiedScreenRequest({ ...screenBody, islands: { feed: ["1"] } }));
+});
+
+test("loads islands' pages with the server's client context, checking the request", async () => {
+  const List = { type: "list", version: 1 } as const;
+  const gateway = createFakeGateway({
+    islands: {
+      "search/results": () => islandResponse("search", island("results", List, { n: 2 }, "c3")),
+    },
+  });
+  const body = {
+    protocol: 0,
+    screen: "search",
+    key: "results",
+    version: 1,
+    params: { q: "a" },
+    cursor: "c2",
+    client: { platform: "evil", appVersion: "0" },
+  };
+  const result = await proxyFor(gateway).loadIsland(body);
+  assert.deepEqual(result.ok && result.response, {
+    key: "results",
+    type: "list",
+    version: 1,
+    status: "ok",
+    props: { n: 2 },
+    next: "c3",
+  });
+  const [sent] = gateway.islandRequests();
+  assert.deepEqual([sent?.client, sent?.cursor, sent?.params], [server, "c2", { q: "a" }]);
+  assert.equal(sent?.headers.authorization, "Bearer secret");
+
+  for (const bad of [
+    { ...body, version: "1" },
+    { ...body, cursor: 2 },
+    { ...body, key: undefined },
+  ]) {
+    const answered = await proxyFor(gateway).loadIsland(bad);
+    assert.equal(!answered.ok && answered.status, 400);
+  }
+  assert.equal(gateway.islandRequests().length, 1);
 });

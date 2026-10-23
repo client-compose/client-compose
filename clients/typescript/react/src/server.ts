@@ -10,7 +10,7 @@ import { createElement, Fragment, type ReactNode, Suspense } from "react";
 
 // Only components may be imported from the "use client" module here: from a Server Component,
 // they're client references that can be rendered, never called.
-import { IslandBoundary } from "./client.ts";
+import { IslandBoundary, IslandScope, type IslandScopeValue } from "./client.ts";
 import type { ScreenConfig } from "./config.ts";
 import { loadScreen } from "./load.ts";
 
@@ -78,6 +78,18 @@ async function ScreenIslands(props: ServerComposedScreenProps): Promise<ReactNod
     } catch (error) {
       config.onRenderError?.(island.key, error);
       continue;
+    }
+    // As on the client, it knows where it is, for its next page (usePages).
+    const entry = response.islands.find((e) => e.key === island.key);
+    if (entry?.status === "ok") {
+      const value: IslandScopeValue = {
+        screen: response.screen,
+        params: props.params ?? {},
+        key: entry.key,
+        version: entry.version,
+        ...(entry.next !== undefined && { next: entry.next }),
+      };
+      node = createElement(IslandScope, { value }, node);
     }
     // As on the client: its own <Suspense> so a server render error stays inside this island, and
     // IslandBoundary to hide it once the browser re-renders it.

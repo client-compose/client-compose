@@ -51,7 +51,8 @@ export async function resolveCached<Ctx>(
   report: (failure: Failure) => void,
 ): Promise<unknown> {
   const opts = call.island.cache;
-  if (!cache || !opts) return call.island.resolve(call.rc);
+  // A page depends on its cursor, and the cache keeps props alone, not where they go on.
+  if (!cache || !opts || call.island.paged) return call.island.resolve(call.rc);
   const appKey = opts.key(call.rc);
   if (!appKey) return call.island.resolve(call.rc);
   const key = `island:${call.island.type}:${call.island.version}:${appKey}`;

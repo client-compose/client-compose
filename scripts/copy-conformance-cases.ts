@@ -6,6 +6,7 @@ const root = new URL("../", import.meta.url);
 const out = new URL("conformance/runner/dist/cases/", root);
 mkdirSync(new URL("actions/", out), { recursive: true });
 copyFileSync(new URL("conformance/composer/cases.json", root), new URL("composer.json", out));
+copyFileSync(new URL("conformance/composer/island-cases.json", root), new URL("islands.json", out));
 copyFileSync(new URL("conformance/composer/action-cases.json", root), new URL("actions.json", out));
 copyFileSync(new URL("conformance/client/cases.json", root), new URL("client.json", out));
 copyFileSync(

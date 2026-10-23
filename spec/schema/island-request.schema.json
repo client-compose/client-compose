@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://client-compose.dev/schema/v0/island-request.json",
+  "title": "Island request",
+  "description": "Resolves one island of a screen again: its next page (with a cursor), or from its first page (spec \u00a74.5).",
+  "type": "object",
+  "required": [
+    "protocol",
+    "screen",
+    "key",
+    "version",
+    "client"
+  ],
+  "properties": {
+    "protocol": {
+      "const": 0
+    },
+    "screen": {
+      "type": "string",
+      "minLength": 1
+    },
+    "key": {
+      "type": "string",
+      "minLength": 1
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "params": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "client": {
+      "$ref": "screen-request.json#/properties/client"
+    },
+    "cursor": {
+      "type": "string",
+      "minLength": 1
+    }
+  }
+}

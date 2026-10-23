@@ -23,6 +23,20 @@ type mockPlacement struct {
 	LoadDelayMs int    `json:"loadDelayMs"`
 	// Wait this long before loading, so the case controls which island starts a shared load.
 	StartDelayMs int `json:"startDelayMs"`
+	// Pages, if set, gives the island that many pages (spec §4.5).
+	Pages int `json:"pages"`
+}
+
+// mockPage is the page a paged mock's cursor asks for: 1 without one, and only pages it has.
+func mockPage(cursor string, pages int) (int, error) {
+	if cursor == "" {
+		return 1, nil
+	}
+	var p int
+	if _, err := fmt.Sscanf(cursor, "page:%d", &p); err != nil || p < 2 || p > pages || cursor != fmt.Sprintf("page:%d", p) {
+		return 0, fmt.Errorf("conformance: cursor %q: %w", cursor, ErrInvalidCursor)
+	}
+	return p, nil
 }
 
 // ConformanceScreen is the test-only `__conformance` screen (spec §8.1).
@@ -61,6 +75,27 @@ func ConformanceScreen() Screen {
 			for _, m := range mocks {
 				p := Placement{Key: m.Key, Required: m.Required, Timeout: time.Duration(m.TimeoutMs) * time.Millisecond}
 				for _, v := range m.Versions {
+					if m.Pages > 0 {
+						p.Versions = append(p.Versions, NewPagedIsland(m.Type, v, func(ctx context.Context, r Request) (map[string]int, string, error) {
+							switch m.Outcome {
+							case "error":
+								return nil, "", errors.New("mock failure")
+							case "timeout":
+								<-ctx.Done()
+								return nil, "", ctx.Err()
+							}
+							page, err := mockPage(r.Cursor, m.Pages)
+							if err != nil {
+								return nil, "", err
+							}
+							next := ""
+							if page < m.Pages {
+								next = fmt.Sprintf("page:%d", page+1)
+							}
+							return map[string]int{"v": v, "page": page}, next, nil
+						}))
+						continue
+					}
 					p.Versions = append(p.Versions, NewIsland(m.Type, v, func(ctx context.Context, _ Request) (map[string]int, error) {
 						switch m.Outcome {
 						case "error":

@@ -66,3 +66,32 @@ test("fetch fails clearly without loadScreen", async () => {
   const transport = viaProxy({ performAction: async () => ({ ok: true, response: ok }) });
   await assert.rejects(transport.fetch("ignored", { body: "{}" }), /no loadScreen/);
 });
+
+test("fetch hands an island request to loadIsland, and answers like the composer", async () => {
+  const entry = {
+    key: "results",
+    type: "list",
+    version: 1,
+    status: "ok" as const,
+    props: { n: 2 },
+  };
+  const bodies: unknown[] = [];
+  const transport = viaProxy({
+    performAction: async () => ({ ok: true, response: ok }),
+    loadIsland: async (body) => {
+      bodies.push(body);
+      return bodies.length === 1
+        ? { ok: true, response: entry }
+        : { ok: false, status: 400, body: '{"error":{"code":"invalid_cursor"}}' };
+    },
+  });
+  const init = {
+    method: "POST",
+    body: JSON.stringify({ protocol: 0, screen: "search", key: "results", version: 1 }),
+  };
+  const found = await transport.fetch("/screens/search/islands/results", init);
+  assert.deepEqual(await found.json(), { protocol: 0, screen: "search", island: entry });
+  const rejected = await transport.fetch("/screens/search/islands/results", init);
+  assert.equal(rejected.status, 400);
+  assert.deepEqual(bodies[0], JSON.parse(init.body));
+});

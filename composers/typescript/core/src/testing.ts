@@ -4,6 +4,7 @@
 //     const app = testComposer(composer);
 //     const profile = await app.screen("profile", { userId: "u1" }, { headers: { authorization: "Bearer t" } });
 //     const header = profile.props(ProfileHeaderV2, "header");
+//     const more = await app.nextPage(profile, "posts"); // a paged island's next page (spec §4.5)
 //
 //     const followed = await app.perform(FollowUserV1, { userId: "u1" });
 //     assert.equal(followed.result?.followers, 8);
@@ -16,6 +17,7 @@ import {
   type DeclaredError,
   type IslandDescriptor,
   type IslandEntry,
+  type IslandResponse,
   PROTOCOL_VERSION,
   type ScreenErrorResponse,
   type ScreenResponse,
@@ -44,6 +46,9 @@ export interface RequestOptions {
 }
 
 export interface TestScreen {
+  /** The screen's id, and the params it was requested with. */
+  id: string;
+  params: Record<string, string>;
   /** The HTTP status. */
   status: number;
   /** The screen, when status is 200. */
@@ -56,6 +61,21 @@ export interface TestScreen {
   island(key: string): IslandEntry | undefined;
   /** An island's props, typed by its descriptor. Throws if the island is missing or errored. */
   props<P>(descriptor: IslandDescriptor<P>, key: string): P;
+}
+
+/** One island resolved by an island request (spec §4.5), or the error the composer answered with. */
+export interface TestIsland {
+  /** The screen it's on, and the screen's params. */
+  screen: string;
+  params: Record<string, string>;
+  /** The HTTP status. */
+  status: number;
+  /** The island, when status is 200: its props or its error, and its `next`. */
+  entry?: IslandEntry;
+  /** The protocol error code otherwise, e.g. "invalid_cursor". */
+  error?: string;
+  /** The island's props, typed by its descriptor. Throws if it didn't resolve. */
+  props<P>(descriptor: IslandDescriptor<P>): P;
 }
 
 export interface TestOutcome<R, E extends DeclaredError> {
@@ -77,6 +97,18 @@ export interface TestComposer {
     params?: Record<string, string>,
     options?: RequestOptions,
   ): Promise<TestScreen>;
+  /** Resolve one island of a screen again: the page `cursor` asks for, or its first without one. */
+  island(
+    screen: string,
+    params: Record<string, string>,
+    key: string,
+    version: number,
+    options?: RequestOptions & { cursor?: string },
+  ): Promise<TestIsland>;
+  /** The page after a screen's island, as a client scrolling to its end would fetch it. */
+  nextPage(screen: TestScreen, key: string, options?: RequestOptions): Promise<TestIsland>;
+  /** The page after one an island request returned. */
+  next(island: TestIsland, options?: RequestOptions): Promise<TestIsland>;
   perform<I, R, E extends DeclaredError>(
     descriptor: ActionDescriptor<I, R, E>,
     input: I,
@@ -109,6 +141,48 @@ export function testComposer<Ctx, Req = Request>(
     return res;
   }
 
+  async function island(
+    screen: string,
+    params: Record<string, string>,
+    key: string,
+    version: number,
+    requestOptions: RequestOptions & { cursor?: string } = {},
+  ): Promise<TestIsland> {
+    const res = await post(
+      `/screens/${encodeURIComponent(screen)}/islands/${encodeURIComponent(key)}`,
+      {
+        protocol: PROTOCOL_VERSION,
+        screen,
+        key,
+        version,
+        params,
+        client,
+        ...(requestOptions.cursor !== undefined && { cursor: requestOptions.cursor }),
+      },
+      requestOptions.headers,
+    );
+    const entry = res.status === 200 ? (res.body as IslandResponse).island : undefined;
+    return {
+      screen,
+      params,
+      status: res.status,
+      entry,
+      error: entry ? undefined : (res.body as ScreenErrorResponse).error.code,
+      props<P>(descriptor: IslandDescriptor<P>): P {
+        if (!entry) throw new Error(`testComposer: island request answered ${res.status}`);
+        if (entry.status !== "ok")
+          throw new Error(
+            `testComposer: island "${key}" is ${entry.status}: ${JSON.stringify(entry)}`,
+          );
+        if (entry.type !== descriptor.type || entry.version !== descriptor.version)
+          throw new Error(
+            `testComposer: island "${key}" is ${entry.type} v${entry.version}, not ${descriptor.type} v${descriptor.version}`,
+          );
+        return entry.props as P;
+      },
+    };
+  }
+
   return {
     async screen(id, params = {}, requestOptions = {}) {
       const res = await post(
@@ -119,6 +193,8 @@ export function testComposer<Ctx, Req = Request>(
       const response = res.status === 200 ? (res.body as ScreenResponse) : undefined;
       const entries = response?.islands ?? [];
       return {
+        id,
+        params,
         status: res.status,
         response,
         error: response ? undefined : (res.body as ScreenErrorResponse).error.code,
@@ -143,6 +219,28 @@ export function testComposer<Ctx, Req = Request>(
           return entry.props as P;
         },
       };
+    },
+
+    island,
+
+    async nextPage(screen, key, requestOptions = {}) {
+      const entry = screen.island(key);
+      if (entry?.status !== "ok" || !entry.next)
+        throw new Error(`testComposer: island "${key}" on ${screen.id} has no next page`);
+      return island(screen.id, screen.params, key, entry.version, {
+        ...requestOptions,
+        cursor: entry.next,
+      });
+    },
+
+    async next(previous, requestOptions = {}) {
+      const entry = previous.entry;
+      if (entry?.status !== "ok" || !entry.next)
+        throw new Error(`testComposer: island "${entry?.key}" has no next page`);
+      return island(previous.screen, previous.params, entry.key, entry.version, {
+        ...requestOptions,
+        cursor: entry.next,
+      });
     },
 
     async perform(descriptor, input, requestOptions = {}) {

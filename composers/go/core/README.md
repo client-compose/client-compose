@@ -155,6 +155,40 @@ cc.ReportErrors(func(ctx context.Context, f cc.Failure) {
 })
 ```
 
+## Islands with pages
+
+A feed or a list of results sends its first page with the screen, and its next pages as the person
+scrolls (spec §4.5). Define it with `DefinePaged`: it resolves the page `r.Cursor` asks for (the
+first when it's empty) to that page's props, and the cursor of the page after it, or `""` at the
+end. The cursor is yours: whatever you need to go on, such as an offset, and the time the first
+page was made so that newer items don't push the list along.
+
+```go
+results := cc.DefinePaged(func(ctx context.Context, r cc.Request) (ResultListV1, string, error) {
+	from, err := readCursor(r.Cursor) // "" for the first page
+	if err != nil {
+		return ResultListV1{}, "", fmt.Errorf("results: %w", cc.ErrInvalidCursor) // 400 invalid_cursor
+	}
+	items, more, err := search(ctx, r.Params["q"], from)
+	if err != nil {
+		return ResultListV1{}, "", err
+	}
+	next := ""
+	if more {
+		next = makeCursor(from.after(items))
+	}
+	return ResultListV1{Items: items}, next, nil
+})
+```
+
+The island's entry carries `next` while there are more pages. Clients fetch them from
+`POST /screens/{screen}/islands/{key}`, which lays the screen out as it would (requirements,
+layout, `When`) and resolves that one island. The same request without a cursor resolves any
+island again, so a client can refresh one without the whole screen. Paged islands aren't cached.
+
+In tests, `app.NextPage(screen, "results")` fetches the page after a screen's island, `app.Next`
+the one after that, and `cctest.IslandProps[ResultListV1](t, page)` reads it.
+
 ## Caching islands (optional)
 
 To keep an island's props between requests, give the composer a `cc.Cache` and opt islands in with

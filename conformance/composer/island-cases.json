@@ -1,0 +1,493 @@
+{
+  "$comment": "Island request cases (spec \u00a74.5, \u00a78.1). The runner POSTs to {base}/screens/{path ?? request.screen}/islands/{pathKey ?? request.key} with an island request for the __conformance screen: its params carry `placements`, and `key`, `version` and `cursor` come from the case, merged with any `request` overrides; `rawBody` replaces the body entirely. Expected bodies are subset matches, as for the screen cases.",
+  "cases": [
+    {
+      "name": "fetches the next page at the version asked for",
+      "placements": [
+        {
+          "key": "feed",
+          "type": "post-list",
+          "versions": [
+            1,
+            2
+          ],
+          "outcome": "ok",
+          "pages": 3
+        }
+      ],
+      "key": "feed",
+      "version": 1,
+      "cursor": "page:2",
+      "expect": {
+        "status": 200,
+        "body": {
+          "protocol": 0,
+          "screen": "__conformance",
+          "island": {
+            "key": "feed",
+            "type": "post-list",
+            "version": 1,
+            "status": "ok",
+            "props": {
+              "v": 1,
+              "page": 2
+            },
+            "next": "page:3"
+          }
+        }
+      }
+    },
+    {
+      "name": "the last page has no next",
+      "placements": [
+        {
+          "key": "feed",
+          "type": "post-list",
+          "versions": [
+            1,
+            2
+          ],
+          "outcome": "ok",
+          "pages": 3
+        }
+      ],
+      "key": "feed",
+      "version": 2,
+      "cursor": "page:3",
+      "expect": {
+        "status": 200,
+        "body": {
+          "island": {
+            "version": 2,
+            "status": "ok",
+            "props": {
+              "v": 2,
+              "page": 3
+            },
+            "next": "$absent"
+          }
+        }
+      }
+    },
+    {
+      "name": "without a cursor, resolves the island again from its first page",
+      "placements": [
+        {
+          "key": "feed",
+          "type": "post-list",
+          "versions": [
+            1,
+            2
+          ],
+          "outcome": "ok",
+          "pages": 3
+        }
+      ],
+      "key": "feed",
+      "version": 2,
+      "expect": {
+        "status": 200,
+        "body": {
+          "island": {
+            "status": "ok",
+            "props": {
+              "v": 2,
+              "page": 1
+            },
+            "next": "page:2"
+          }
+        }
+      }
+    },
+    {
+      "name": "refreshes an island that has no pages",
+      "placements": [
+        {
+          "key": "header",
+          "type": "profile-header",
+          "versions": [
+            1
+          ],
+          "outcome": "ok"
+        }
+      ],
+      "key": "header",
+      "version": 1,
+      "expect": {
+        "status": 200,
+        "body": {
+          "island": {
+            "key": "header",
+            "status": "ok",
+            "props": {
+              "v": 1
+            },
+            "next": "$absent"
+          }
+        }
+      }
+    },
+    {
+      "name": "a failing island is a 200 with its error",
+      "placements": [
+        {
+          "key": "feed",
+          "type": "post-list",
+          "versions": [
+            1
+          ],
+          "outcome": "error",
+          "pages": 2,
+          "required": true
+        }
+      ],
+      "key": "feed",
+      "version": 1,
+      "cursor": "page:2",
+      "expect": {
+        "status": 200,
+        "body": {
+          "island": {
+            "key": "feed",
+            "status": "error",
+            "error": {
+              "code": "resolve_failed"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "a slow island times out as retryable",
+      "placements": [
+        {
+          "key": "feed",
+          "type": "post-list",
+          "versions": [
+            1
+          ],
+          "outcome": "timeout",
+          "timeoutMs": 50,
+          "pages": 2
+        }
+      ],
+      "key": "feed",
+      "version": 1,
+      "expect": {
+        "status": 200,
+        "body": {
+          "island": {
+            "status": "error",
+            "error": {
+              "code": "timeout",
+              "retryable": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "rejects a cursor the island didn't make",
+      "placements": [
+        {
+          "key": "feed",
+          "type": "post-list",
+          "versions": [
+            1,
+            2
+          ],
+          "outcome": "ok",
+          "pages": 3
+        }
+      ],
+      "key": "feed",
+      "version": 1,
+      "cursor": "page:9",
+      "expect": {
+        "status": 400,
+        "body": {
+          "error": {
+            "code": "invalid_cursor"
+          }
+        }
+      }
+    },
+    {
+      "name": "rejects a cursor for an island without pages",
+      "placements": [
+        {
+          "key": "header",
+          "type": "profile-header",
+          "versions": [
+            1
+          ],
+          "outcome": "ok"
+        }
+      ],
+      "key": "header",
+      "version": 1,
+      "cursor": "page:2",
+      "expect": {
+        "status": 400,
+        "body": {
+          "error": {
+            "code": "invalid_cursor"
+          }
+        }
+      }
+    },
+    {
+      "name": "rejects a version the placement doesn't have",
+      "placements": [
+        {
+          "key": "feed",
+          "type": "post-list",
+          "versions": [
+            1,
+            2
+          ],
+          "outcome": "ok",
+          "pages": 3
+        }
+      ],
+      "key": "feed",
+      "version": 3,
+      "expect": {
+        "status": 400,
+        "body": {
+          "error": {
+            "code": "unsupported_island_version"
+          }
+        }
+      }
+    },
+    {
+      "name": "rejects a key the screen doesn't have",
+      "placements": [
+        {
+          "key": "feed",
+          "type": "post-list",
+          "versions": [
+            1,
+            2
+          ],
+          "outcome": "ok",
+          "pages": 3
+        }
+      ],
+      "key": "nope",
+      "version": 1,
+      "expect": {
+        "status": 404,
+        "body": {
+          "error": {
+            "code": "unknown_island"
+          }
+        }
+      }
+    },
+    {
+      "name": "rejects an unknown screen",
+      "placements": [
+        {
+          "key": "feed",
+          "type": "post-list",
+          "versions": [
+            1,
+            2
+          ],
+          "outcome": "ok",
+          "pages": 3
+        }
+      ],
+      "key": "feed",
+      "version": 1,
+      "request": {
+        "screen": "nope"
+      },
+      "expect": {
+        "status": 404,
+        "body": {
+          "error": {
+            "code": "unknown_screen"
+          }
+        }
+      }
+    },
+    {
+      "name": "responds not_found when the screen's params refer to nothing",
+      "placements": [
+        {
+          "key": "feed",
+          "type": "post-list",
+          "versions": [
+            1,
+            2
+          ],
+          "outcome": "ok",
+          "pages": 3
+        }
+      ],
+      "key": "feed",
+      "version": 1,
+      "request": {
+        "params": {
+          "placements": "[{\"key\": \"feed\", \"type\": \"post-list\", \"versions\": [1, 2], \"outcome\": \"ok\", \"pages\": 3}]",
+          "notFound": "true"
+        }
+      },
+      "expect": {
+        "status": 404,
+        "body": {
+          "error": {
+            "code": "not_found"
+          }
+        }
+      }
+    },
+    {
+      "name": "responds unauthenticated when the screen needs a signed-in user",
+      "placements": [
+        {
+          "key": "feed",
+          "type": "post-list",
+          "versions": [
+            1,
+            2
+          ],
+          "outcome": "ok",
+          "pages": 3
+        }
+      ],
+      "key": "feed",
+      "version": 1,
+      "request": {
+        "params": {
+          "placements": "[{\"key\": \"feed\", \"type\": \"post-list\", \"versions\": [1, 2], \"outcome\": \"ok\", \"pages\": 3}]",
+          "auth": "unauthenticated"
+        }
+      },
+      "expect": {
+        "status": 401,
+        "body": {
+          "error": {
+            "code": "unauthenticated"
+          }
+        }
+      }
+    },
+    {
+      "name": "responds forbidden when the user may not see the screen",
+      "placements": [
+        {
+          "key": "feed",
+          "type": "post-list",
+          "versions": [
+            1,
+            2
+          ],
+          "outcome": "ok",
+          "pages": 3
+        }
+      ],
+      "key": "feed",
+      "version": 1,
+      "request": {
+        "params": {
+          "placements": "[{\"key\": \"feed\", \"type\": \"post-list\", \"versions\": [1, 2], \"outcome\": \"ok\", \"pages\": 3}]",
+          "auth": "forbidden"
+        }
+      },
+      "expect": {
+        "status": 403,
+        "body": {
+          "error": {
+            "code": "forbidden"
+          }
+        }
+      }
+    },
+    {
+      "name": "rejects a body key that differs from the path",
+      "placements": [
+        {
+          "key": "feed",
+          "type": "post-list",
+          "versions": [
+            1,
+            2
+          ],
+          "outcome": "ok",
+          "pages": 3
+        }
+      ],
+      "key": "feed",
+      "version": 1,
+      "pathKey": "other",
+      "expect": {
+        "status": 400,
+        "body": {
+          "error": {
+            "code": "island_mismatch"
+          }
+        }
+      }
+    },
+    {
+      "name": "rejects a body that isn't an island request",
+      "placements": [
+        {
+          "key": "feed",
+          "type": "post-list",
+          "versions": [
+            1,
+            2
+          ],
+          "outcome": "ok",
+          "pages": 3
+        }
+      ],
+      "key": "feed",
+      "version": 1,
+      "request": {
+        "version": null
+      },
+      "expect": {
+        "status": 400,
+        "body": {
+          "error": {
+            "code": "bad_request"
+          }
+        }
+      }
+    },
+    {
+      "name": "rejects an unsupported protocol version",
+      "placements": [
+        {
+          "key": "feed",
+          "type": "post-list",
+          "versions": [
+            1,
+            2
+          ],
+          "outcome": "ok",
+          "pages": 3
+        }
+      ],
+      "key": "feed",
+      "version": 1,
+      "request": {
+        "protocol": 99
+      },
+      "expect": {
+        "status": 400,
+        "body": {
+          "error": {
+            "code": "unsupported_protocol"
+          }
+        }
+      }
+    }
+  ]
+}
