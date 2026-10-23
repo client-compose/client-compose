@@ -158,6 +158,30 @@ const tracing: Plugin<Ctx> = {
 
 `reportErrors(fn)` is a plugin with just an `error` hook.
 
+## Islands with pages
+
+A feed or a list of results sends its first page with the screen, and its next pages as the person
+scrolls (spec §4.5). Define it with `pagedIsland`: it resolves the page `cursor` asks for (the
+first when it's undefined) to that page's props, and the cursor of the page after it. The cursor is
+yours: whatever you need to go on, such as an offset, and the time the first page was made so that
+newer items don't push the list along.
+
+```ts
+const Results = pagedIsland(ResultListV1, async ({ params, cursor }) => {
+  const from = readCursor(cursor); // throws InvalidCursorError: 400 invalid_cursor
+  const { items, more } = await search(params.q, from);
+  return { props: { items }, ...(more && { next: makeCursor(from.after(items)) }) };
+});
+```
+
+The island's entry carries `next` while there are more pages. Clients fetch them from
+`POST /screens/{screen}/islands/{key}`, which lays the screen out as it would (requirements,
+layout, `when`) and resolves that one island. The same request without a cursor resolves any
+island again, so a client can refresh one without the whole screen. Paged islands aren't cached.
+
+In tests, `app.nextPage(screen, "results")` fetches the page after a screen's island, `app.next`
+the one after that, and `page.props(ResultListV1)` reads it.
+
 ## Caching islands (optional)
 
 To keep an island's props between requests, give the composer a `Cache` and opt islands in. The

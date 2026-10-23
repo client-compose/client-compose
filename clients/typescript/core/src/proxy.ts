@@ -18,15 +18,26 @@ import {
   type ActionResponse,
   type Capabilities,
   type ClientContext,
+  type IslandEntry,
+  type IslandRequest,
   PROTOCOL_VERSION,
   type ScreenRequest,
   type ScreenResponse,
 } from "@client-compose/protocol";
 
-import { ActionFetchError, fetchAction, fetchScreen, ScreenFetchError } from "./index.ts";
+import {
+  ActionFetchError,
+  fetchAction,
+  fetchIsland,
+  fetchScreen,
+  IslandFetchError,
+  ScreenFetchError,
+} from "./index.ts";
 
 /** A screen request from the browser: the server sets the client context. */
 export type ProxiedScreenRequest = Omit<ScreenRequest, "client">;
+/** An island request from the browser: the server sets the client context. */
+export type ProxiedIslandRequest = Omit<IslandRequest, "client">;
 /** An action request from the browser: the server sets the client context. */
 export type ProxiedActionRequest = Omit<ActionRequest, "client">;
 
@@ -60,6 +71,11 @@ export interface ComposerProxy {
   performAction(body: unknown): Promise<ProxyResult<ActionResponse>>;
   /** Checks a browser's screen request, then loads it with the server's context and headers. */
   loadScreen(body: unknown): Promise<ProxyResult<ScreenResponse>>;
+  /**
+   * Checks a browser's island request (a page of an island, spec §4.5), then loads it with the
+   * server's context and headers. Resolves with the island's entry.
+   */
+  loadIsland(body: unknown): Promise<ProxyResult<IslandEntry>>;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -86,6 +102,17 @@ export function isProxiedScreenRequest(value: unknown): value is ProxiedScreenRe
     (value.params === undefined || isStringRecord(value.params)) &&
     isCapabilities(value.islands)
   );
+}
+
+export function isProxiedIslandRequest(value: unknown): value is ProxiedIslandRequest {
+  if (!isRecord(value) || value.protocol !== PROTOCOL_VERSION) {
+    return false;
+  }
+  const addressed = typeof value.screen === "string" && typeof value.key === "string";
+  const versioned = typeof value.version === "number" && Number.isInteger(value.version);
+  const paramsOk = value.params === undefined || isStringRecord(value.params);
+  const cursorOk = value.cursor === undefined || typeof value.cursor === "string";
+  return addressed && versioned && paramsOk && cursorOk;
 }
 
 export function isProxiedActionRequest(value: unknown): value is ProxiedActionRequest {
@@ -157,5 +184,31 @@ export function createComposerProxy(options: ComposerProxyOptions): ComposerProx
     }
   }
 
-  return { performAction, loadScreen };
+  async function loadIsland(body: unknown): Promise<ProxyResult<IslandEntry>> {
+    if (!isProxiedIslandRequest(body)) {
+      return BAD_REQUEST;
+    }
+    const request: IslandRequest = { ...body, client: await options.client() };
+    try {
+      return {
+        ok: true,
+        response: await fetchIsland(options.baseUrl, request, await init(), options.fetch),
+      };
+    } catch (error) {
+      if (error instanceof IslandFetchError) {
+        return {
+          ok: false,
+          status: error.status,
+          body: error.body,
+        };
+      }
+      throw error;
+    }
+  }
+
+  return {
+    performAction,
+    loadScreen,
+    loadIsland,
+  };
 }

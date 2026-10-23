@@ -13,6 +13,8 @@ import { createElement, Fragment, type ReactNode, Suspense } from "react";
 import { IslandBoundary } from "./client.ts";
 import type { ScreenConfig } from "./config.ts";
 import { loadScreen } from "./load.ts";
+import { IslandScope } from "./pages.ts";
+import { scopeOf } from "./scope.ts";
 
 export type { ErrorEntry, ScreenConfig } from "./config.ts";
 export { loadScreen } from "./load.ts";
@@ -80,6 +82,11 @@ async function ScreenIslands(props: ServerComposedScreenProps): Promise<ReactNod
     } catch (error) {
       config.onRenderError?.(island.key, error);
       continue;
+    }
+    // As on the client, it knows where it is, for its next page (usePages).
+    const scope = scopeOf(response, props.params ?? {}, island.key);
+    if (scope) {
+      node = createElement(IslandScope, { value: scope }, node);
     }
     // As on the client: its own <Suspense> so a server render error stays inside this island, and
     // IslandBoundary to hide it once the browser re-renders it.

@@ -5,6 +5,7 @@
 //     const gateway = createFakeGateway({
 //       screens: { profile: () => screen("profile", [island("header", ProfileHeaderV1, { name: "Ada" })]) },
 //       actions: { follow: () => actionOk(FollowUserV1, { followers: 8 }) },
+//       islands: { "profile/posts": (r) => islandResponse("profile", island("posts", PostsV1, …, "page:3")) },
 //     });
 //     // pass gateway.fetch as the client's fetch, then assert on gateway.actionRequests()
 //
@@ -46,6 +47,16 @@ export interface RecordedScreenRequest extends RecordedRequest {
   islands: Capabilities;
 }
 
+/** An island request (spec §4.5): a page of one island, or the island resolved again. */
+export interface RecordedIslandRequest extends RecordedRequest {
+  screen: string;
+  key: string;
+  version: number;
+  params: Record<string, string>;
+  cursor: string | undefined;
+  client: ClientContext | undefined;
+}
+
 export interface RecordedActionRequest extends RecordedRequest {
   action: string;
   version: number;
@@ -59,6 +70,8 @@ export interface FakeGatewayHandlers {
   screens?: Record<string, (request: RecordedScreenRequest) => FakeResponse>;
   /** By action name. */
   actions?: Record<string, (request: RecordedActionRequest) => FakeResponse>;
+  /** Island requests, by `"{screen}/{key}"`. */
+  islands?: Record<string, (request: RecordedIslandRequest) => FakeResponse>;
   /** Anything else, e.g. uploads to storage: return undefined to leave a request to the others. */
   other?: (request: RecordedRequest) => FakeResponse | undefined;
 }
@@ -69,6 +82,7 @@ export interface FakeGateway {
   /** Every request received, in order. */
   requests: RecordedRequest[];
   screenRequests(): RecordedScreenRequest[];
+  islandRequests(): RecordedIslandRequest[];
   actionRequests(): RecordedActionRequest[];
 }
 
@@ -135,9 +149,14 @@ function headersOf(init: HeadersInit | undefined): Record<string, string> {
   return out;
 }
 
+function isIslandURL(url: string): boolean {
+  return /\/screens\/[^/]+\/islands\/[^/?]+/.test(url);
+}
+
 function asScreenRequest(request: RecordedRequest): RecordedScreenRequest | undefined {
   const { body } = request;
-  if (!request.url.includes("/screens/") || !isRecord(body) || typeof body.screen !== "string") {
+  const isScreen = request.url.includes("/screens/") && !isIslandURL(request.url);
+  if (!isScreen || !isRecord(body) || typeof body.screen !== "string") {
     return undefined;
   }
   return {
@@ -146,6 +165,25 @@ function asScreenRequest(request: RecordedRequest): RecordedScreenRequest | unde
     params: strings(body.params),
     client: clientContext(body.client),
     islands: capabilities(body.islands),
+  };
+}
+
+function asIslandRequest(request: RecordedRequest): RecordedIslandRequest | undefined {
+  const { body } = request;
+  if (!isIslandURL(request.url) || !isRecord(body)) {
+    return undefined;
+  }
+  if (typeof body.screen !== "string" || typeof body.key !== "string") {
+    return undefined;
+  }
+  return {
+    ...request,
+    screen: body.screen,
+    key: body.key,
+    version: typeof body.version === "number" ? body.version : 0,
+    params: strings(body.params),
+    cursor: typeof body.cursor === "string" ? body.cursor : undefined,
+    client: clientContext(body.client),
   };
 }
 
@@ -187,6 +225,12 @@ export function createFakeGateway(handlers: FakeGatewayHandlers = {}): FakeGatew
     if (other) {
       return respond(other);
     }
+    const islandRequest = asIslandRequest(request);
+    const islandHandler =
+      islandRequest && handlers.islands?.[`${islandRequest.screen}/${islandRequest.key}`];
+    if (islandRequest && islandHandler) {
+      return respond(islandHandler(islandRequest));
+    }
     const screenRequest = asScreenRequest(request);
     const screenHandler = screenRequest && handlers.screens?.[screenRequest.screen];
     if (screenRequest && screenHandler) {
@@ -205,6 +249,7 @@ export function createFakeGateway(handlers: FakeGatewayHandlers = {}): FakeGatew
     fetch: fakeFetch,
     requests,
     screenRequests: () => requests.flatMap((r) => asScreenRequest(r) ?? []),
+    islandRequests: () => requests.flatMap((r) => asIslandRequest(r) ?? []),
     actionRequests: () => requests.flatMap((r) => asActionRequest(r) ?? []),
   };
 }
@@ -232,14 +277,23 @@ export function installFakeGateway(handlers: FakeGatewayHandlers = {}): Installe
 
 // ---- Responses ----
 
-/** An island in a screen response, typed by its generated descriptor. */
-export function island<P>(key: string, descriptor: IslandDescriptor<P>, props: P): IslandEntry<P> {
+/**
+ * An island in a screen or island response, typed by its generated descriptor. Give `next` for an
+ * island with more pages (spec §4.5).
+ */
+export function island<P>(
+  key: string,
+  descriptor: IslandDescriptor<P>,
+  props: P,
+  next?: string,
+): IslandEntry<P> {
   return {
     key,
     type: descriptor.type,
     version: descriptor.version,
     status: "ok",
     props,
+    ...(next !== undefined && { next }),
   };
 }
 
@@ -271,6 +325,18 @@ export function screen(
       screen: id,
       islands,
       ...(meta && { meta }),
+    },
+  };
+}
+
+/** An island response (spec §4.5): a page of one island, or the island resolved again. */
+export function islandResponse(screen: string, entry: IslandEntry<unknown>): FakeResponse {
+  return {
+    status: 200,
+    body: {
+      protocol: PROTOCOL_VERSION,
+      screen,
+      island: entry,
     },
   };
 }

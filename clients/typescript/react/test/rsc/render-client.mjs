@@ -5,6 +5,8 @@ import { createFromNodeStream } from "react-server-dom-webpack/client.node";
 
 const clientModuleUrls = [
   new URL("../../dist/client.js", import.meta.url).href,
+  new URL("../../dist/pages.js", import.meta.url).href,
+  new URL("../../dist/provider.js", import.meta.url).href,
   new URL("./counter.mjs", import.meta.url).href,
 ];
 const modules = {};

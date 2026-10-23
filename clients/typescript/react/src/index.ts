@@ -12,7 +12,6 @@ export { ReactIslandRegistry } from "./registry.ts";
 export {
   type ActionResult,
   type ActionState,
-  ClientComposeProvider,
   ComposedScreen,
   type ComposedScreenProps,
   Island,
@@ -22,9 +21,11 @@ export {
   useScreen,
   type UseScreenOptions,
 } from "./client.ts";
+export { type PagesState, type PagesStatus, usePages } from "./pages.ts";
+export { ClientComposeProvider } from "./provider.ts";
 export { type ProxyFunctions, type ProxyTransport, viaProxy } from "./proxy.ts";
 export { declaredError, isUnexpected } from "./results.ts";
-export { ActionFetchError } from "@client-compose/client";
+export { ActionFetchError, IslandFetchError } from "@client-compose/client";
 export type {
   ActionDescriptor,
   ActionEffects,
@@ -32,6 +33,8 @@ export type {
   ActionResponse,
   DeclaredError,
   IslandDescriptor,
+  IslandEntry,
+  IslandError,
   ScreenMeta,
   ScreenRef,
   ScreenResponse,

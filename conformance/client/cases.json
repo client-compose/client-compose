@@ -1,111 +1,339 @@
 {
-  "$comment": "Client conformance cases (spec §8.2). For each case: register a test renderer for every type/version in `registered`, check the declared capabilities, decode `response` from JSON, plan it, and render. The test renderer outputs \"{type}@{version}:{props.v}\". When `renderErrors` is true, also install an error fallback that outputs \"error:{key}:{error.code}\". `expectSkipped` lists keys of islands the client reported as skipped (unknown type/version/status or undecodable props). Cases with `typedOnly` apply only to clients that decode props into typed structures (Swift, Kotlin); untyped clients (TypeScript) skip them.",
+  "$comment": "Client conformance cases (spec \u00a78.2). For each case: register a test renderer for every type/version in `registered`, check the declared capabilities, decode `response` from JSON, plan it, and render. The test renderer outputs \"{type}@{version}:{props.v}\". When `renderErrors` is true, also install an error fallback that outputs \"error:{key}:{error.code}\". `expectSkipped` lists keys of islands the client reported as skipped (unknown type/version/status or undecodable props). Cases with `typedOnly` apply only to clients that decode props into typed structures (Swift, Kotlin); untyped clients (TypeScript) skip them.",
   "cases": [
     {
       "name": "declares capabilities sorted ascending",
-      "registered": { "profile-header": [2, 1], "post-grid": [1] },
-      "expectCapabilities": { "profile-header": [1, 2], "post-grid": [1] },
-      "response": { "protocol": 0, "screen": "s", "islands": [] },
+      "registered": {
+        "profile-header": [
+          2,
+          1
+        ],
+        "post-grid": [
+          1
+        ]
+      },
+      "expectCapabilities": {
+        "profile-header": [
+          1,
+          2
+        ],
+        "post-grid": [
+          1
+        ]
+      },
+      "response": {
+        "protocol": 0,
+        "screen": "s",
+        "islands": []
+      },
       "expectRendered": [],
       "expectSkipped": []
     },
     {
       "name": "renders in order with the matching version",
-      "registered": { "profile-header": [1, 2], "post-grid": [1] },
-      "expectCapabilities": { "profile-header": [1, 2], "post-grid": [1] },
+      "registered": {
+        "profile-header": [
+          1,
+          2
+        ],
+        "post-grid": [
+          1
+        ]
+      },
+      "expectCapabilities": {
+        "profile-header": [
+          1,
+          2
+        ],
+        "post-grid": [
+          1
+        ]
+      },
       "response": {
         "protocol": 0,
         "screen": "s",
         "islands": [
-          { "key": "posts", "type": "post-grid", "version": 1, "status": "ok", "props": { "v": 7 } },
-          { "key": "header", "type": "profile-header", "version": 2, "status": "ok", "props": { "v": 3 } }
+          {
+            "key": "posts",
+            "type": "post-grid",
+            "version": 1,
+            "status": "ok",
+            "props": {
+              "v": 7
+            }
+          },
+          {
+            "key": "header",
+            "type": "profile-header",
+            "version": 2,
+            "status": "ok",
+            "props": {
+              "v": 3
+            }
+          }
         ]
       },
-      "expectRendered": ["post-grid@1:7", "profile-header@2:3"],
+      "expectRendered": [
+        "post-grid@1:7",
+        "profile-header@2:3"
+      ],
       "expectSkipped": []
     },
     {
       "name": "omits errored islands by default",
-      "registered": { "profile-header": [1], "post-grid": [1] },
-      "expectCapabilities": { "profile-header": [1], "post-grid": [1] },
-      "response": {
-        "protocol": 0,
-        "screen": "s",
-        "islands": [
-          { "key": "header", "type": "profile-header", "version": 1, "status": "ok", "props": { "v": 1 } },
-          { "key": "posts", "type": "post-grid", "version": 1, "status": "error", "error": { "code": "timeout", "retryable": true } }
+      "registered": {
+        "profile-header": [
+          1
+        ],
+        "post-grid": [
+          1
         ]
       },
-      "expectRendered": ["profile-header@1:1"],
-      "expectSkipped": []
-    },
-    {
-      "name": "renders an error fallback when provided",
-      "registered": { "post-grid": [1] },
-      "expectCapabilities": { "post-grid": [1] },
-      "renderErrors": true,
-      "response": {
-        "protocol": 0,
-        "screen": "s",
-        "islands": [{ "key": "posts", "type": "post-grid", "version": 1, "status": "error", "error": { "code": "timeout" } }]
-      },
-      "expectRendered": ["error:posts:timeout"],
-      "expectSkipped": []
-    },
-    {
-      "name": "skips undeclared types and versions",
-      "registered": { "profile-header": [1] },
-      "expectCapabilities": { "profile-header": [1] },
-      "response": {
-        "protocol": 0,
-        "screen": "s",
-        "islands": [
-          { "key": "mystery", "type": "mystery", "version": 1, "status": "ok", "props": { "v": 1 } },
-          { "key": "future", "type": "profile-header", "version": 9, "status": "ok", "props": { "v": 9 } },
-          { "key": "header", "type": "profile-header", "version": 1, "status": "ok", "props": { "v": 1 } }
+      "expectCapabilities": {
+        "profile-header": [
+          1
+        ],
+        "post-grid": [
+          1
         ]
       },
-      "expectRendered": ["profile-header@1:1"],
-      "expectSkipped": ["mystery", "future"]
-    },
-    {
-      "name": "tolerates unknown fields and statuses",
-      "registered": { "profile-header": [1] },
-      "expectCapabilities": { "profile-header": [1] },
       "response": {
         "protocol": 0,
         "screen": "s",
-        "somethingNew": { "a": 1 },
         "islands": [
-          { "key": "later", "type": "profile-header", "version": 1, "status": "pending" },
           {
             "key": "header",
             "type": "profile-header",
             "version": 1,
             "status": "ok",
-            "props": { "v": 1, "extraProp": "ignored" },
-            "experiment": "x"
+            "props": {
+              "v": 1
+            }
+          },
+          {
+            "key": "posts",
+            "type": "post-grid",
+            "version": 1,
+            "status": "error",
+            "error": {
+              "code": "timeout",
+              "retryable": true
+            }
           }
         ]
       },
-      "expectRendered": ["profile-header@1:1"],
-      "expectSkipped": ["later"]
+      "expectRendered": [
+        "profile-header@1:1"
+      ],
+      "expectSkipped": []
     },
     {
-      "name": "skips islands whose props fail to decode",
-      "typedOnly": true,
-      "registered": { "profile-header": [1] },
-      "expectCapabilities": { "profile-header": [1] },
+      "name": "renders an error fallback when provided",
+      "registered": {
+        "post-grid": [
+          1
+        ]
+      },
+      "expectCapabilities": {
+        "post-grid": [
+          1
+        ]
+      },
+      "renderErrors": true,
       "response": {
         "protocol": 0,
         "screen": "s",
         "islands": [
-          { "key": "bad", "type": "profile-header", "version": 1, "status": "ok", "props": { "v": "not-a-number" } },
-          { "key": "good", "type": "profile-header", "version": 1, "status": "ok", "props": { "v": 2 } }
+          {
+            "key": "posts",
+            "type": "post-grid",
+            "version": 1,
+            "status": "error",
+            "error": {
+              "code": "timeout"
+            }
+          }
         ]
       },
-      "expectRendered": ["profile-header@1:2"],
-      "expectSkipped": ["bad"]
+      "expectRendered": [
+        "error:posts:timeout"
+      ],
+      "expectSkipped": []
+    },
+    {
+      "name": "skips undeclared types and versions",
+      "registered": {
+        "profile-header": [
+          1
+        ]
+      },
+      "expectCapabilities": {
+        "profile-header": [
+          1
+        ]
+      },
+      "response": {
+        "protocol": 0,
+        "screen": "s",
+        "islands": [
+          {
+            "key": "mystery",
+            "type": "mystery",
+            "version": 1,
+            "status": "ok",
+            "props": {
+              "v": 1
+            }
+          },
+          {
+            "key": "future",
+            "type": "profile-header",
+            "version": 9,
+            "status": "ok",
+            "props": {
+              "v": 9
+            }
+          },
+          {
+            "key": "header",
+            "type": "profile-header",
+            "version": 1,
+            "status": "ok",
+            "props": {
+              "v": 1
+            }
+          }
+        ]
+      },
+      "expectRendered": [
+        "profile-header@1:1"
+      ],
+      "expectSkipped": [
+        "mystery",
+        "future"
+      ]
+    },
+    {
+      "name": "tolerates unknown fields and statuses",
+      "registered": {
+        "profile-header": [
+          1
+        ]
+      },
+      "expectCapabilities": {
+        "profile-header": [
+          1
+        ]
+      },
+      "response": {
+        "protocol": 0,
+        "screen": "s",
+        "somethingNew": {
+          "a": 1
+        },
+        "islands": [
+          {
+            "key": "later",
+            "type": "profile-header",
+            "version": 1,
+            "status": "pending"
+          },
+          {
+            "key": "header",
+            "type": "profile-header",
+            "version": 1,
+            "status": "ok",
+            "props": {
+              "v": 1,
+              "extraProp": "ignored"
+            },
+            "experiment": "x"
+          }
+        ]
+      },
+      "expectRendered": [
+        "profile-header@1:1"
+      ],
+      "expectSkipped": [
+        "later"
+      ]
+    },
+    {
+      "name": "skips islands whose props fail to decode",
+      "typedOnly": true,
+      "registered": {
+        "profile-header": [
+          1
+        ]
+      },
+      "expectCapabilities": {
+        "profile-header": [
+          1
+        ]
+      },
+      "response": {
+        "protocol": 0,
+        "screen": "s",
+        "islands": [
+          {
+            "key": "bad",
+            "type": "profile-header",
+            "version": 1,
+            "status": "ok",
+            "props": {
+              "v": "not-a-number"
+            }
+          },
+          {
+            "key": "good",
+            "type": "profile-header",
+            "version": 1,
+            "status": "ok",
+            "props": {
+              "v": 2
+            }
+          }
+        ]
+      },
+      "expectRendered": [
+        "profile-header@1:2"
+      ],
+      "expectSkipped": [
+        "bad"
+      ]
+    },
+    {
+      "name": "renders an island with more pages as any other",
+      "registered": {
+        "post-list": [
+          1
+        ]
+      },
+      "expectCapabilities": {
+        "post-list": [
+          1
+        ]
+      },
+      "response": {
+        "protocol": 0,
+        "screen": "s",
+        "islands": [
+          {
+            "key": "feed",
+            "type": "post-list",
+            "version": 1,
+            "status": "ok",
+            "props": {
+              "v": 1
+            },
+            "next": "opaque-cursor"
+          }
+        ]
+      },
+      "expectRendered": [
+        "post-list@1:1"
+      ],
+      "expectSkipped": []
     }
   ]
 }
