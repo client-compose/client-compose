@@ -17,6 +17,9 @@ type Request struct {
 	Screen string
 	Params map[string]string
 	Client ClientContext
+	// Cursor is the page an island request asks for (spec §4.5): an island's own Next, from an
+	// earlier page. It's empty for a screen, and for an island's first page.
+	Cursor string
 }
 
 // Island is one resolvable version of an island type. Build one with Define (or NewIsland).
@@ -26,7 +29,19 @@ type Island struct {
 	resolve func(ctx context.Context, r Request) (any, error)
 	// cache, if set with CacheFor, caches the island's props when the composer has a Cache.
 	cache *islandCache
+	// paged islands resolve to a page: their props, and the cursor of the page after (DefinePaged).
+	paged bool
 }
+
+// page is what a paged island resolves to.
+type page struct {
+	props any
+	next  string
+}
+
+// ErrInvalidCursor means a paged island can't read the cursor it was given: one it didn't make, or
+// one that's no longer good. The client gets 400 invalid_cursor (spec §4.5).
+var ErrInvalidCursor = errors.New("clientcompose: invalid cursor")
 
 // NewIsland defines how to resolve the props for one version of an island, for props types that
 // codegen didn't generate. Prefer Define.
@@ -52,6 +67,40 @@ type Props interface {
 func Define[P Props](resolve func(ctx context.Context, r Request) (P, error)) Island {
 	var zero P
 	return NewIsland(zero.IslandType(), zero.IslandVersion(), resolve)
+}
+
+// NewPagedIsland is NewIsland for an island with pages (spec §4.5). Prefer DefinePaged.
+func NewPagedIsland[P any](typ string, version int, resolve func(ctx context.Context, r Request) (P, string, error)) Island {
+	return Island{
+		Type:    typ,
+		Version: version,
+		paged:   true,
+		resolve: func(ctx context.Context, r Request) (any, error) {
+			props, next, err := resolve(ctx, r)
+			if err != nil {
+				return nil, err
+			}
+			return page{props: props, next: next}, nil
+		},
+	}
+}
+
+// DefinePaged defines an island version with pages, such as a feed or search results (spec §4.5).
+// It resolves the page r.Cursor asks for (the first when it's empty) to that page's props, and the
+// cursor of the page after it, or "" when it's the last. The cursor is the app's own: anything it
+// needs to go on, such as an offset and the time the first page was made. A cursor it can't read
+// is an error wrapping ErrInvalidCursor.
+//
+//	results := cc.DefinePaged(func(ctx context.Context, r cc.Request) (ResultListV1, string, error) {
+//		offset, err := readCursor(r.Cursor)
+//		if err != nil {
+//			return ResultListV1{}, "", fmt.Errorf("results: %w", cc.ErrInvalidCursor)
+//		}
+//		...
+//	})
+func DefinePaged[P Props](resolve func(ctx context.Context, r Request) (P, string, error)) Island {
+	var zero P
+	return NewPagedIsland(zero.IslandType(), zero.IslandVersion(), resolve)
 }
 
 // Versions lists the versions of an island a placement can resolve.
@@ -303,7 +352,7 @@ func (c *Composer) composeScreen(ctx context.Context, req ScreenRequest) Result 
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			entries[i] = c.resolveEntry(ctx, t.p, t.island, r)
+			entries[i], _ = c.resolveEntry(ctx, t.p, t.island, r) // a failure is in its entry
 		}()
 	}
 	wg.Wait()
@@ -370,7 +419,9 @@ func (c *Composer) meta(ctx context.Context, screen Screen, r Request) (out *Scr
 	return &meta
 }
 
-func (c *Composer) resolveEntry(parent context.Context, p Placement, island Island, r Request) IslandEntry {
+// resolveEntry resolves one island to its entry. A failure is in the entry; it's returned too, so
+// an island request can tell an invalid cursor from a failure.
+func (c *Composer) resolveEntry(parent context.Context, p Placement, island Island, r Request) (IslandEntry, error) {
 	entry := IslandEntry{Key: p.Key, Type: island.Type, Version: island.Version}
 	timeout := p.Timeout
 	if timeout == 0 {
@@ -400,10 +451,13 @@ func (c *Composer) resolveEntry(parent context.Context, p Placement, island Isla
 		if o.err == nil {
 			entry.Status = "ok"
 			entry.Props = o.props
+			if pg, ok := o.props.(page); ok {
+				entry.Props, entry.Next = pg.props, pg.next
+			}
 			if entry.Props == nil {
 				entry.Props = map[string]any{}
 			}
-			return entry
+			return entry, nil
 		}
 		err = o.err
 	case <-ctx.Done():
@@ -417,7 +471,7 @@ func (c *Composer) resolveEntry(parent context.Context, p Placement, island Isla
 	} else {
 		entry.Error = &IslandError{Code: "resolve_failed"}
 	}
-	return entry
+	return entry, err
 }
 
 // Islands lists the island types and versions placed by screens with declared Islands, as a client

@@ -9,10 +9,29 @@ export interface ComposerCase {
     outcome: "ok" | "error" | "timeout";
     required?: boolean;
     timeoutMs?: number;
+    /** The island has this many pages (spec §4.5). */
+    pages?: number;
   }[];
   capabilities: Record<string, number[]>;
   request?: Record<string, unknown>;
   path?: string;
+  rawBody?: string;
+  expect: { status: number; body?: unknown };
+}
+
+/** An island request (spec §4.5) for the `__conformance` screen laid out with `placements`. */
+export interface IslandCase {
+  name: string;
+  placements: ComposerCase["placements"];
+  key: string;
+  version: number;
+  cursor?: string;
+  /** Overrides for the request body (protocol, screen, params, client...). */
+  request?: Record<string, unknown>;
+  /** The screen in the path. Default: the request's. */
+  path?: string;
+  /** The key in the path. Default: the request's. */
+  pathKey?: string;
   rawBody?: string;
   expect: { status: number; body?: unknown };
 }
@@ -82,6 +101,7 @@ export interface CaseResult {
 
 const SUITES = {
   composer: "composer/cases.json",
+  islands: "composer/island-cases.json",
   actions: "composer/action-cases.json",
   client: "client/cases.json",
   clientActions: "client/action-cases.json",
@@ -101,6 +121,7 @@ function read<T>(suite: keyof typeof SUITES): T {
 const load = <T>(suite: keyof typeof SUITES): T => read<{ cases: T }>(suite).cases;
 
 export const composerCases = (): ComposerCase[] => load("composer");
+export const islandCases = (): IslandCase[] => load("islands");
 export const actionCases = (): ActionCase[] => load("actions");
 export const clientCases = (): ClientCase[] => load("client");
 export const clientActionCases = (): ClientActionCases => read("clientActions");
@@ -126,6 +147,32 @@ export async function runComposerCase(
   return post(
     fetchImpl,
     `${baseUrl.replace(/\/$/, "")}/screens/${encodeURIComponent(path)}`,
+    c.rawBody ?? JSON.stringify(request),
+    c,
+  );
+}
+
+/** Sends one island case (spec §4.5). `fetchImpl` as for runComposerCase. */
+export async function runIslandCase(
+  baseUrl: string,
+  c: IslandCase,
+  fetchImpl: typeof fetch = fetch,
+): Promise<CaseResult> {
+  const request: Record<string, unknown> = {
+    protocol: 0,
+    screen: "__conformance",
+    key: c.key,
+    version: c.version,
+    params: { placements: JSON.stringify(c.placements) },
+    client: { platform: "conformance", appVersion: "0.0.0" },
+    ...(c.cursor !== undefined && { cursor: c.cursor }),
+    ...c.request,
+  };
+  const path = c.path ?? String(request.screen);
+  const key = c.pathKey ?? String(request.key);
+  return post(
+    fetchImpl,
+    `${baseUrl.replace(/\/$/, "")}/screens/${encodeURIComponent(path)}/islands/${encodeURIComponent(key)}`,
     c.rawBody ?? JSON.stringify(request),
     c,
   );
@@ -190,13 +237,18 @@ async function post(
   }
 }
 
-/** Runs the screen cases, then the action cases (spec §8.1). `fetchImpl` as for runComposerCase. */
+/**
+ * Runs the screen cases, the island cases, then the action cases (spec §8.1). `fetchImpl` as for
+ * runComposerCase.
+ */
 export async function runComposerConformance(
   baseUrl: string,
   fetchImpl: typeof fetch = fetch,
 ): Promise<CaseResult[]> {
   const results: CaseResult[] = [];
   for (const c of composerCases()) results.push(await runComposerCase(baseUrl, c, fetchImpl));
+  for (const c of islandCases())
+    results.push(await runIslandCase(baseUrl, { ...c, name: `island: ${c.name}` }, fetchImpl));
   for (const c of actionCases())
     results.push(await runActionCase(baseUrl, { ...c, name: `action: ${c.name}` }, fetchImpl));
   return results;

@@ -54,6 +54,8 @@ type IslandEntry struct {
 	Status  string       `json:"status"`
 	Props   any          `json:"props,omitempty"`
 	Error   *IslandError `json:"error,omitempty"`
+	// Next is set when the island has more pages: an opaque cursor for its next one (spec §4.5).
+	Next string `json:"next,omitempty"`
 }
 
 // CacheHint tells clients how long the screen may be cached.
@@ -76,6 +78,25 @@ type ScreenResponse struct {
 	Islands  []IslandEntry `json:"islands"`
 	Meta     *ScreenMeta   `json:"meta,omitempty"`
 	Cache    *CacheHint    `json:"cache,omitempty"`
+}
+
+// IslandRequest is the body a client POSTs to /screens/{screen}/islands/{key}: one island of the
+// screen resolved again, for its next page (with Cursor) or from its first (spec §4.5).
+type IslandRequest struct {
+	Protocol *int              `json:"protocol"`
+	Screen   string            `json:"screen"`
+	Key      string            `json:"key"`
+	Version  int               `json:"version"`
+	Params   map[string]string `json:"params,omitempty"`
+	Client   *ClientContext    `json:"client"`
+	Cursor   string            `json:"cursor,omitempty"`
+}
+
+// IslandResponse is the successful response to an island request: the island, alone.
+type IslandResponse struct {
+	Protocol int         `json:"protocol"`
+	Screen   string      `json:"screen"`
+	Island   IslandEntry `json:"island"`
 }
 
 // ErrorResponse is the body of a non-2xx response.

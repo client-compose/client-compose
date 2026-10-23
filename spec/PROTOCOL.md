@@ -154,6 +154,7 @@ All three are optional strings. Clients use what applies to them and ignore the 
 | `status`  | `ok` or `error`.                                                           |
 | `props`   | Present iff `status` is `ok`. MUST validate against the manifest.         |
 | `error`   | Present iff `status` is `error`. `{ code, retryable?, message? }`.        |
+| `next`    | Optional, only with `status: "ok"`. The island has more pages: an opaque cursor for its next one (§4.5). |
 
 ### 4.2 Version negotiation (composer side)
 
@@ -189,6 +190,78 @@ For each island the composer wants to place:
 - Typed clients (Swift, Kotlin, …) that fail to decode an island's props MUST skip that
   island rather than fail the screen, and SHOULD report it.
 - Props SHOULD be validated client-side in debug builds only.
+
+### 4.5 Island requests
+
+Some islands are long lists people scroll through: a feed, search results, comments. A screen
+sends their first page, and an island request fetches the next. The same request without a
+cursor resolves one island again, so a client can refresh it without the whole screen.
+
+An island entry with more pages carries `next`, an opaque string made by the composer's app. To
+fetch that page, a client sends `POST {base}/screens/{screen}/islands/{key}`
+(`schema/island-request.schema.json`):
+
+```json
+{
+  "protocol": 0,
+  "screen": "search",
+  "key": "results",
+  "version": 1,
+  "params": { "q": "pasta" },
+  "client": { "platform": "ios", "appVersion": "4.2.0" },
+  "cursor": "eyJuIjoyMH0"
+}
+```
+
+| Field      | Meaning                                                                         |
+| ---------- | ------------------------------------------------------------------------------- |
+| `screen`, `key` | The screen, and the island's key on it. Also in the path.                 |
+| `version`  | The island version the client is showing. Pages are resolved at that version.  |
+| `params`, `client` | As for the screen (§3): the same params the screen was requested with. |
+| `cursor`   | Optional. The entry's `next`. Without it, the island is resolved again from its first page. |
+
+The composer answers `200` with the island as an entry (§4.1), alone
+(`schema/island-response.schema.json`):
+
+```json
+{
+  "protocol": 0,
+  "screen": "search",
+  "island": {
+    "key": "results",
+    "type": "result-list",
+    "version": 1,
+    "status": "ok",
+    "props": { "items": [ … ] },
+    "next": "eyJuIjo0MH0"
+  }
+}
+```
+
+- **A page is the island's props**, holding that page's content: no new schema. How pages combine
+  (usually, appending their items) is the island's business; fields that only matter on the first
+  page can be optional.
+- **The screen is laid out as it would be**: its requirements, its layout and each placement's
+  condition run for the request, so a page answers 401, 403 or 404 just as the screen would. The
+  island's resolver sees the cursor.
+- **A cursor belongs to the app**: it carries whatever the app needs to go on (an offset, the time
+  the first page was made, so later additions don't push the list along). Composers pass it
+  through; clients never make or read one.
+- **Nothing changes**: an island request has no effects. Clients MAY cache it like a screen.
+- **Failure is the island's**: if it fails, the response is `200` with an entry whose `status` is
+  `error` (§4.3). `required` doesn't apply.
+
+| Situation                                         | Status | `error.code`                 |
+| ------------------------------------------------- | ------ | ---------------------------- |
+| The screen, or the key on it, doesn't exist for this request (unknown, or its condition is false) | 404 | `unknown_island` (`unknown_screen` for the screen) |
+| The placement has no version `version`            | 400    | `unsupported_island_version` |
+| A cursor for an island without pages, or one its app rejects | 400 | `invalid_cursor`   |
+| Body `screen` or `key` differs from the path      | 400    | `island_mismatch`            |
+
+Other failures are as for screens (§8.1): `bad_request`, `unsupported_protocol`, `not_found`,
+`unauthenticated`, `forbidden`, `layout_failed`.
+
+Clients that don't page or refresh islands ignore `next` (§4.3: unknown fields are ignored).
 
 ---
 
@@ -354,7 +427,6 @@ screen with the same id whose params include every param in the reference. So
 
 - **Deferred islands / streaming**: return fast islands first, stream slow ones
   (NDJSON or SSE), marked `status: "pending"`.
-- **Island refresh**: re-resolve a single island by `key` without the whole screen.
 - **Capability hashing** to shrink requests.
 - **Per-island cache hints** vs screen-level `cache`.
 - **Analytics/experiment metadata** on each island (`experiment`, `variant`).
@@ -395,10 +467,18 @@ The `__conformance` screen also reads three optional params:
 - `notFound`: `"true"` makes the screen respond `not_found`.
 - `auth`: `"unauthenticated"` or `"forbidden"` makes the screen respond with that error.
 
+If a mock has `pages` (a number), the island has that many pages (§4.5). Its resolver for version
+`n` resolves page `p` to `{ "v": n, "page": p }`, with `next` set to `"page:<p+1>"` until the last
+page. Without a cursor it resolves page 1; a cursor it didn't make is `invalid_cursor`. A mock
+without `pages` has none, so any cursor is `invalid_cursor`.
+
 If a mock has `load` (a key), its resolver first waits `startDelayMs`, then calls the composer's
 request-scoped load (§9) with that key and work that counts how often it runs, takes `loadDelayMs`,
 and fails if its cancellation signal fires. It then resolves to `{ "v": n, "calls": <runs of that
 key's work so far in this request> }`.
+
+The runner also sends each case in `conformance/composer/island-cases.json` as an island request
+(§4.5) for the `__conformance` screen, with the case's placements in its params.
 
 The `__conformance` screen MUST NOT be registered in production builds.
 
