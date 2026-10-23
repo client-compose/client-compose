@@ -34,7 +34,12 @@ interface IslandBase {
 }
 
 export type IslandEntry<P = Record<string, unknown>> =
-  | (IslandBase & { status: "ok"; props: P })
+  | (IslandBase & {
+      status: "ok";
+      props: P;
+      /** The island has more pages: an opaque cursor for its next one (spec §4.5). */
+      next?: string;
+    })
   | (IslandBase & { status: "error"; error: IslandError });
 
 /** Describes the screen as a whole: page title, description, sharing image (spec §4). */
@@ -51,6 +56,30 @@ export interface ScreenResponse {
   islands: IslandEntry[];
   meta?: ScreenMeta;
   cache?: { maxAge: number };
+}
+
+/**
+ * Resolves one island of a screen again: its next page, given the cursor from its entry's `next`,
+ * or from its first page without one (spec §4.5).
+ */
+export interface IslandRequest {
+  protocol: typeof PROTOCOL_VERSION;
+  screen: string;
+  /** The island's key on the screen. */
+  key: string;
+  /** The island version the client is showing. */
+  version: number;
+  /** The params the screen was requested with. */
+  params?: Record<string, string>;
+  client: ClientContext;
+  cursor?: string;
+}
+
+/** A 200 island response: the island, alone (spec §4.5). */
+export interface IslandResponse<P = Record<string, unknown>> {
+  protocol: typeof PROTOCOL_VERSION;
+  screen: string;
+  island: IslandEntry<P>;
 }
 
 export interface ScreenErrorResponse {

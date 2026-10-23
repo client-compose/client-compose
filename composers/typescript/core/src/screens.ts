@@ -15,6 +15,11 @@ export interface LayoutContext<Ctx> extends LoadContext {
   /** Your app's context for this request, from the composer's `context` function. */
   ctx: Ctx;
   /**
+   * The page an island request asks for (spec §4.5): an island's own `next`, from an earlier page.
+   * Undefined for a screen, and for an island's first page.
+   */
+  cursor?: string;
+  /**
    * Run `fn` once per `key` for this request, sharing the result with every island (and the layout)
    * that asks for the same key. `fn` gets the request's signal, not one island's, so an island
    * timing out never cancels work other islands are waiting on.
@@ -36,6 +41,14 @@ export interface Island<Ctx, P = unknown> {
   resolve: (rc: ResolveContext<Ctx>) => Promise<P> | P;
   /** Cache the island's props, when the composer has a `Cache` (CMP-18). */
   cache?: IslandCache<Ctx>;
+  /** It has pages: it resolves to a `Page`, its props and where the next page starts. */
+  paged?: boolean;
+}
+
+/** One page of a paged island: its props, and the cursor of the page after it, if there is one. */
+export interface Page<P> {
+  props: P;
+  next?: string;
 }
 
 export interface IslandOptions<Ctx> {
@@ -66,6 +79,30 @@ export function island<P, Ctx = unknown>(
     version: descriptor.version,
     resolve,
     ...options,
+  };
+}
+
+/**
+ * Define an island version with pages, such as a feed or search results (spec §4.5). It resolves
+ * the page `rc.cursor` asks for (the first when it's undefined) to that page's props, and the
+ * cursor of the page after it, if there is one. The cursor is your app's own: anything it needs
+ * to go on, such as an offset and the time the first page was made. Throw `InvalidCursorError`
+ * for one it can't read. Pages aren't cached.
+ *
+ *     const Results = pagedIsland(ResultListV1, async ({ params, cursor }) => {
+ *       const { items, next } = await search(params.q, readCursor(cursor));
+ *       return { props: { items }, next };
+ *     });
+ */
+export function pagedIsland<P, Ctx = unknown>(
+  descriptor: IslandDescriptor<P>,
+  resolve: (rc: ResolveContext<Ctx>) => Promise<Page<P>> | Page<P>,
+): Island<Ctx, Page<P>> {
+  return {
+    type: descriptor.type,
+    version: descriptor.version,
+    resolve,
+    paged: true,
   };
 }
 

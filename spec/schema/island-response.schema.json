@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://client-compose.dev/schema/v0/island-response.json",
+  "title": "Island response",
+  "type": "object",
+  "required": [
+    "protocol",
+    "screen",
+    "island"
+  ],
+  "properties": {
+    "protocol": {
+      "const": 0
+    },
+    "screen": {
+      "type": "string"
+    },
+    "island": {
+      "$ref": "screen-response.json#/$defs/island"
+    }
+  }
+}

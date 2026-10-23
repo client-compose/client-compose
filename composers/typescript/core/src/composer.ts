@@ -4,16 +4,18 @@ import {
   type ActionRequest,
   type Capabilities,
   type IslandEntry,
+  type IslandRequest,
   PROTOCOL_VERSION,
+  type ScreenErrorResponse,
   type ScreenRequest,
 } from "@client-compose/protocol";
 
 import { type Action, isActionRequestShape, performAction, protocolError } from "./actions.ts";
 import { type Cache, type Idempotency, performIdempotent, resolveCached } from "./adapters.ts";
 import { isRecord } from "./guards.ts";
-import { attachScope, RequestScope } from "./loading.ts";
+import { attachScope, InvalidCursorError, RequestScope } from "./loading.ts";
 import type { ComposeFn, Failure, PerformFn, Plugin, ResolveFn } from "./plugins.ts";
-import { type ComposeResult, fail, type PerformResult } from "./results.ts";
+import { type ComposeResult, fail, type IslandResult, type PerformResult } from "./results.ts";
 import {
   type Island,
   type LayoutContext,
@@ -57,19 +59,25 @@ export interface HandleResult {
 export interface Composer<Ctx, Req = Request> {
   /**
    * Fetch-standard handler (Bun, Deno, Cloudflare Workers, Hono, Next.js route handlers). Answers
-   * POST requests whose path ends in /screens/{screen} or /actions/{action}, so it works under any
-   * prefix.
+   * POST requests whose path ends in /screens/{screen}, /screens/{screen}/islands/{key} or
+   * /actions/{action}, so it works under any prefix.
    *
    *     export default { fetch: composer.fetch };
    */
   fetch: [Req] extends [Request] ? (request: Request) => Promise<Response> : never;
   /**
-   * For adapters: answer a POST to a path ending in /screens/{screen} or /actions/{action}, given its
-   * raw body and your server's request (for `context`). Returns undefined for any other path.
+   * For adapters: answer a POST to a path ending in /screens/{screen},
+   * /screens/{screen}/islands/{key} or /actions/{action}, given its raw body and your server's
+   * request (for `context`). Returns undefined for any other path.
    */
   handle(path: string, body: string, request: Req): Promise<HandleResult | undefined>;
   /** Compose a screen in-process, with a context you provide. Tests use the testing kit instead. */
   compose(req: ScreenRequest, ctx: Ctx): Promise<ComposeResult>;
+  /**
+   * Resolve one island of a screen in-process (spec §4.5): its next page, for a request with a
+   * cursor, or from its first page without one.
+   */
+  composeIsland(req: IslandRequest, ctx: Ctx): Promise<IslandResult>;
   /** Perform an action in-process, with a context you provide. */
   perform(req: ActionRequest, ctx: Ctx): Promise<PerformResult>;
   /** The islands placed by screens with declared `islands`, as a client would declare them. */
@@ -165,6 +173,77 @@ export function createComposer<Ctx = undefined, Req = Request>(
       return fail(404, "unknown_screen", req.screen);
     }
     return composeChain(req, ctx);
+  }
+
+  async function composeIsland(req: IslandRequest, ctx: Ctx): Promise<IslandResult> {
+    if (req.protocol !== PROTOCOL_VERSION) {
+      return unsupportedProtocol();
+    }
+    const screen = screens.get(req.screen);
+    if (!screen) {
+      return fail(404, "unknown_screen", req.screen);
+    }
+    // As for a screen: shared loads live as long as this request.
+    const request = new AbortController();
+    const scope = new RequestScope(request.signal);
+    try {
+      return await composeIslandIn(screen, req, ctx, scope);
+    } finally {
+      request.abort();
+    }
+  }
+
+  /**
+   * One island, from the screen laid out as it would be for the request: its requirements, layout
+   * and conditions run, so a page answers 401, 403 or 404 as the screen would.
+   */
+  async function composeIslandIn(
+    screen: Screen<Ctx>,
+    req: IslandRequest,
+    ctx: Ctx,
+    scope: RequestScope,
+  ): Promise<IslandResult> {
+    const load = scope.load.bind(scope);
+    const fields = {
+      screen: screen.id,
+      params: req.params ?? {},
+      client: req.client,
+      ctx,
+      load,
+      cursor: req.cursor,
+    };
+    const lc: LayoutContext<Ctx> = attachScope(fields, scope);
+    let placements: Placement<Ctx>[];
+    try {
+      placements = await placementsFor(screen, lc);
+    } catch (err) {
+      const res = protocolError(err);
+      if (res) {
+        return res;
+      }
+      report({
+        kind: "layout",
+        screen: screen.id,
+        error: err,
+      });
+      return fail(500, "layout_failed");
+    }
+    const found = islandAsked(placements, req);
+    if ("res" in found) {
+      return found.res;
+    }
+    const { entry, cause } = await resolveEntry(screen, found.placement, found.island, lc, scope);
+    if (cause instanceof InvalidCursorError) {
+      return fail(400, "invalid_cursor");
+    }
+    return {
+      status: 200,
+      body: {
+        protocol: PROTOCOL_VERSION,
+        screen: screen.id,
+        island: entry,
+      },
+    };
   }
 
   async function perform(req: ActionRequest, ctx: Ctx): Promise<PerformResult> {
@@ -300,20 +379,24 @@ export function createComposer<Ctx = undefined, Req = Request>(
     return (screen.islands ?? []).filter((_, i) => shown[i]);
   }
 
+  /**
+   * Resolves one island to its entry, and whether it's required. A failure is in its entry, and
+   * returned as its `cause` too, so an island request can tell an invalid cursor from a failure.
+   */
   async function resolveEntry(
     screen: Screen<Ctx>,
     p: Placement<Ctx>,
     island: Island<Ctx, unknown>,
     lc: LayoutContext<Ctx>,
     scope: RequestScope,
-  ): Promise<{ entry: IslandEntry; required?: boolean }> {
+  ): Promise<{ entry: IslandEntry; required?: boolean; cause?: unknown }> {
     const base = {
       key: p.key,
       type: island.type,
       version: island.version,
     };
     try {
-      const props = await withTimeout(p.timeoutMs ?? defaultTimeoutMs, (signal) =>
+      const resolved = await withTimeout(p.timeoutMs ?? defaultTimeoutMs, (signal) =>
         resolveChain({
           screen: screen.id,
           key: p.key,
@@ -321,14 +404,18 @@ export function createComposer<Ctx = undefined, Req = Request>(
           rc: attachScope({ ...lc, signal }, scope),
         }),
       );
+      // A paged island resolves to a page: its props, and where the next page starts.
+      const page = island.paged && isRecord(resolved) ? resolved : undefined;
+      const props = page ? page.props : resolved;
+      const next = typeof page?.next === "string" && page.next !== "" ? page.next : undefined;
       // Props are objects: the manifest's props schema says so (spec §2).
-      return {
-        entry: {
-          ...base,
-          status: "ok",
-          props: isRecord(props) ? props : {},
-        },
+      const entry: IslandEntry = {
+        ...base,
+        status: "ok",
+        props: isRecord(props) ? props : {},
+        ...(next !== undefined && { next }),
       };
+      return { entry };
     } catch (error) {
       report({
         kind: "island",
@@ -346,6 +433,7 @@ export function createComposer<Ctx = undefined, Req = Request>(
           error: { code, retryable: timedOut },
         },
         required: p.required,
+        cause: error,
       };
     }
   }
@@ -353,7 +441,7 @@ export function createComposer<Ctx = undefined, Req = Request>(
   /** Runs `context` and the plugins' context hooks, or returns the response to send instead. */
   async function contextFor(
     request: Req,
-    kind: "screens" | "actions",
+    kind: Route["kind"],
   ): Promise<{ ctx: Ctx } | { res: HandleResult }> {
     try {
       // Without a context function, Ctx is undefined (createComposer's default): TypeScript can't
@@ -373,7 +461,7 @@ export function createComposer<Ctx = undefined, Req = Request>(
         return { res };
       }
       report({ kind: "context", error });
-      return { res: fail(500, kind === "screens" ? "layout_failed" : "action_failed") };
+      return { res: fail(500, kind === "actions" ? "action_failed" : "layout_failed") };
     }
   }
 
@@ -390,34 +478,73 @@ export function createComposer<Ctx = undefined, Req = Request>(
     if ("res" in context) {
       return context.res;
     }
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(body);
-    } catch {
+    const parsed = parseJson(body);
+    if (!parsed.ok) {
       return fail(400, "bad_request", "Body is not valid JSON");
     }
-    if (route.kind === "screens") {
-      if (!isScreenRequestShape(parsed)) {
-        return fail(400, "bad_request", "Body is not a screen request");
-      }
-      if (parsed.protocol !== PROTOCOL_VERSION) {
-        return fail(400, "unsupported_protocol", `Composer speaks protocol ${PROTOCOL_VERSION}`);
-      }
-      if (parsed.screen !== route.name) {
-        return fail(400, "screen_mismatch", `${parsed.screen} != ${route.name}`);
-      }
-      return compose(parsed, context.ctx);
+    switch (route.kind) {
+      case "screens":
+        return handleScreen(route.name, parsed.value, context.ctx);
+      case "islands":
+        return handleIsland(route.name, route.key, parsed.value, context.ctx);
+      case "actions":
+        return handleAction(route.name, parsed.value, context.ctx);
     }
-    if (!isActionRequestShape(parsed)) {
+  }
+
+  /** A screen request (spec §3), checked against its path. */
+  function handleScreen(
+    screen: string,
+    body: unknown,
+    ctx: Ctx,
+  ): Promise<HandleResult> | HandleResult {
+    if (!isScreenRequestShape(body)) {
+      return fail(400, "bad_request", "Body is not a screen request");
+    }
+    if (body.protocol !== PROTOCOL_VERSION) {
+      return unsupportedProtocol();
+    }
+    if (body.screen !== screen) {
+      return fail(400, "screen_mismatch", `${body.screen} != ${screen}`);
+    }
+    return compose(body, ctx);
+  }
+
+  /** An island request (spec §4.5), checked against its path. */
+  function handleIsland(
+    screen: string,
+    key: string,
+    body: unknown,
+    ctx: Ctx,
+  ): Promise<HandleResult> | HandleResult {
+    if (!isIslandRequestShape(body)) {
+      return fail(400, "bad_request", "Body is not an island request");
+    }
+    if (body.protocol !== PROTOCOL_VERSION) {
+      return unsupportedProtocol();
+    }
+    if (body.screen !== screen || body.key !== key) {
+      return fail(400, "island_mismatch", `${body.screen}/${body.key} != ${screen}/${key}`);
+    }
+    return composeIsland(body, ctx);
+  }
+
+  /** An action request (spec §5.2), checked against its path. */
+  function handleAction(
+    action: string,
+    body: unknown,
+    ctx: Ctx,
+  ): Promise<HandleResult> | HandleResult {
+    if (!isActionRequestShape(body)) {
       return fail(400, "bad_request", "Body is not an action request");
     }
-    if (parsed.protocol !== PROTOCOL_VERSION) {
-      return fail(400, "unsupported_protocol", `Composer speaks protocol ${PROTOCOL_VERSION}`);
+    if (body.protocol !== PROTOCOL_VERSION) {
+      return unsupportedProtocol();
     }
-    if (parsed.action !== route.name) {
-      return fail(400, "action_mismatch", `${parsed.action} != ${route.name}`);
+    if (body.action !== action) {
+      return fail(400, "action_mismatch", `${body.action} != ${action}`);
     }
-    return perform(parsed, context.ctx);
+    return perform(body, ctx);
   }
 
   async function fetchHandler(request: Request): Promise<Response> {
@@ -461,6 +588,7 @@ export function createComposer<Ctx = undefined, Req = Request>(
     fetch: fetchHandler as Composer<Ctx, Req>["fetch"],
     handle,
     compose,
+    composeIsland,
     perform,
     islands,
   };
@@ -469,20 +597,80 @@ export function createComposer<Ctx = undefined, Req = Request>(
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
-/** The route a path ends in: /screens/{screen} or /actions/{action}. */
-export function matchRoute(
-  path: string,
-): { kind: "screens" | "actions"; name: string } | undefined {
-  const match = path.split("?")[0].match(/\/(screens|actions)\/([^/]+)\/?$/);
-  if (!match) {
-    return undefined;
-  }
+/** A composer route: a screen, one island of a screen (with its key), or an action. */
+export type Route =
+  | {
+      kind: "screens" | "actions";
+      /** The screen or action. */
+      name: string;
+    }
+  | {
+      kind: "islands";
+      /** The screen. */
+      name: string;
+      /** The island's key on it. */
+      key: string;
+    };
+
+const islandPath = /\/screens\/([^/]+)\/islands\/([^/]+)\/?$/;
+const screenOrActionPath = /\/(screens|actions)\/([^/]+)\/?$/;
+
+/** The route a path ends in: /screens/{screen}, /screens/{screen}/islands/{key} or /actions/{action}. */
+export function matchRoute(path: string): Route | undefined {
+  const clean = path.split("?")[0];
   try {
+    const island = islandPath.exec(clean);
+    if (island) {
+      return {
+        kind: "islands",
+        name: decodeURIComponent(island[1]),
+        key: decodeURIComponent(island[2]),
+      };
+    }
+    const match = screenOrActionPath.exec(clean);
+    if (!match) {
+      return undefined;
+    }
     const kind = match[1] === "screens" ? "screens" : "actions";
     return { kind, name: decodeURIComponent(match[2]) };
   } catch {
     return undefined;
   }
+}
+
+function unsupportedProtocol() {
+  return fail(400, "unsupported_protocol", `Composer speaks protocol ${PROTOCOL_VERSION}`);
+}
+
+/** A request body as JSON, or why not. */
+function parseJson(body: string): { ok: true; value: unknown } | { ok: false } {
+  try {
+    const value: unknown = JSON.parse(body);
+    return { ok: true, value };
+  } catch {
+    return { ok: false };
+  }
+}
+
+/** The placement and version an island request asks for, or the error to answer with. */
+function islandAsked<Ctx>(
+  placements: Placement<Ctx>[],
+  req: IslandRequest,
+):
+  | { placement: Placement<Ctx>; island: Island<Ctx, unknown> }
+  | { res: { status: 400 | 404; body: ScreenErrorResponse } } {
+  const placement = placements.find((p) => p.key === req.key);
+  if (!placement) {
+    return { res: fail(404, "unknown_island", req.key) };
+  }
+  const island = placement.versions.find((v) => v.version === req.version);
+  if (!island) {
+    return { res: fail(400, "unsupported_island_version", `${req.key} v${req.version}`) };
+  }
+  if (req.cursor !== undefined && !island.paged) {
+    return { res: fail(400, "invalid_cursor", `${req.key} has no pages`) };
+  }
+  return { placement, island };
 }
 
 function isScreenRequestShape(v: unknown): v is ScreenRequest {
@@ -491,6 +679,20 @@ function isScreenRequestShape(v: unknown): v is ScreenRequest {
   }
   const fieldsOk = typeof v.protocol === "number" && typeof v.screen === "string";
   return fieldsOk && isRecord(v.client) && isRecord(v.islands);
+}
+
+function isIslandRequestShape(v: unknown): v is IslandRequest {
+  if (!isRecord(v)) {
+    return false;
+  }
+  const addressed = typeof v.screen === "string" && typeof v.key === "string";
+  const versioned =
+    typeof v.protocol === "number" &&
+    typeof v.version === "number" &&
+    Number.isInteger(v.version) &&
+    v.version >= 1;
+  const cursorOk = v.cursor === undefined || typeof v.cursor === "string";
+  return addressed && versioned && cursorOk && isRecord(v.client);
 }
 
 class TimeoutError extends Error {}

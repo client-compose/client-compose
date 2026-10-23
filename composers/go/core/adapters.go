@@ -51,6 +51,10 @@ type islandCache struct {
 //		return viewerID(ctx) + ":" + r.Params["page"]
 //	})
 func (i Island) CacheFor(ttl time.Duration, key CacheKey) Island {
+	if i.paged {
+		// A page depends on its cursor, and the cache keeps props alone, not where they go on.
+		panic(fmt.Sprintf("clientcompose: %s v%d has pages, which aren't cached", i.Type, i.Version))
+	}
 	i.cache = &islandCache{ttl: ttl, key: key}
 	return i
 }

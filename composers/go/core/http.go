@@ -3,13 +3,15 @@ package clientcompose
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 )
 
 const maxBodyBytes = 1 << 20
 
-// ServeHTTP serves POST /screens/{screen} and POST /actions/{action}. Mount the composer at your
+// ServeHTTP serves POST /screens/{screen}, POST /screens/{screen}/islands/{key} and
+// POST /actions/{action}. Mount the composer at your
 // root, or under a prefix with http.StripPrefix. Other routers take an http.Handler too: chi's
 // Mount, gin.WrapH, echo.WrapHandler.
 func (c *Composer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -22,6 +24,13 @@ func (c *Composer) routes() *http.ServeMux {
 		ctx, res, ok := c.context(r, LayoutFailed)
 		if ok {
 			res = c.composeHTTP(ctx, r.PathValue("screen"), r.Body)
+		}
+		writeResult(w, res)
+	})
+	mux.HandleFunc("POST /screens/{screen}/islands/{key}", func(w http.ResponseWriter, r *http.Request) {
+		ctx, res, ok := c.context(r, LayoutFailed)
+		if ok {
+			res = c.composeIslandHTTP(ctx, r.PathValue("screen"), r.PathValue("key"), r.Body)
 		}
 		writeResult(w, res)
 	})
@@ -75,6 +84,25 @@ func (c *Composer) composeHTTP(ctx context.Context, pathScreen string, body io.R
 		return fail(http.StatusBadRequest, "screen_mismatch", req.Screen+" != "+pathScreen)
 	}
 	return c.Compose(ctx, req)
+}
+
+// composeIslandHTTP parses and checks a raw island request body, then resolves the island (spec
+// §4.5 error codes).
+func (c *Composer) composeIslandHTTP(ctx context.Context, pathScreen, pathKey string, body io.Reader) Result {
+	var req IslandRequest
+	if err := json.NewDecoder(io.LimitReader(body, maxBodyBytes)).Decode(&req); err != nil {
+		return fail(http.StatusBadRequest, "bad_request", "body is not valid JSON")
+	}
+	if req.Protocol == nil || req.Screen == "" || req.Key == "" || req.Version < 1 || req.Client == nil {
+		return fail(http.StatusBadRequest, "bad_request", "body is not an island request")
+	}
+	if *req.Protocol != ProtocolVersion {
+		return fail(http.StatusBadRequest, "unsupported_protocol", "")
+	}
+	if req.Screen != pathScreen || req.Key != pathKey {
+		return fail(http.StatusBadRequest, "island_mismatch", fmt.Sprintf("%s/%s != %s/%s", req.Screen, req.Key, pathScreen, pathKey))
+	}
+	return c.ComposeIsland(ctx, req)
 }
 
 // performHTTP parses and checks a raw action request body, then performs the action (spec §8.1

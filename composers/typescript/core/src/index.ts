@@ -20,6 +20,7 @@ export {
   createComposer,
   type HandleResult,
   matchRoute,
+  type Route,
 } from "./composer.ts";
 export { conformanceActions, conformanceScreen } from "./conformance.ts";
 export {
@@ -27,6 +28,7 @@ export {
   type BatchLoaderOptions,
   defineBatchLoader,
   ForbiddenError,
+  InvalidCursorError,
   type LoadContext,
   LoadNotFoundError,
   NotFoundError,
@@ -43,13 +45,15 @@ export {
   type RequirementRequest,
   type ResolveFn,
 } from "./plugins.ts";
-export type { ComposeResult, PerformResult } from "./results.ts";
+export type { ComposeResult, IslandResult, PerformResult } from "./results.ts";
 export {
   type Island,
   island,
   type IslandOptions,
   type LayoutContext,
   negotiate,
+  type Page,
+  pagedIsland,
   place,
   type Placement,
   type PlaceOptions,
@@ -72,6 +76,8 @@ export {
   type IslandDescriptor,
   type IslandEntry,
   type IslandError,
+  type IslandRequest,
+  type IslandResponse,
   PROTOCOL_VERSION,
   type ScreenErrorResponse,
   type ScreenMeta,

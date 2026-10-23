@@ -1,5 +1,5 @@
 {
-  "$comment": "Composer conformance cases (spec §8.1). The runner POSTs to {base}/screens/{path ?? request.screen} with a request built from `placements` and `capabilities`, merged with any `request` overrides; `rawBody` replaces the body entirely. Expected bodies are subset matches, except arrays, which must match in length and order.",
+  "$comment": "Composer conformance cases (spec \u00a78.1). The runner POSTs to {base}/screens/{path ?? request.screen} with a request built from `placements` and `capabilities`, merged with any `request` overrides; `rawBody` replaces the body entirely. Expected bodies are subset matches, except arrays, which must match in length and order.",
   "cases": [
     {
       "name": "picks highest mutually supported version",
@@ -443,6 +443,78 @@
                 "v": 1,
                 "calls": 1
               }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "an island with more pages says where the next starts",
+      "placements": [
+        {
+          "key": "feed",
+          "type": "post-list",
+          "versions": [
+            1
+          ],
+          "outcome": "ok",
+          "pages": 3
+        },
+        {
+          "key": "short",
+          "type": "post-list",
+          "versions": [
+            1
+          ],
+          "outcome": "ok",
+          "pages": 1
+        },
+        {
+          "key": "plain",
+          "type": "profile-header",
+          "versions": [
+            1
+          ],
+          "outcome": "ok"
+        }
+      ],
+      "capabilities": {
+        "post-list": [
+          1
+        ],
+        "profile-header": [
+          1
+        ]
+      },
+      "expect": {
+        "status": 200,
+        "body": {
+          "islands": [
+            {
+              "key": "feed",
+              "status": "ok",
+              "props": {
+                "v": 1,
+                "page": 1
+              },
+              "next": "page:2"
+            },
+            {
+              "key": "short",
+              "status": "ok",
+              "props": {
+                "v": 1,
+                "page": 1
+              },
+              "next": "$absent"
+            },
+            {
+              "key": "plain",
+              "status": "ok",
+              "props": {
+                "v": 1
+              },
+              "next": "$absent"
             }
           ]
         }
