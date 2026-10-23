@@ -148,8 +148,7 @@ const ProfileHeader = island(ProfileHeaderV2, async ({ params, load }) => {
 
 A plugin is a value that implements some of these. The core calls them in the order they're listed
 in `use`, and conformance runs with them installed, so a plugin can't break the protocol. A plugin
-is also the right way for an app to share its own conventions across screens, as Flavr's gateway
-`kit` does today.
+is also the right way for an app to share its own conventions across screens.
 
 ### Adapters
 
@@ -319,9 +318,9 @@ In order, each as its own pull request:
 1. **This document.**
 2. **Composers.** The declarative shape and the extension points in Go and TypeScript, as one
    breaking change at 0.x (CMP-1, CMP-10, CMP-11, CMP-15 to CMP-17). Fetch-standard, Express and
-   Fastify adapters (CMP-12). Test kits for both (CMP-13). Candidates from Flavr, the first
-   production app: a static placement (an island whose props are known up front) and loading many
-   keys from a batch loader at once. Flavr moves to the new Go API in the same round.
+   Fastify adapters (CMP-12). Test kits for both (CMP-13). Candidates from the first production
+   app: a static placement (an island whose props are known up front) and loading many keys from a
+   batch loader at once.
 3. **Adapters.** Optional cache and idempotency adapters in Go and TypeScript (CMP-18, CMP-19), with
    in-memory implementations in the test kits. Your app supplies the real ones.
 4. **Conformance.** Client fixtures for actions and effects: outcomes, declared and unknown error
