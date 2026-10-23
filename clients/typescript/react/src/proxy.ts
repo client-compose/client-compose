@@ -6,7 +6,12 @@
 
 import { ActionFetchError } from "@client-compose/client";
 import type { ProxyResult } from "@client-compose/client/proxy";
-import type { ActionRequest, ActionResponse, ScreenResponse } from "@client-compose/protocol";
+import type {
+  ActionRequest,
+  ActionResponse,
+  IslandEntry,
+  ScreenResponse,
+} from "@client-compose/protocol";
 
 import type { ClientComposeConfig } from "./config.ts";
 
@@ -15,6 +20,11 @@ export interface ProxyFunctions {
   performAction: (request: ActionRequest) => Promise<ProxyResult<ActionResponse>>;
   /** Calls the server's `proxy.loadScreen`. Leave out if the browser never loads screens itself. */
   loadScreen?: (request: unknown) => Promise<ProxyResult<ScreenResponse>>;
+  /**
+   * Calls the server's `proxy.loadIsland`, for islands' next pages (usePages). Leave out if no
+   * island loads pages.
+   */
+  loadIsland?: (request: unknown) => Promise<ProxyResult<IslandEntry>>;
 }
 
 export type ProxyTransport = Required<Pick<ClientComposeConfig, "fetch" | "performAction">>;
@@ -30,7 +40,19 @@ function parseBody(body: BodyInit | null | undefined): unknown {
 
 /** `fetch` and `performAction` for `ClientComposeConfig` that go through your server. */
 export function viaProxy(proxy: ProxyFunctions): ProxyTransport {
-  async function proxiedFetch(_input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  async function proxiedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    if (/\/screens\/[^/]+\/islands\//.test(url)) {
+      if (!proxy.loadIsland)
+        throw new Error("viaProxy: no loadIsland given, so islands can't load their pages");
+      const body = parseBody(init?.body);
+      const result = await proxy.loadIsland(body);
+      const screen = (body as { screen?: unknown } | undefined)?.screen;
+      // As the composer answers, so fetchIsland reads it the same way.
+      return result.ok
+        ? Response.json({ protocol: 0, screen, island: result.response })
+        : new Response(result.body, { status: result.status });
+    }
     if (!proxy.loadScreen)
       throw new Error("viaProxy: no loadScreen given, so the browser can't load screens");
     const result = await proxy.loadScreen(parseBody(init?.body));

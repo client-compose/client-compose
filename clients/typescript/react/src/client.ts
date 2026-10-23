@@ -6,8 +6,10 @@
 
 import {
   buildActionRequest,
+  buildIslandRequest,
   checkActionResponse,
   fetchAction,
+  fetchIsland,
   newIdempotencyKey,
   plan,
   type PlannedIsland,
@@ -17,6 +19,7 @@ import {
   type ActionEffects,
   type ActionResponse,
   type DeclaredError,
+  type IslandError,
   type ScreenRef,
   screenRefMatches,
   type ScreenResponse,
@@ -251,10 +254,14 @@ export function useScreen(
   const islands = useMemo(
     () =>
       response
-        ? plan(config.registry, response, {
-            onError: config.renderIslandError,
-            onSkipped: config.onSkipped,
-          })
+        ? scoped(
+            plan(config.registry, response, {
+              onError: config.renderIslandError,
+              onSkipped: config.onSkipped,
+            }),
+            response,
+            latestParams.current,
+          )
         : [],
     [response, config],
   );
@@ -279,6 +286,157 @@ export function useScreen(
     refreshing: current.refreshing,
     reload,
   };
+}
+
+// ---- Island requests (spec §4.5) ----
+
+/** Where an island is: its screen and the screen's params, its key and version, and its `next`. */
+export interface IslandScopeValue {
+  screen: string;
+  params: Record<string, string>;
+  key: string;
+  version: number;
+  next?: string;
+}
+
+const IslandScopeContext = createContext<IslandScopeValue | null>(null);
+
+/**
+ * Tells the island inside it where it is, so it can fetch its next page (usePages). useScreen and
+ * <ComposedScreen> put one around every island; so does the Server Component entry.
+ */
+export function IslandScope(props: { value: IslandScopeValue; children?: ReactNode }): ReactNode {
+  return createElement(IslandScopeContext.Provider, { value: props.value }, props.children);
+}
+
+/** Planned islands, each inside its IslandScope. */
+function scoped(
+  islands: PlannedIsland<ReactNode>[],
+  response: ScreenResponse,
+  params: Record<string, string>,
+): PlannedIsland<ReactNode>[] {
+  return islands.map((island) => {
+    const entry = response.islands.find((e) => e.key === island.key);
+    if (entry?.status !== "ok") return island;
+    const value: IslandScopeValue = {
+      screen: response.screen,
+      params,
+      key: entry.key,
+      version: entry.version,
+      ...(entry.next !== undefined && { next: entry.next }),
+    };
+    return {
+      key: island.key,
+      render: () => createElement(IslandScope, { value }, island.render()),
+    };
+  });
+}
+
+/**
+ * "more" while there's a next page, "loading" while it loads, "end" when there are no more (or the
+ * island has no pages), "failed" when the last page couldn't load: `loadMore` tries it again.
+ */
+export type PagesStatus = "more" | "loading" | "end" | "failed";
+
+export interface PagesState<P> {
+  /** The island's pages so far: the props it was rendered with, then each page loaded since. */
+  pages: P[];
+  status: PagesStatus;
+  /**
+   * Why the last page failed: the island's error from the composer (an `IslandError`, e.g.
+   * `{ code: "timeout", retryable: true }`), or the request's (e.g. a `ScreenFetchError`).
+   */
+  error?: IslandError | unknown;
+  /** Fetch the next page, unless one is loading or there are no more. */
+  loadMore: () => void;
+}
+
+interface Pages<P> {
+  /** The props the pages start from: new props (another search, a reload) start again. */
+  first: P;
+  more: P[];
+  next: string | undefined;
+  loading: boolean;
+  error?: unknown;
+}
+
+/**
+ * The pages of a paged island (spec §4.5), from the props it was rendered with. Call it in the
+ * island's component, with its props, and lay out every page, usually by flattening their items:
+ *
+ *     function Results(props: ResultListV1) {
+ *       const { pages, status, loadMore } = usePages(props);
+ *       const items = pages.flatMap((page) => page.items);
+ *       return <FlatList data={items} onEndReached={loadMore} … />;
+ *     }
+ *
+ * When the island is rendered with new props (the screen reloaded, or opened with other params),
+ * it starts again from them. A page that arrives after that is dropped.
+ */
+export function usePages<P>(props: P): PagesState<P> {
+  const { config } = useClientCompose();
+  const scope = useContext(IslandScopeContext);
+  const [pages, setPages] = useState<Pages<P>>(() => ({
+    first: props,
+    more: [],
+    next: scope?.next,
+    loading: false,
+  }));
+  const current: Pages<P> =
+    pages.first === props ? pages : { first: props, more: [], next: scope?.next, loading: false };
+  if (current !== pages) setPages(current); // new props: start again from them
+
+  const loadMore = () => {
+    if (!scope || current.loading || current.next === undefined) return;
+    const first = current.first;
+    const cursor = current.next;
+    // Only for the pages it was asked for: newer props start again.
+    const update = (change: (p: Pages<P>) => Pages<P>) =>
+      setPages((p) => (p.first === first ? change(p) : p));
+    update((p) => ({ ...p, loading: true, error: undefined }));
+    void (async () => {
+      try {
+        const request = buildIslandRequest(
+          scope.screen,
+          scope.params,
+          scope,
+          config.client,
+          cursor,
+        );
+        const entry = await fetchIsland(
+          config.baseUrl,
+          request,
+          { ...config.requestInit, headers: await config.headers?.() },
+          config.fetch,
+        );
+        if (entry.status === "ok") {
+          update((p) => ({
+            ...p,
+            more: [...p.more, entry.props as P],
+            next: entry.next,
+            loading: false,
+          }));
+        } else {
+          update((p) => ({ ...p, loading: false, error: entry.error }));
+        }
+      } catch (error) {
+        update((p) => ({ ...p, loading: false, error }));
+      }
+    })();
+  };
+
+  return {
+    pages: [current.first, ...current.more],
+    status: pagesStatus(current),
+    ...(current.error !== undefined && { error: current.error }),
+    loadMore,
+  };
+}
+
+function pagesStatus<P>(pages: Pages<P>): PagesStatus {
+  if (pages.loading) return "loading";
+  if (pages.error !== undefined) return "failed";
+  return pages.next === undefined ? "end" : "more";
 }
 
 interface BoundaryProps {

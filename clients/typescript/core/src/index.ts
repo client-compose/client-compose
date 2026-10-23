@@ -10,6 +10,8 @@ import {
   type DeclaredError,
   type IslandDescriptor,
   type IslandEntry,
+  type IslandRequest,
+  type IslandResponse,
   PROTOCOL_VERSION,
   type ScreenRequest,
   type ScreenResponse,
@@ -142,6 +144,61 @@ export async function fetchScreen(
   });
   if (!res.ok) throw new ScreenFetchError(res.status, await res.text());
   return (await res.json()) as ScreenResponse;
+}
+
+// ---- Island requests (spec §4.5) ----
+
+/**
+ * A request for one island of a screen: the page `cursor` asks for (an entry's `next`), or the
+ * island from its first page without one. `params` are the screen's own.
+ */
+export function buildIslandRequest(
+  screen: string,
+  params: Record<string, string> | undefined,
+  entry: { key: string; version: number },
+  client: ClientContext,
+  cursor?: string,
+): IslandRequest {
+  return {
+    protocol: PROTOCOL_VERSION,
+    screen,
+    key: entry.key,
+    version: entry.version,
+    params,
+    client,
+    ...(cursor !== undefined && { cursor }),
+  };
+}
+
+/**
+ * POST an island request. Resolves with the island's entry: its props (and `next`, if it has more
+ * pages) or the error it failed with. Throws ScreenFetchError for a non-2xx response (e.g.
+ * `invalid_cursor`, `unknown_island`, `unauthenticated`), or an answer that isn't this island.
+ */
+export async function fetchIsland(
+  baseUrl: string,
+  request: IslandRequest,
+  init: RequestInit = {},
+  fetchImpl: typeof fetch = fetch,
+): Promise<IslandEntry> {
+  const path = `${encodeURIComponent(request.screen)}/islands/${encodeURIComponent(request.key)}`;
+  const res = await fetchImpl(`${baseUrl}/screens/${path}`, {
+    ...init,
+    method: "POST",
+    headers: { "content-type": "application/json", ...init.headers },
+    body: JSON.stringify(request),
+  });
+  const text = await res.text();
+  if (!res.ok) throw new ScreenFetchError(res.status, text);
+  let island: IslandEntry | undefined;
+  try {
+    island = (JSON.parse(text) as IslandResponse).island;
+  } catch {
+    island = undefined;
+  }
+  if (island?.key !== request.key || island.version !== request.version)
+    throw new ScreenFetchError(res.status, text);
+  return island;
 }
 
 // ---- Actions (spec §5) ----
