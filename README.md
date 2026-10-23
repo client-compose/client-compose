@@ -7,7 +7,9 @@ Your server decides which islands make up each screen, in what order, and with w
 the server, and every app that's already installed picks it up, as long as it knows how to draw the
 islands you send.
 
-It works the same across web, iOS and Android, from a Go or TypeScript backend.
+The protocol is language-neutral. This repo has composers in Go and TypeScript and clients for
+React, React Native, SwiftUI and Jetpack Compose, and new ones for other languages and UI frameworks
+are welcome.
 
 ```
  app                              composer (your backend-for-frontend)         services
@@ -26,13 +28,20 @@ Native apps change slowly. A UI change waits on store review, then on people upd
 them never do. On the web you deploy and you're done; on mobile you're supporting last year's build
 for years.
 
+It isn't only the UI that gets stuck. An installed app also carries its networking: which endpoints
+to call, what to send them and how to read what comes back. When the backend changes, every old
+build still expects the old shapes, so you either keep those endpoints alive indefinitely or accept
+that some older versions will just break.
+
 The usual fix is server-driven UI: describe the whole interface from the server. That works until
 the schema grows rows and columns and padding and conditionals, and you've built a second UI
 framework, a worse one, that every app has to interpret.
 
 Client Compose sits in between. The server decides *what's on the screen*. The app decides *what it
 looks like* and *how it behaves*. The contract between them is a flat, ordered list of islands, each
-a versioned set of typed props. No layout trees, no styling, no logic sent over the wire.
+a versioned set of typed props. No layout trees, no styling, no logic sent over the wire. And
+because the app only ever talks to the composer, the code that knows about your services lives on
+the server, where you can change it.
 
 ## What it looks like
 
@@ -113,6 +122,14 @@ composer sends the newest version both sides know. An app from two years ago get
 from the same endpoint that gives today's app v2. `codegen compat` catches a breaking change to a
 released version before it ships.
 
+**Backend changes stay on the backend.** The app doesn't call your services, so it doesn't ship
+their endpoints, request shapes or response parsing. It asks for screens and performs actions, and
+the composer does the rest. When a service changes, you update the composer and deploy it. The
+adapting for each app version happens there too: last year's build still sends v1 of an action,
+and the composer maps it onto the new API. When an old version really can't be supported any more,
+you stop serving that island and old apps show the rest of the screen without it, instead of
+breaking.
+
 **One slow service doesn't take the screen down.** Islands resolve in parallel, each with its own
 timeout. If the posts service is down, the header still renders, and the posts island comes back as
 an error the app can hide or retry. Mark an island `required` when the screen means nothing without
@@ -161,11 +178,30 @@ Pick a composer and a client. Each has a README covering setup, testing and the 
 | Client | [Plain TypeScript](clients/typescript/core), for anything else that renders | `npm install @client-compose/client` |
 | Codegen | [Types for every language](codegen), from your manifests | `npm install -D @client-compose/codegen`, or a [standalone binary](codegen#install) |
 
+### Your stack isn't listed?
+
+Contribute it. The protocol is a short [spec](spec/PROTOCOL.md), and nothing in it depends on Go,
+TypeScript or any UI framework. Anything that can make an HTTP request and render a list can be a
+client, and anything that can serve one can be a composer. What a new implementation has to do is
+spelled out:
+
+- **A composer** in another language (Python, Ruby, Kotlin on the server, Rust, .NET…) passes the
+  [composer conformance suite](conformance), which runs over HTTP against your server, so it needs
+  nothing from your language.
+- **A client** for another platform loads the shared fixtures in its own tests: rendering, actions
+  and effects.
+- **A UI binding** for another framework (Vue, Svelte, Solid, UIKit, Flutter…) usually sits on an
+  existing client core. The React, SwiftUI and Compose bindings show the shape.
+- **A framework adapter** for an existing composer (Hono, Koa, Lambda, Gin…) is usually a few lines.
+
+[`spec/CAPABILITIES.md`](spec/CAPABILITIES.md) lists what each layer should provide, and
+[CONTRIBUTING.md](CONTRIBUTING.md) walks through adding one.
+
 ## Status
 
 Client Compose is young: everything is 0.x and the protocol is v0. Expect breaking changes while it
-settles, each called out in the changelogs. It's built alongside a real app, Flavr, whose web and
-React Native apps run on the Go composer, and most of the design comes from what that app needed.
+settles, each called out in the changelogs. It's built alongside a real app with web and React
+Native clients on the Go composer, and most of the design comes from what that app needed.
 
 On the way:
 
