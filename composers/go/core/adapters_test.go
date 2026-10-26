@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -19,7 +20,7 @@ func countedHeader(runs *atomic.Int32, fail *atomic.Bool) cc.Island {
 		if fail != nil && fail.Load() {
 			return headerV1{}, errors.New("users service down")
 		}
-		return headerV1{Name: r.Params["userId"] + string(rune('0'+runs.Add(1)))}, nil
+		return headerV1{Name: r.Params["userId"] + strconv.Itoa(int(runs.Add(1)))}, nil
 	})
 }
 
@@ -128,7 +129,7 @@ func echoAction(runs *atomic.Int32, release chan struct{}) cc.Action {
 		if release != nil {
 			<-release
 		}
-		return ca.ConformanceV1Result{Echo: in.Echo + string(rune('0'+n)), Version: 1}, cc.Effects{Invalidate: []cc.ScreenRef{{Screen: "feed"}}}, nil
+		return ca.ConformanceV1Result{Echo: in.Echo + strconv.Itoa(int(n)), Version: 1}, cc.Effects{Invalidate: []cc.ScreenRef{{Screen: "feed"}}}, nil
 	})
 }
 

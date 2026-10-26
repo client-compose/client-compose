@@ -25,6 +25,7 @@ type ClientContext struct {
 	Extra      map[string]any `json:"-"`
 }
 
+// UnmarshalJSON reads the known fields, and keeps every other field in Extra.
 func (c *ClientContext) UnmarshalJSON(data []byte) error {
 	type known ClientContext
 	if err := json.Unmarshal(data, (*known)(c)); err != nil {

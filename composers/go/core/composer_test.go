@@ -38,11 +38,12 @@ func TestPanickingIslandIsIsolated(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer res.Body.Close()
 	var body ScreenResponse
 	if err := json.NewDecoder(res.Body).Decode(&body); err != nil {
 		t.Fatal(err)
 	}
-	if res.StatusCode != 200 || body.Islands[0].Status != "error" || body.Islands[0].Error.Code != "resolve_failed" {
+	if res.StatusCode != http.StatusOK || body.Islands[0].Status != "error" || body.Islands[0].Error.Code != "resolve_failed" {
 		t.Fatalf("unexpected response %d %+v", res.StatusCode, body)
 	}
 }

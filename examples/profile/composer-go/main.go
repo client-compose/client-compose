@@ -123,7 +123,7 @@ func profileScreen(s Services) cc.Screen {
 		posts, err := s.RecentPosts(ctx, r.Params["userId"])
 		grid := PostGridV1{Posts: []PostGridV1Post{}}
 		for _, p := range posts {
-			grid.Posts = append(grid.Posts, PostGridV1Post{ID: p.ID, ThumbnailURL: p.ThumbnailURL})
+			grid.Posts = append(grid.Posts, PostGridV1Post(p))
 		}
 		return grid, err
 	})
