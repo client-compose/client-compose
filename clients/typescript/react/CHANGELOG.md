@@ -1,5 +1,12 @@
 # @client-compose/react
 
+## 0.9.0
+
+### Minor Changes
+
+- [#37](https://github.com/client-compose/client-compose/pull/37) [`37bd8f6`](https://github.com/client-compose/client-compose/commit/37bd8f6849b47ad5e8d9d00b7f04ac57f5bfa69c) Thanks [@LewisYearsley](https://github.com/LewisYearsley)! - `pagedIsland` in `@client-compose/react/testing`: a paged island on a screen of its own, with the
+  fake composer's answers for the screen and its pages, for testing islands that use `usePages`.
+
 ## 0.8.0
 
 ### Minor Changes
