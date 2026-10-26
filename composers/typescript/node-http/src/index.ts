@@ -32,7 +32,11 @@ export function createRequestListener<Ctx>(
     for await (const chunk of req) {
       body += chunk;
     }
-    const result = (await composer.handle(path, body, req))!;
+    const result = await composer.handle(path, body, req);
+    if (!result) {
+      res.writeHead(404).end();
+      return;
+    }
     res
       .writeHead(result.status, { "content-type": "application/json" })
       .end(JSON.stringify(result.body));

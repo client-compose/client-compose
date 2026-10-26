@@ -10,6 +10,7 @@ import {
 
 import { type Action, isActionRequestShape, performAction, protocolError } from "./actions.ts";
 import { type Cache, type Idempotency, performIdempotent, resolveCached } from "./adapters.ts";
+import { isRecord } from "./guards.ts";
 import { attachScope, RequestScope } from "./loading.ts";
 import type { ComposeFn, Failure, PerformFn, Plugin, ResolveFn } from "./plugins.ts";
 import { type ComposeResult, fail, type PerformResult } from "./results.ts";
@@ -102,13 +103,12 @@ export function createComposer<Ctx = undefined, Req = Request>(
   const actions = new Map<string, Map<number, Action<Ctx>>>();
   for (const a of config.actions ?? []) {
     const { action, version } = a.descriptor;
-    if (!actions.has(action)) {
-      actions.set(action, new Map());
-    }
-    if (actions.get(action)!.has(version)) {
+    const versions = actions.get(action) ?? new Map<number, Action<Ctx>>();
+    if (versions.has(version)) {
       throw new Error(`Action ${action} v${version} is defined twice`);
     }
-    actions.get(action)!.set(version, a);
+    versions.set(version, a);
+    actions.set(action, versions);
   }
   const plugins = config.use ?? [];
   const defaultTimeoutMs = config.defaultTimeoutMs ?? 2000;
@@ -123,11 +123,26 @@ export function createComposer<Ctx = undefined, Req = Request>(
     }
   };
 
+  // compose and perform check a screen or action exists before the chains run.
+  const screenOf = (id: string): Screen<Ctx> => {
+    const found = screens.get(id);
+    if (!found) {
+      throw new Error(`No screen "${id}"`);
+    }
+    return found;
+  };
+  const actionOf = (name: string, version: number): Action<Ctx> => {
+    const found = actions.get(name)?.get(version);
+    if (!found) {
+      throw new Error(`No action ${name} v${version}`);
+    }
+    return found;
+  };
+
   let resolveChain: ResolveFn<Ctx> = (call) => resolveCached(config.cache, call, report);
-  let composeChain: ComposeFn<Ctx> = (req, ctx) =>
-    composeScreen(screens.get(req.screen)!, req, ctx);
+  let composeChain: ComposeFn<Ctx> = (req, ctx) => composeScreen(screenOf(req.screen), req, ctx);
   const performOnce = (req: ActionRequest, ctx: Ctx) =>
-    performAction(actions.get(req.action)!.get(req.version)!, req, ctx, report);
+    performAction(actionOf(req.action, req.version), req, ctx, report);
   let performChain: PerformFn<Ctx> = (req, ctx) =>
     performIdempotent(config.idempotency, req, ctx, performOnce, report);
   for (const p of [...plugins].reverse()) {
@@ -216,9 +231,10 @@ export function createComposer<Ctx = undefined, Req = Request>(
       return fail(500, "layout_failed");
     }
     // Started now so it runs alongside the islands (and can share their loads).
-    const meta = screen.meta
+    const metaOf = screen.meta;
+    const meta = metaOf
       ? Promise.resolve()
-          .then(() => screen.meta!(lc))
+          .then(() => metaOf(lc))
           .catch((error) => {
             report({
               kind: "meta",
@@ -245,9 +261,9 @@ export function createComposer<Ctx = undefined, Req = Request>(
         )
         .map(({ p, island }) => resolveEntry(screen, p, island, lc, scope)),
     );
-    const failedRequired = entries.find((e) => e.status === "error" && e.required);
+    const failedRequired = entries.find((e) => e.entry.status === "error" && e.required);
     if (failedRequired) {
-      return fail(502, "required_island_failed", failedRequired.key);
+      return fail(502, "required_island_failed", failedRequired.entry.key);
     }
     const screenMeta = await meta;
 
@@ -256,7 +272,7 @@ export function createComposer<Ctx = undefined, Req = Request>(
       body: {
         protocol: PROTOCOL_VERSION,
         screen: screen.id,
-        islands: entries.map(({ required: _, ...e }) => e as IslandEntry),
+        islands: entries.map((e) => e.entry),
         ...(screenMeta &&
           Object.values(screenMeta).some((v) => v !== undefined) && { meta: screenMeta }),
         ...(screen.cache && { cache: { maxAge: screen.cache.maxAge } }),
@@ -290,7 +306,7 @@ export function createComposer<Ctx = undefined, Req = Request>(
     island: Island<Ctx, unknown>,
     lc: LayoutContext<Ctx>,
     scope: RequestScope,
-  ): Promise<IslandEntry & { required?: boolean }> {
+  ): Promise<{ entry: IslandEntry; required?: boolean }> {
     const base = {
       key: p.key,
       type: island.type,
@@ -305,10 +321,13 @@ export function createComposer<Ctx = undefined, Req = Request>(
           rc: attachScope({ ...lc, signal }, scope),
         }),
       );
+      // Props are objects: the manifest's props schema says so (spec §2).
       return {
-        ...base,
-        status: "ok",
-        props: (props ?? {}) as Record<string, unknown>,
+        entry: {
+          ...base,
+          status: "ok",
+          props: isRecord(props) ? props : {},
+        },
       };
     } catch (error) {
       report({
@@ -319,11 +338,14 @@ export function createComposer<Ctx = undefined, Req = Request>(
         error,
       });
       const timedOut = error instanceof TimeoutError;
+      const code = timedOut ? "timeout" : "resolve_failed";
       return {
-        ...base,
-        status: "error",
+        entry: {
+          ...base,
+          status: "error",
+          error: { code, retryable: timedOut },
+        },
         required: p.required,
-        error: { code: timedOut ? "timeout" : "resolve_failed", retryable: timedOut },
       };
     }
   }
@@ -334,6 +356,9 @@ export function createComposer<Ctx = undefined, Req = Request>(
     kind: "screens" | "actions",
   ): Promise<{ ctx: Ctx } | { res: HandleResult }> {
     try {
+      // Without a context function, Ctx is undefined (createComposer's default): TypeScript can't
+      // tie the two together.
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
       let ctx = (config.context ? await config.context(request) : undefined) as Ctx;
       for (const p of plugins) {
         const extra = p.context ? await p.context(request, ctx) : undefined;
@@ -403,7 +428,12 @@ export function createComposer<Ctx = undefined, Req = Request>(
     if (request.method !== "POST") {
       return new Response(null, { status: 405, headers: { allow: "POST" } });
     }
-    const res = (await handle(path, await request.text(), request as Req))!;
+    // fetch is only offered when Req is a fetch Request (Composer's type says so).
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+    const res = await handle(path, await request.text(), request as Req);
+    if (!res) {
+      return new Response(null, { status: 404 });
+    }
     return json(res.status, res.body);
   }
 
@@ -426,6 +456,8 @@ export function createComposer<Ctx = undefined, Req = Request>(
   }
 
   return {
+    // The same: Composer's fetch is `never` unless Req is a fetch Request.
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
     fetch: fetchHandler as Composer<Ctx, Req>["fetch"],
     handle,
     compose,
@@ -446,24 +478,19 @@ export function matchRoute(
     return undefined;
   }
   try {
-    return { kind: match[1] as "screens" | "actions", name: decodeURIComponent(match[2]) };
+    const kind = match[1] === "screens" ? "screens" : "actions";
+    return { kind, name: decodeURIComponent(match[2]) };
   } catch {
     return undefined;
   }
 }
 
 function isScreenRequestShape(v: unknown): v is ScreenRequest {
-  const r = v as ScreenRequest;
-  return (
-    typeof r === "object" &&
-    r !== null &&
-    typeof r.protocol === "number" &&
-    typeof r.screen === "string" &&
-    typeof r.client === "object" &&
-    r.client !== null &&
-    typeof r.islands === "object" &&
-    r.islands !== null
-  );
+  if (!isRecord(v)) {
+    return false;
+  }
+  const fieldsOk = typeof v.protocol === "number" && typeof v.screen === "string";
+  return fieldsOk && isRecord(v.client) && isRecord(v.islands);
 }
 
 class TimeoutError extends Error {}

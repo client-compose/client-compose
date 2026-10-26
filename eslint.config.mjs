@@ -79,6 +79,13 @@ export default defineConfig([
     },
   },
   {
+    // Test kits and conformance servers read what the composer or client under test answered
+    // (whose shapes its own types already guarantee), and type props by a generated descriptor,
+    // whose props type exists only at the type level.
+    files: ["**/src/testing.ts", "**/src/conformance.ts"],
+    rules: { "@typescript-eslint/consistent-type-assertions": "off" },
+  },
+  {
     files: ["**/*.config.{js,cjs,mjs}", "examples/profile/react-native/*.js"],
     rules: { "@typescript-eslint/no-require-imports": "off" },
   },

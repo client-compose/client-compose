@@ -24,6 +24,8 @@ export class RequestScope {
 
   /** Run `fn` once per key for this request; every caller gets the same result (or error). */
   load<T>(key: string, fn: (signal: AbortSignal) => Promise<T> | T): Promise<T> {
+    // One map holds every key's promise, whatever its type: a key always comes with the same `fn`.
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
     let promise = this.memo.get(key) as Promise<T> | undefined;
     if (!promise) {
       promise = new Promise<T>((resolve) => resolve(fn(this.signal)));
@@ -33,6 +35,9 @@ export class RequestScope {
     return promise;
   }
 
+  // One map holds every batch loader's state, whatever its key and value types: each loader only
+  // ever reads its own, so the types line up, but TypeScript can't see it.
+  /* eslint-disable @typescript-eslint/consistent-type-assertions */
   batchState<K, V>(loader: BatchLoader<K, V>): BatchState<K, V> {
     let state = this.batches.get(loader as BatchLoader<unknown, unknown>) as
       BatchState<K, V> | undefined;
@@ -49,9 +54,12 @@ export class RequestScope {
     }
     return state;
   }
+  /* eslint-enable @typescript-eslint/consistent-type-assertions */
 }
 
 export function attachScope<T extends object>(target: T, scope: RequestScope): T & LoadContext {
+  // defineProperty returns its target typed as it was, not with the property it just defined.
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
   return Object.defineProperty(target, scopeSymbol, { value: scope, enumerable: false }) as T &
     LoadContext;
 }

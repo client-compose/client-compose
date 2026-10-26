@@ -27,8 +27,17 @@ export async function loadScreen(
     {
       ...config.requestInit,
       ...init,
-      headers: { ...headers, ...(init.headers as Record<string, string> | undefined) },
+      headers: { ...headers, ...headerRecord(init.headers) },
     },
     config.fetch,
   );
+}
+
+/** Headers given any way fetch takes them, as a plain record to merge with others. */
+function headerRecord(init: HeadersInit | undefined): Record<string, string> {
+  const out: Record<string, string> = {};
+  new Headers(init).forEach((value, name) => {
+    out[name] = value;
+  });
+  return out;
 }

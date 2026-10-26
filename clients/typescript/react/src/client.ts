@@ -316,13 +316,20 @@ export function useScreen(
   }, [key, screens, reload]);
 
   return {
-    status: response ? "ready" : current.error !== undefined ? "error" : "loading",
+    status: screenStatus(response, current.error),
     islands,
     response,
     error: current.error,
     refreshing: current.refreshing,
     reload,
   };
+}
+
+function screenStatus(response: ScreenResponse | undefined, error: unknown): ScreenState["status"] {
+  if (response) {
+    return "ready";
+  }
+  return error !== undefined ? "error" : "loading";
 }
 
 interface BoundaryProps {
@@ -337,6 +344,7 @@ interface BoundaryProps {
  */
 export class IslandBoundary extends Component<BoundaryProps, { failed: boolean }> {
   static contextType = ClientComposeContext;
+  declare context: ContextValue | null;
   state = { failed: false };
 
   static getDerivedStateFromError(): { failed: boolean } {
@@ -344,7 +352,7 @@ export class IslandBoundary extends Component<BoundaryProps, { failed: boolean }
   }
 
   componentDidCatch(error: unknown): void {
-    (this.context as ContextValue | null)?.config.onRenderError?.(this.props.islandKey, error);
+    this.context?.config.onRenderError?.(this.props.islandKey, error);
   }
 
   render(): ReactNode {

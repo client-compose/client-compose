@@ -1,5 +1,7 @@
 // Validates action input against its JSON Schema: the subset codegen accepts (codegen/README.md).
 
+import { isRecord } from "./guards.ts";
+
 interface Schema {
   type: "object" | "array" | "string" | "integer" | "number" | "boolean";
   properties?: Record<string, Schema>;
@@ -23,6 +25,9 @@ export function validate(
   path = "input",
 ): Validation {
   try {
+    // The schema is an action's own input schema, generated from its manifest by codegen, which
+    // only lets through the subset Schema describes.
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
     return { ok: true, value: check(schema as unknown as Schema, value, path) };
   } catch (err) {
     if (err instanceof Invalid) {
@@ -40,12 +45,14 @@ function check(s: Schema, v: unknown, path: string): unknown {
   const fail = (expected: string): never => {
     throw new Invalid(`${path}: expected ${expected}`);
   };
+  // Kept for the error below, where every known type has been handled.
+  const type: unknown = s.type;
   switch (s.type) {
     case "object": {
-      if (typeof v !== "object" || v === null || Array.isArray(v)) {
+      if (!isRecord(v)) {
         return fail("an object");
       }
-      const obj = v as Record<string, unknown>;
+      const obj = v;
       const out: Record<string, unknown> = {};
       if (s.additionalProperties) {
         for (const [k, item] of Object.entries(obj)) {
@@ -61,9 +68,8 @@ function check(s: Schema, v: unknown, path: string): unknown {
       for (const [k, item] of Object.entries(obj)) {
         const prop = s.properties?.[k];
         if (!prop) {
-          out[k] = item;
-        } // unknown: ignored, but passed through untouched
-        else if (item !== null && item !== undefined) {
+          out[k] = item; // unknown: ignored, but passed through untouched
+        } else if (item !== null && item !== undefined) {
           out[k] = check(prop, item, `${path}.${k}`);
         }
       }
@@ -73,7 +79,7 @@ function check(s: Schema, v: unknown, path: string): unknown {
       if (!Array.isArray(v)) {
         return fail("an array");
       }
-      return v.map((item, i) => check(s.items!, item, `${path}[${i}]`));
+      return v.map((item, i) => (s.items ? check(s.items, item, `${path}[${i}]`) : item));
     case "string":
       if (typeof v !== "string") {
         return fail("a string");
@@ -103,9 +109,7 @@ function check(s: Schema, v: unknown, path: string): unknown {
       }
       return v;
   }
-  throw new Invalid(
-    `${path}: unsupported schema type ${JSON.stringify((s as { type: unknown }).type)}`,
-  );
+  throw new Invalid(`${path}: unsupported schema type ${JSON.stringify(type)}`);
 }
 
 function isAbsoluteUri(v: string): boolean {

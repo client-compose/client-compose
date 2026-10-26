@@ -24,7 +24,8 @@ function parseBody(body: BodyInit | null | undefined): unknown {
     return undefined;
   }
   try {
-    return JSON.parse(body) as unknown;
+    const parsed: unknown = JSON.parse(body);
+    return parsed;
   } catch {
     return undefined;
   }

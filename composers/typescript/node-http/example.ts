@@ -86,7 +86,10 @@ const profile = screen<Ctx>("profile", {
 
 const composer = createComposer<Ctx, IncomingMessage>({
   screens: [profile],
-  context: (req) => ({ viewer: req.headers["x-user-id"] as string | undefined }),
+  context: (req) => {
+    const viewer = req.headers["x-user-id"];
+    return { viewer: typeof viewer === "string" ? viewer : undefined };
+  },
   use: [reportErrors((failure) => console.error(`${failure.kind} failed`, failure))],
 });
 

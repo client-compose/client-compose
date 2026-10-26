@@ -26,11 +26,11 @@ function version(): string {
   if (typeof __CLIENT_COMPOSE_CODEGEN_VERSION__ === "string") {
     return __CLIENT_COMPOSE_CODEGEN_VERSION__;
   }
-  return (
-    JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
-      version: string;
-    }
-  ).version;
+  const pkg: unknown = JSON.parse(
+    readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+  );
+  const found = typeof pkg === "object" && pkg !== null && "version" in pkg ? pkg.version : "";
+  return typeof found === "string" ? found : "unknown";
 }
 
 function fail(message: string): never {

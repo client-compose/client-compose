@@ -95,6 +95,8 @@ function read<T>(suite: keyof typeof SUITES): T {
   const bundled = new URL(`./cases/${suite}.json`, import.meta.url);
   const inRepo = new URL(`../../${SUITES[suite]}`, import.meta.url);
   const file = existsSync(bundled) ? bundled : inRepo;
+  // The suites are this package's own files, in the shapes their types describe.
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
   return JSON.parse(readFileSync(file, "utf8")) as T;
 }
 
@@ -254,7 +256,7 @@ export function subsetMismatch(
       return `${path}: expected object, got ${JSON.stringify(actual)}`;
     }
     for (const [k, v] of Object.entries(expected)) {
-      const m = subsetMismatch(v, (actual as Record<string, unknown>)[k], `${path}.${k}`);
+      const m = subsetMismatch(v, Reflect.get(actual, k), `${path}.${k}`);
       if (m) {
         return m;
       }

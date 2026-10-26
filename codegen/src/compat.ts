@@ -144,53 +144,43 @@ function compareObject(old: ObjectDef, current: ObjectDef, path: string, report:
 }
 
 function compareType(old: TypeRef, current: TypeRef, path: string, report: Report): void {
-  if (old.kind !== current.kind) {
+  if (old.kind === "string" && current.kind === "string") {
+    if (old.format !== current.format) {
+      report(path, `format changed from ${describe(old)} to ${describe(current)}`);
+    }
+  } else if (old.kind === "integer" && current.kind === "integer") {
+    if (old.int64 !== current.int64) {
+      report(path, `integer size changed from ${describe(old)} to ${describe(current)}`);
+    }
+  } else if (old.kind === "array" && current.kind === "array") {
+    compareType(old.items, current.items, `${path}[]`, report);
+  } else if (old.kind === "map" && current.kind === "map") {
+    compareType(old.values, current.values, `${path}{}`, report);
+  } else if (old.kind === "object" && current.kind === "object") {
+    compareObject(old.def, current.def, path, report);
+  } else if (old.kind === "enum" && current.kind === "enum") {
+    compareEnum(old.def.values, current.def.values, path, report);
+  } else if (old.kind !== current.kind) {
     report(path, `type changed from ${describe(old)} to ${describe(current)}`);
-    return;
   }
-  switch (old.kind) {
-    case "string": {
-      const after = current as typeof old;
-      if (old.format !== after.format) {
-        report(path, `format changed from ${describe(old)} to ${describe(after)}`);
-      }
-      return;
-    }
-    case "integer": {
-      const after = current as typeof old;
-      if (old.int64 !== after.int64) {
-        report(path, `integer size changed from ${describe(old)} to ${describe(after)}`);
-      }
-      return;
-    }
-    case "array":
-      return compareType(old.items, (current as typeof old).items, `${path}[]`, report);
-    case "map":
-      return compareType(old.values, (current as typeof old).values, `${path}{}`, report);
-    case "object":
-      return compareObject(old.def, (current as typeof old).def, path, report);
-    case "enum": {
-      const before = new Set(old.def.values);
-      const after = new Set((current as typeof old).def.values);
-      const added = [...after].filter((v) => !before.has(v));
-      const removed = [...before].filter((v) => !after.has(v));
-      if (added.length) {
-        report(
-          path,
-          `enum value${added.length > 1 ? "s" : ""} added (${quote(added)}): old apps can't decode them`,
-        );
-      }
-      if (removed.length) {
-        report(
-          path,
-          `enum value${removed.length > 1 ? "s" : ""} removed (${quote(removed)}): new apps can't decode them from a composer that still sends them`,
-        );
-      }
-      return;
-    }
-    case "number":
-    case "boolean":
-      return;
+}
+
+function compareEnum(old: string[], current: string[], path: string, report: Report): void {
+  const before = new Set(old);
+  const after = new Set(current);
+  const added = [...after].filter((v) => !before.has(v));
+  const removed = [...before].filter((v) => !after.has(v));
+  if (added.length) {
+    report(
+      path,
+      `enum value${added.length > 1 ? "s" : ""} added (${quote(added)}): old apps can't decode them`,
+    );
+  }
+  if (removed.length) {
+    report(
+      path,
+      `enum value${removed.length > 1 ? "s" : ""} removed (${quote(removed)}): new apps can't decode them from a composer that still sends them`,
+    );
   }
 }
 
@@ -274,7 +264,7 @@ function loadAtRef<T>(
         severity: "warning",
         island: file,
         path: "",
-        message: `skipped: ${(err as Error).message}`,
+        message: `skipped: ${err instanceof Error ? err.message : String(err)}`,
       });
     }
   }

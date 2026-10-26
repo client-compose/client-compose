@@ -9,6 +9,7 @@ import {
   PROTOCOL_VERSION,
 } from "@client-compose/protocol";
 
+import { isRecord } from "./guards.ts";
 import {
   attachScope,
   ForbiddenError,
@@ -165,8 +166,8 @@ export async function performAction<Ctx>(
         ...base,
         status: "ok",
         // Results are objects: the manifest's result schema says so (spec §5.1).
-        result: (outcome.result ?? {}) as Record<string, unknown>,
-        ...(hasEffects && { effects: compactEffects(effects!) }),
+        result: isRecord(outcome.result) ? outcome.result : {},
+        ...(hasEffects && effects && { effects: compactEffects(effects) }),
       },
     };
   } catch (err) {
@@ -189,18 +190,11 @@ function compactEffects(effects: ActionEffects): ActionEffects {
 }
 
 export function isActionRequestShape(v: unknown): v is ActionRequest {
-  const r = v as ActionRequest;
-  return (
-    typeof r === "object" &&
-    r !== null &&
-    typeof r.protocol === "number" &&
-    typeof r.action === "string" &&
-    r.action !== "" &&
-    Number.isInteger(r.version) &&
-    r.version > 0 &&
-    r.input !== undefined &&
-    r.input !== null &&
-    typeof r.client === "object" &&
-    r.client !== null
-  );
+  if (!isRecord(v)) {
+    return false;
+  }
+  const named = typeof v.protocol === "number" && typeof v.action === "string" && v.action !== "";
+  const versioned = typeof v.version === "number" && Number.isInteger(v.version) && v.version > 0;
+  const hasInput = v.input !== undefined && v.input !== null;
+  return named && versioned && hasInput && isRecord(v.client);
 }

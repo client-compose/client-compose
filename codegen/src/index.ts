@@ -57,8 +57,12 @@ export interface CodegenConfig {
   };
 }
 
-const list = <T>(v: OneOrMany<T> | undefined): T[] =>
-  v === undefined ? [] : Array.isArray(v) ? v : [v];
+function list<T>(v: OneOrMany<T> | undefined): T[] {
+  if (v === undefined) {
+    return [];
+  }
+  return Array.isArray(v) ? v : [v];
+}
 
 export interface GeneratedFile {
   path: string;
@@ -71,6 +75,8 @@ function manifestsDirOf(configPath: string): {
   manifestsDir?: string;
   actionsDir?: string;
 } {
+  // The config file is the user's: each target checks the options it reads.
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
   const config = JSON.parse(readFileSync(configPath, "utf8")) as CodegenConfig;
   const base = dirname(resolve(configPath));
   const dir = (d: string | undefined) => (d === undefined ? undefined : resolve(base, d));

@@ -103,8 +103,12 @@ async function setup(
     ClientComposeProvider,
     { config: cfg },
     createElement(Harness),
-    ...screens.map((s, i) =>
-      createElement("section", { key: i }, createElement(ComposedScreen, s)),
+    ...screens.map((s) =>
+      createElement(
+        "section",
+        { key: `${s.screen}:${JSON.stringify(s.params ?? {})}` },
+        createElement(ComposedScreen, s),
+      ),
     ),
   );
   await act(async () => root.render(tree));

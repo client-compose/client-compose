@@ -26,7 +26,9 @@ export function composerPlugin<Ctx>(composer: Composer<Ctx, FastifyRequest>): Fa
 
     const handler = async (request: FastifyRequest) => {
       const body = typeof request.body === "string" ? request.body : "";
-      return (await composer.handle(request.url, body, request))!;
+      const result = await composer.handle(request.url, body, request);
+      // Only the composer's own routes are registered, so it always answers them.
+      return result ?? { status: 404, body: null };
     };
     for (const route of ["/screens/:screen", "/actions/:action"]) {
       app.post(route, async (request, reply) => {
