@@ -37,7 +37,11 @@ export class RequestScope {
     let state = this.batches.get(loader as BatchLoader<unknown, unknown>) as
       BatchState<K, V> | undefined;
     if (!state) {
-      state = { memo: new Map(), pending: [], timer: undefined };
+      state = {
+        memo: new Map(),
+        pending: [],
+        timer: undefined,
+      };
       this.batches.set(
         loader as BatchLoader<unknown, unknown>,
         state as BatchState<unknown, unknown>,
@@ -54,7 +58,9 @@ export function attachScope<T extends object>(target: T, scope: RequestScope): T
 
 function scopeOf(context: LoadContext): RequestScope {
   const scope = context[scopeSymbol];
-  if (!scope) throw new Error("Batch loaders need the context passed to a layout or resolver");
+  if (!scope) {
+    throw new Error("Batch loaders need the context passed to a layout or resolver");
+  }
   return scope;
 }
 
@@ -141,10 +147,16 @@ export function defineBatchLoader<K, V>(
       const state = scope.batchState(loader);
       const id = cacheKey(key);
       const existing = state.memo.get(id);
-      if (existing) return existing;
+      if (existing) {
+        return existing;
+      }
 
       const promise = new Promise<V>((resolve, reject) =>
-        state.pending.push({ key, resolve, reject }),
+        state.pending.push({
+          key,
+          resolve,
+          reject,
+        }),
       );
       promise.catch(() => {});
       state.memo.set(id, promise);
@@ -173,8 +185,11 @@ export function defineBatchLoader<K, V>(
           (result) =>
             batch.forEach((p, i) => {
               const value = isMap(result) ? result.get(p.key) : result[i];
-              if (value === undefined) p.reject(new LoadNotFoundError(p.key));
-              else p.resolve(value);
+              if (value === undefined) {
+                p.reject(new LoadNotFoundError(p.key));
+              } else {
+                p.resolve(value);
+              }
             }),
           (error) => batch.forEach((p) => p.reject(error)),
         );

@@ -41,8 +41,9 @@ test("generated action descriptors work end to end with the composer and client"
   const composer = createComposer({
     actions: [
       action(RenameThingV1, ({ thingId, name }) => {
-        if (name === "taken")
+        if (name === "taken") {
           return { error: { code: "name_taken", details: { suggestions: ["taken-2"] } } };
+        }
         return {
           result: { thing: { id: thingId, name } },
           effects: { invalidate: [{ screen: "thing", params: { thingId } }] },
@@ -59,7 +60,11 @@ test("generated action descriptors work end to end with the composer and client"
   const ok = await callAction(
     "",
     RenameThingV1,
-    { thingId: "t1", name: "New", visibility: "public" },
+    {
+      thingId: "t1",
+      name: "New",
+      visibility: "public",
+    },
     options,
   );
   assert.deepEqual(ok.status === "ok" && [ok.result.thing, ok.effects], [
@@ -75,7 +80,11 @@ test("generated action descriptors work end to end with the composer and client"
     callAction(
       "",
       RenameThingV1,
-      { thingId: "t1", name: "x", visibility: "secret" as "public" },
+      {
+        thingId: "t1",
+        name: "x",
+        visibility: "secret" as "public",
+      },
       options,
     ),
     /status 400/,
@@ -101,7 +110,18 @@ test("generated TS descriptors work with the client and composer", () => {
 });
 
 const rejects = (props: unknown, message: RegExp) =>
-  assert.throws(() => parseManifest({ type: "x", version: 1, props }, "x.json"), message);
+  assert.throws(
+    () =>
+      parseManifest(
+        {
+          type: "x",
+          version: 1,
+          props,
+        },
+        "x.json",
+      ),
+    message,
+  );
 
 test("rejects unsupported schema features rather than guessing", () => {
   rejects({ type: "object", properties: { a: { oneOf: [] } } }, /props\.a: "type" must be one of/);
@@ -116,7 +136,14 @@ test("rejects unsupported schema features rather than guessing", () => {
     /unsupported keyword "pattern"/,
   );
   rejects({ type: "object", properties: { a: { type: "array" } } }, /need an "items"/);
-  rejects({ type: "object", required: ["b"], properties: {} }, /unknown property "b"/);
+  rejects(
+    {
+      type: "object",
+      required: ["b"],
+      properties: {},
+    },
+    /unknown property "b"/,
+  );
   rejects({ type: "string" }, /"props" must be a JSON Schema with "type": "object"/);
 });
 
@@ -125,8 +152,16 @@ test("rejects nested types that would share a name", () => {
     {
       type: "object",
       properties: {
-        a: { type: "object", title: "Thing", properties: {} },
-        b: { type: "object", title: "Thing", properties: {} },
+        a: {
+          type: "object",
+          title: "Thing",
+          properties: {},
+        },
+        b: {
+          type: "object",
+          title: "Thing",
+          properties: {},
+        },
       },
     },
     /both be named Thing/,
@@ -136,11 +171,26 @@ test("rejects nested types that would share a name", () => {
 test("rejects bad island identity", () => {
   assert.throws(
     () =>
-      parseManifest({ type: "Profile_Header", version: 1, props: { type: "object" } }, "x.json"),
+      parseManifest(
+        {
+          type: "Profile_Header",
+          version: 1,
+          props: { type: "object" },
+        },
+        "x.json",
+      ),
     /kebab-case/,
   );
   assert.throws(
-    () => parseManifest({ type: "x", version: 0, props: { type: "object" } }, "x.json"),
+    () =>
+      parseManifest(
+        {
+          type: "x",
+          version: 0,
+          props: { type: "object" },
+        },
+        "x.json",
+      ),
     /positive integer/,
   );
 });
@@ -187,7 +237,13 @@ test("the embedded input schema has no annotations, but keeps properties named l
       input: {
         type: "object",
         description: "dropped",
-        properties: { title: { type: "string", title: "Dropped", description: "dropped" } },
+        properties: {
+          title: {
+            type: "string",
+            title: "Dropped",
+            description: "dropped",
+          },
+        },
       },
       result: { type: "object" },
     },

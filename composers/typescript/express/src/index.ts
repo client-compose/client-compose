@@ -58,9 +58,15 @@ const isParseError = (err: unknown) =>
 
 async function rawBody(req: Request): Promise<string> {
   // A body parser in front of us has already read the stream.
-  if (typeof req.body === "string") return req.body;
-  if (req.body !== undefined && req.readableEnded) return JSON.stringify(req.body);
+  if (typeof req.body === "string") {
+    return req.body;
+  }
+  if (req.body !== undefined && req.readableEnded) {
+    return JSON.stringify(req.body);
+  }
   let body = "";
-  for await (const chunk of req) body += chunk;
+  for await (const chunk of req) {
+    body += chunk;
+  }
   return body;
 }

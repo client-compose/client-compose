@@ -179,14 +179,28 @@ async function post(
       try {
         body = JSON.parse(text);
       } catch {
-        return { name: c.name, passed: false, message: `response is not JSON: ${text}` };
+        return {
+          name: c.name,
+          passed: false,
+          message: `response is not JSON: ${text}`,
+        };
       }
       const mismatch = subsetMismatch(c.expect.body, body, "body");
-      if (mismatch) return { name: c.name, passed: false, message: `${mismatch}\n  got: ${text}` };
+      if (mismatch) {
+        return {
+          name: c.name,
+          passed: false,
+          message: `${mismatch}\n  got: ${text}`,
+        };
+      }
     }
     return { name: c.name, passed: true };
   } catch (err) {
-    return { name: c.name, passed: false, message: `request failed: ${String(err)}` };
+    return {
+      name: c.name,
+      passed: false,
+      message: `request failed: ${String(err)}`,
+    };
   }
 }
 
@@ -196,9 +210,12 @@ export async function runComposerConformance(
   fetchImpl: typeof fetch = fetch,
 ): Promise<CaseResult[]> {
   const results: CaseResult[] = [];
-  for (const c of composerCases()) results.push(await runComposerCase(baseUrl, c, fetchImpl));
-  for (const c of actionCases())
+  for (const c of composerCases()) {
+    results.push(await runComposerCase(baseUrl, c, fetchImpl));
+  }
+  for (const c of actionCases()) {
     results.push(await runActionCase(baseUrl, { ...c, name: `action: ${c.name}` }, fetchImpl));
+  }
   return results;
 }
 
@@ -212,18 +229,23 @@ export function subsetMismatch(
   actual: unknown,
   path: string,
 ): string | undefined {
-  if (expected === "$absent")
+  if (expected === "$absent") {
     return actual === undefined
       ? undefined
       : `${path}: expected no value, got ${JSON.stringify(actual)}`;
+  }
   if (Array.isArray(expected)) {
-    if (!Array.isArray(actual)) return `${path}: expected array, got ${JSON.stringify(actual)}`;
+    if (!Array.isArray(actual)) {
+      return `${path}: expected array, got ${JSON.stringify(actual)}`;
+    }
     if (expected.length !== actual.length) {
       return `${path}: expected ${expected.length} items, got ${actual.length}`;
     }
     for (let i = 0; i < expected.length; i++) {
       const m = subsetMismatch(expected[i], actual[i], `${path}[${i}]`);
-      if (m) return m;
+      if (m) {
+        return m;
+      }
     }
     return undefined;
   }
@@ -233,7 +255,9 @@ export function subsetMismatch(
     }
     for (const [k, v] of Object.entries(expected)) {
       const m = subsetMismatch(v, (actual as Record<string, unknown>)[k], `${path}.${k}`);
-      if (m) return m;
+      if (m) {
+        return m;
+      }
     }
     return undefined;
   }

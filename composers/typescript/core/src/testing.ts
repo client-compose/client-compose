@@ -95,7 +95,11 @@ export function testComposer<Ctx, Req = Request>(
   const toRequest =
     options.request ??
     ((init: { url: string; headers: Record<string, string>; body: string }) =>
-      new Request(init.url, { method: "POST", headers: init.headers, body: init.body }) as Req);
+      new Request(init.url, {
+        method: "POST",
+        headers: init.headers,
+        body: init.body,
+      }) as Req);
 
   async function post(path: string, body: unknown, headers: Record<string, string> = {}) {
     const raw = JSON.stringify(body);
@@ -103,9 +107,15 @@ export function testComposer<Ctx, Req = Request>(
     const res = await composer.handle(
       path,
       raw,
-      toRequest({ url: base + path, headers: allHeaders, body: raw }),
+      toRequest({
+        url: base + path,
+        headers: allHeaders,
+        body: raw,
+      }),
     );
-    if (!res) throw new Error(`testComposer: ${path} isn't a composer route`);
+    if (!res) {
+      throw new Error(`testComposer: ${path} isn't a composer route`);
+    }
     return res;
   }
 
@@ -113,7 +123,13 @@ export function testComposer<Ctx, Req = Request>(
     async screen(id, params = {}, requestOptions = {}) {
       const res = await post(
         `/screens/${encodeURIComponent(id)}`,
-        { protocol: PROTOCOL_VERSION, screen: id, params, client, islands },
+        {
+          protocol: PROTOCOL_VERSION,
+          screen: id,
+          params,
+          client,
+          islands,
+        },
         requestOptions.headers,
       );
       const response = res.status === 200 ? (res.body as ScreenResponse) : undefined;
@@ -131,10 +147,11 @@ export function testComposer<Ctx, Req = Request>(
               `testComposer: screen ${id} has no island "${key}" (it has ${entries.map((e) => e.key).join(", ") || "none"})`,
             );
           }
-          if (entry.status !== "ok")
+          if (entry.status !== "ok") {
             throw new Error(
               `testComposer: island "${key}" is ${entry.status}: ${JSON.stringify(entry)}`,
             );
+          }
           if (entry.type !== descriptor.type || entry.version !== descriptor.version) {
             throw new Error(
               `testComposer: island "${key}" is ${entry.type} v${entry.version}, not ${descriptor.type} v${descriptor.version}`,
@@ -160,8 +177,9 @@ export function testComposer<Ctx, Req = Request>(
         },
         requestOptions.headers,
       );
-      if (res.status !== 200)
+      if (res.status !== 200) {
         return { httpStatus: res.status, failure: (res.body as ScreenErrorResponse).error.code };
+      }
       const body = res.body as {
         status: "ok" | "error";
         result?: never;
@@ -181,8 +199,12 @@ export function testComposer<Ctx, Req = Request>(
 
 function declared(descriptors: IslandDescriptor<unknown>[]): Capabilities {
   const out: Capabilities = {};
-  for (const d of descriptors) (out[d.type] ??= []).push(d.version);
-  for (const versions of Object.values(out)) versions.sort((a, b) => a - b);
+  for (const d of descriptors) {
+    (out[d.type] ??= []).push(d.version);
+  }
+  for (const versions of Object.values(out)) {
+    versions.sort((a, b) => a - b);
+  }
   return out;
 }
 
@@ -206,7 +228,9 @@ export function memoryIdempotencyStore(): IdempotencyStore {
   return {
     begin(key, ttlMs) {
       const entry = entries.get(key);
-      if (entry && entry.expires > Date.now()) return { stored: entry.outcome, claimed: false };
+      if (entry && entry.expires > Date.now()) {
+        return { stored: entry.outcome, claimed: false };
+      }
       entries.set(key, { expires: Date.now() + ttlMs });
       return { claimed: true };
     },

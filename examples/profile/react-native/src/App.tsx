@@ -67,7 +67,9 @@ export default function App() {
 function ProfileScreen({ userId }: { userId: string }) {
   const screen = useScreen("profile", { userId });
 
-  if (screen.status === "loading") return <ActivityIndicator style={styles.center} />;
+  if (screen.status === "loading") {
+    return <ActivityIndicator style={styles.center} />;
+  }
   if (screen.status === "error") {
     return (
       <View style={styles.center}>
@@ -98,8 +100,19 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderColor: "#ccc",
   },
-  tab: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: "#eee" },
+  tab: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "#eee",
+  },
   tabActive: { backgroundColor: "#cfdcff" },
-  center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, padding: 24 },
+  center: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    padding: 24,
+  },
   retry: { color: "#2952cc", fontWeight: "600" },
 });

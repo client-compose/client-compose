@@ -24,7 +24,11 @@ const Rename: ActionDescriptor<{ name: string }, { id: string }, RenameError> = 
   errors: ["taken"],
   input: { type: "object" },
 };
-const client = { platform: "web", appVersion: "1.0.0", locale: "en" };
+const client = {
+  platform: "web",
+  appVersion: "1.0.0",
+  locale: "en",
+};
 
 test("answers screen requests from handlers and records them", async () => {
   const gateway = createFakeGateway({
@@ -35,7 +39,13 @@ test("answers screen requests from handlers and records them", async () => {
   });
   const res = await fetchScreen(
     "https://composer.test",
-    { protocol: 0, screen: "profile", params: { userId: "u1" }, client, islands: { header: [2] } },
+    {
+      protocol: 0,
+      screen: "profile",
+      params: { userId: "u1" },
+      client,
+      islands: { header: [2] },
+    },
     { headers: { Authorization: "Bearer t" } },
     gateway.fetch,
   );
@@ -43,7 +53,15 @@ test("answers screen requests from handlers and records them", async () => {
     protocol: 0,
     screen: "profile",
     meta: { title: "Ada" },
-    islands: [{ key: "h", type: "header", version: 2, status: "ok", props: { name: "u1" } }],
+    islands: [
+      {
+        key: "h",
+        type: "header",
+        version: 2,
+        status: "ok",
+        props: { name: "u1" },
+      },
+    ],
   });
   const [req] = gateway.screenRequests();
   assert.equal(req?.url, "https://composer.test/screens/profile");

@@ -29,7 +29,9 @@ function counted(
   const header = island(
     HeaderV1,
     ({ params }) => {
-      if (options.fail?.()) throw new Error("users service down");
+      if (options.fail?.()) {
+        throw new Error("users service down");
+      }
       return { name: `${params.userId}${++runs}` };
     },
     { cache: { ttlMs: 60_000, key: ({ params }) => (options.key ?? ((p) => p.userId))(params) } },
@@ -121,9 +123,12 @@ function echo(gate?: Promise<void>) {
   let runs = 0;
   const handler = action(ConformanceV1, async (input) => {
     const n = ++runs;
-    if (input.outcome === "fail") throw new Error("boom");
-    if (input.outcome === "rejected")
+    if (input.outcome === "fail") {
+      throw new Error("boom");
+    }
+    if (input.outcome === "rejected") {
       return { error: { code: "rejected", details: { echo: input.echo } } };
+    }
     await gate;
     return {
       result: { echo: `${input.echo}${n}`, version: 1 },
@@ -149,7 +154,11 @@ const hi = { outcome: "ok" as const, echo: "hi" };
 test("retried actions return their first outcome", async () => {
   const { handler, runs } = echo();
   const app = testComposer(
-    createComposer({ actions: [handler], context: viewerContext, idempotency: byViewer() }),
+    createComposer({
+      actions: [handler],
+      context: viewerContext,
+      idempotency: byViewer(),
+    }),
   );
   const first = await app.perform(ConformanceV1, hi, { ...as("ada"), idempotencyKey: "k1" });
   const retry = await app.perform(ConformanceV1, hi, { ...as("ada"), idempotencyKey: "k1" });
@@ -175,7 +184,11 @@ test("retried actions return their first outcome", async () => {
 test("declared errors are kept, and failures release the key", async () => {
   const { handler, runs } = echo();
   const app = testComposer(
-    createComposer({ actions: [handler], context: viewerContext, idempotency: byViewer() }),
+    createComposer({
+      actions: [handler],
+      context: viewerContext,
+      idempotency: byViewer(),
+    }),
   );
   for (let i = 0; i < 2; i++) {
     const out = await app.perform(
@@ -201,7 +214,11 @@ test("a duplicate in flight waits for the first", async () => {
   const gate = new Promise<void>((resolve) => (open = resolve));
   const { handler, runs } = echo(gate);
   const app = testComposer(
-    createComposer({ actions: [handler], context: viewerContext, idempotency: byViewer() }),
+    createComposer({
+      actions: [handler],
+      context: viewerContext,
+      idempotency: byViewer(),
+    }),
   );
   const calls = [1, 2].map(() => app.perform(ConformanceV1, hi, { idempotencyKey: "k1" }));
   setTimeout(open, 100);

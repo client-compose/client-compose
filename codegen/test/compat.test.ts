@@ -15,7 +15,15 @@ import {
 
 const island = (properties: object, required: string[] = [], version = 1) =>
   parseManifest(
-    { type: "card", version, props: { type: "object", required, properties } },
+    {
+      type: "card",
+      version,
+      props: {
+        type: "object",
+        required,
+        properties,
+      },
+    },
     "card.json",
   );
 
@@ -37,7 +45,12 @@ test("allows adding an optional property and removing an optional one", () => {
 test("allows description and title changes and enum reordering", () => {
   const before = island({ size: { type: "string", enum: ["s", "m"] } });
   const after = island({
-    size: { type: "string", enum: ["m", "s"], title: "Size", description: "How big" },
+    size: {
+      type: "string",
+      enum: ["m", "s"],
+      title: "Size",
+      description: "How big",
+    },
   });
   assert.deepEqual(breaking(before, after), []);
 });
@@ -86,15 +99,30 @@ test("flags any enum value being added or removed", () => {
 
 test("recurses into nested objects, array items and map values", () => {
   const before = island({
-    author: { type: "object", required: ["name"], properties: { name: str } },
-    posts: { type: "array", items: { type: "object", required: ["id"], properties: { id: str } } },
+    author: {
+      type: "object",
+      required: ["name"],
+      properties: { name: str },
+    },
+    posts: {
+      type: "array",
+      items: {
+        type: "object",
+        required: ["id"],
+        properties: { id: str },
+      },
+    },
     scores: { type: "object", additionalProperties: { type: "integer" } },
   });
   const after = island({
     author: { type: "object", properties: { name: str } },
     posts: {
       type: "array",
-      items: { type: "object", properties: { id: str, url: str }, required: ["id", "url"] },
+      items: {
+        type: "object",
+        properties: { id: str, url: str },
+        required: ["id", "url"],
+      },
     },
     scores: { type: "object", additionalProperties: { type: "number" } },
   });
@@ -133,7 +161,11 @@ test("compares against a git ref", () => {
       JSON.stringify({
         type: "card",
         version: 1,
-        props: { type: "object", required, properties: props },
+        props: {
+          type: "object",
+          required,
+          properties: props,
+        },
       });
     const actionManifest = (required: string[]) =>
       JSON.stringify({
@@ -144,7 +176,11 @@ test("compares against a git ref", () => {
       });
     writeFileSync(
       join(repo, "client-compose.codegen.json"),
-      JSON.stringify({ manifests: "islands", actions: "actions", targets: {} }),
+      JSON.stringify({
+        manifests: "islands",
+        actions: "actions",
+        targets: {},
+      }),
     );
     writeFileSync(join(repo, "islands", "card.v1.json"), manifest({ title: str }, ["title"]));
     writeFileSync(join(repo, "actions", "rename.v1.json"), actionManifest([]));
@@ -177,7 +213,13 @@ const obj = (properties: object = {}, required: string[] = []) => ({
 });
 const action = (m: Record<string, unknown> = {}, version = 1) =>
   parseActionManifest(
-    { action: "rename", version, input: obj(), result: obj(), ...m },
+    {
+      action: "rename",
+      version,
+      input: obj(),
+      result: obj(),
+      ...m,
+    },
     "rename.json",
   );
 const actionIssues = (before: ReturnType<typeof action>, after: ReturnType<typeof action>) =>

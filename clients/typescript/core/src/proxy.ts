@@ -113,7 +113,9 @@ export function createComposerProxy(options: ComposerProxyOptions): ComposerProx
   }
 
   async function performAction(body: unknown): Promise<ProxyResult<ActionResponse>> {
-    if (!isProxiedActionRequest(body)) return BAD_REQUEST;
+    if (!isProxiedActionRequest(body)) {
+      return BAD_REQUEST;
+    }
     const request: ActionRequest = { ...body, client: await options.client() };
     try {
       const response = await fetchAction(options.baseUrl, request, await init(), options.fetch);
@@ -122,14 +124,21 @@ export function createComposerProxy(options: ComposerProxyOptions): ComposerProx
         response: (await options.onActionResponse?.(request, response)) ?? response,
       };
     } catch (error) {
-      if (error instanceof ActionFetchError)
-        return { ok: false, status: error.status, body: error.body };
+      if (error instanceof ActionFetchError) {
+        return {
+          ok: false,
+          status: error.status,
+          body: error.body,
+        };
+      }
       throw error;
     }
   }
 
   async function loadScreen(body: unknown): Promise<ProxyResult<ScreenResponse>> {
-    if (!isProxiedScreenRequest(body)) return BAD_REQUEST;
+    if (!isProxiedScreenRequest(body)) {
+      return BAD_REQUEST;
+    }
     const request: ScreenRequest = { ...body, client: await options.client() };
     try {
       return {
@@ -137,8 +146,13 @@ export function createComposerProxy(options: ComposerProxyOptions): ComposerProx
         response: await fetchScreen(options.baseUrl, request, await init(), options.fetch),
       };
     } catch (error) {
-      if (error instanceof ScreenFetchError)
-        return { ok: false, status: error.status, body: error.body };
+      if (error instanceof ScreenFetchError) {
+        return {
+          ok: false,
+          status: error.status,
+          body: error.body,
+        };
+      }
       throw error;
     }
   }

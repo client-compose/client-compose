@@ -28,7 +28,13 @@ function fakeFetch(
 
 test("callAction posts a typed request with a fresh idempotency key", async () => {
   const seen: { url?: string; request?: ActionRequest } = {};
-  const ok = { protocol: 0, action: "rename", version: 2, status: "ok", result: { id: "t1" } };
+  const ok = {
+    protocol: 0,
+    action: "rename",
+    version: 2,
+    status: "ok",
+    result: { id: "t1" },
+  };
   const res = await callAction(
     "https://api.test",
     Rename,
@@ -52,12 +58,22 @@ test("callAction posts a typed request with a fresh idempotency key", async () =
 
 test("callAction reuses a given idempotency key, for retries", async () => {
   const seen: { request?: ActionRequest } = {};
-  const ok = { protocol: 0, action: "rename", version: 2, status: "ok", result: { id: "t1" } };
+  const ok = {
+    protocol: 0,
+    action: "rename",
+    version: 2,
+    status: "ok",
+    result: { id: "t1" },
+  };
   await callAction(
     "",
     Rename,
     { name: "x" },
-    { client, idempotencyKey: "k1", fetch: fakeFetch(200, ok, seen) },
+    {
+      client,
+      idempotencyKey: "k1",
+      fetch: fakeFetch(200, ok, seen),
+    },
   );
   assert.equal(seen.request?.idempotencyKey, "k1");
 });
@@ -104,11 +120,14 @@ test("idempotency keys are unique, with or without crypto.randomUUID", () => {
       value: undefined,
       configurable: true,
     });
-    for (let i = 0; i < 100; i++) keys.add(newIdempotencyKey());
+    for (let i = 0; i < 100; i++) {
+      keys.add(newIdempotencyKey());
+    }
   } finally {
     Object.defineProperty(globalThis.crypto, "randomUUID", { value: original, configurable: true });
   }
   assert.equal(keys.size, 200);
-  for (const k of keys)
+  for (const k of keys) {
     assert.match(k, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  }
 });

@@ -61,7 +61,12 @@ export function island<P, Ctx = unknown>(
   resolve: (rc: ResolveContext<Ctx>) => Promise<P> | P,
   options: IslandOptions<Ctx> = {},
 ): Island<Ctx, P> {
-  return { type: descriptor.type, version: descriptor.version, resolve, ...options };
+  return {
+    type: descriptor.type,
+    version: descriptor.version,
+    resolve,
+    ...options,
+  };
 }
 
 /** An island on a screen. Build one with `place` or `placeStatic`. */
@@ -95,7 +100,11 @@ export function place<Ctx>(
   versions: Island<Ctx, unknown> | Island<Ctx, unknown>[],
   options: PlaceOptions<Ctx> = {},
 ): Placement<Ctx> {
-  return { key, versions: Array.isArray(versions) ? versions : [versions], ...options };
+  return {
+    key,
+    versions: Array.isArray(versions) ? versions : [versions],
+    ...options,
+  };
 }
 
 /** Place an island whose props are known up front: a form, a heading. */
@@ -153,7 +162,9 @@ export function negotiate<Ctx>(
   versions: Island<Ctx, unknown>[],
   supported: number[] | undefined,
 ): Island<Ctx, unknown> | undefined {
-  if (!supported) return undefined;
+  if (!supported) {
+    return undefined;
+  }
   return versions
     .filter((v) => supported.includes(v.version))
     .sort((a, b) => b.version - a.version)[0];

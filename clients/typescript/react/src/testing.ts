@@ -50,7 +50,11 @@ export function createTestConfig(options: TestConfigOptions): TestConfig {
   const invalidations: ScreenRef[][] = [];
   const config: ClientComposeConfig = {
     baseUrl: "http://composer.test",
-    client: { platform: "web", appVersion: "test", locale: "en" },
+    client: {
+      platform: "web",
+      appVersion: "test",
+      locale: "en",
+    },
     fetch: gateway.fetch,
     cache: false,
     ...overrides,
@@ -63,5 +67,10 @@ export function createTestConfig(options: TestConfigOptions): TestConfig {
       overrides.onInvalidate?.(refs);
     },
   };
-  return { config, gateway, navigations, invalidations };
+  return {
+    config,
+    gateway,
+    navigations,
+    invalidations,
+  };
 }

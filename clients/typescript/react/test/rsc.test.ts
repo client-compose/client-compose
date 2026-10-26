@@ -11,7 +11,9 @@ const here = (path: string) => fileURLToPath(new URL(path, import.meta.url));
 function run(command: string, args: string[], input?: NodeJS.ReadableStream): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { stdio: [input ? "pipe" : "ignore", "pipe", "pipe"] });
-    if (input) input.pipe(child.stdin!);
+    if (input) {
+      input.pipe(child.stdin!);
+    }
     let out = "";
     let err = "";
     child.stdout!.on("data", (d) => (out += d));

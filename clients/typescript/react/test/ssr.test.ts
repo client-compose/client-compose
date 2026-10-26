@@ -38,15 +38,31 @@ const response = (name: string): ScreenResponse => ({
   protocol: 0,
   screen: "profile",
   islands: [
-    { key: "h", type: "header", version: 1, status: "ok", props: { name } },
-    { key: "c", type: "counter", version: 1, status: "ok", props: { start: 1 } },
+    {
+      key: "h",
+      type: "header",
+      version: 1,
+      status: "ok",
+      props: { name },
+    },
+    {
+      key: "c",
+      type: "counter",
+      version: 1,
+      status: "ok",
+      props: { start: 1 },
+    },
   ],
 });
 
 function recordingFetch(...responses: ScreenResponse[]) {
   const requests: { url: string; init: RequestInit; body: ScreenRequest }[] = [];
   const impl = (async (url: string, init: RequestInit) => {
-    requests.push({ url, init, body: JSON.parse(String(init.body)) });
+    requests.push({
+      url,
+      init,
+      body: JSON.parse(String(init.body)),
+    });
     return Response.json(responses.shift() ?? response("?"));
   }) as typeof fetch;
   return { impl, requests };
@@ -109,7 +125,11 @@ test("loadScreen declares capabilities and merges headers and request options", 
   );
   assert.equal(result.islands.length, 2);
   assert.equal(f.requests[0].url, "https://composer.test/screens/profile");
-  assert.deepEqual(f.requests[0].body.islands, { header: [1], counter: [1], broken: [1] });
+  assert.deepEqual(f.requests[0].body.islands, {
+    header: [1],
+    counter: [1],
+    broken: [1],
+  });
   assert.deepEqual(f.requests[0].body.params, { userId: "u1" });
   assert.equal((f.requests[0].init.headers as Record<string, string>).Authorization, "Bearer t");
   assert.equal(f.requests[0].init.cache, "no-store");
@@ -156,9 +176,27 @@ test("a crashing island is left out of the server HTML and hidden after hydratio
     protocol: 0,
     screen: "profile",
     islands: [
-      { key: "h", type: "header", version: 1, status: "ok", props: { name: "Ada" } },
-      { key: "b", type: "broken", version: 1, status: "ok", props: {} },
-      { key: "c", type: "counter", version: 1, status: "ok", props: { start: 1 } },
+      {
+        key: "h",
+        type: "header",
+        version: 1,
+        status: "ok",
+        props: { name: "Ada" },
+      },
+      {
+        key: "b",
+        type: "broken",
+        version: 1,
+        status: "ok",
+        props: {},
+      },
+      {
+        key: "c",
+        type: "counter",
+        version: 1,
+        status: "ok",
+        props: { start: 1 },
+      },
     ],
   };
   const quiet = console.error;

@@ -91,17 +91,23 @@ export function createComposer<Ctx = undefined, Req = Request>(
 ): Composer<Ctx, Req> {
   const screens = new Map<string, Screen<Ctx>>();
   for (const s of config.screens ?? []) {
-    if (screens.has(s.id)) throw new Error(`Screen "${s.id}" is defined twice`);
-    if ((s.islands === undefined) === (s.layout === undefined))
+    if (screens.has(s.id)) {
+      throw new Error(`Screen "${s.id}" is defined twice`);
+    }
+    if ((s.islands === undefined) === (s.layout === undefined)) {
       throw new Error(`Screen "${s.id}" needs either islands or layout`);
+    }
     screens.set(s.id, s);
   }
   const actions = new Map<string, Map<number, Action<Ctx>>>();
   for (const a of config.actions ?? []) {
     const { action, version } = a.descriptor;
-    if (!actions.has(action)) actions.set(action, new Map());
-    if (actions.get(action)!.has(version))
+    if (!actions.has(action)) {
+      actions.set(action, new Map());
+    }
+    if (actions.get(action)!.has(version)) {
       throw new Error(`Action ${action} v${version} is defined twice`);
+    }
     actions.get(action)!.set(version, a);
   }
   const plugins = config.use ?? [];
@@ -125,25 +131,38 @@ export function createComposer<Ctx = undefined, Req = Request>(
   let performChain: PerformFn<Ctx> = (req, ctx) =>
     performIdempotent(config.idempotency, req, ctx, performOnce, report);
   for (const p of [...plugins].reverse()) {
-    if (p.island) resolveChain = p.island(resolveChain);
-    if (p.screen) composeChain = p.screen(composeChain);
-    if (p.action) performChain = p.action(performChain);
+    if (p.island) {
+      resolveChain = p.island(resolveChain);
+    }
+    if (p.screen) {
+      composeChain = p.screen(composeChain);
+    }
+    if (p.action) {
+      performChain = p.action(performChain);
+    }
   }
 
   async function compose(req: ScreenRequest, ctx: Ctx): Promise<ComposeResult> {
-    if (req.protocol !== PROTOCOL_VERSION)
+    if (req.protocol !== PROTOCOL_VERSION) {
       return fail(400, "unsupported_protocol", `Composer speaks protocol ${PROTOCOL_VERSION}`);
-    if (!screens.has(req.screen)) return fail(404, "unknown_screen", req.screen);
+    }
+    if (!screens.has(req.screen)) {
+      return fail(404, "unknown_screen", req.screen);
+    }
     return composeChain(req, ctx);
   }
 
   async function perform(req: ActionRequest, ctx: Ctx): Promise<PerformResult> {
-    if (req.protocol !== PROTOCOL_VERSION)
+    if (req.protocol !== PROTOCOL_VERSION) {
       return fail(400, "unsupported_protocol", `Composer speaks protocol ${PROTOCOL_VERSION}`);
+    }
     const versions = actions.get(req.action);
-    if (!versions) return fail(404, "unknown_action", req.action);
-    if (!versions.has(req.version))
+    if (!versions) {
+      return fail(404, "unknown_action", req.action);
+    }
+    if (!versions.has(req.version)) {
       return fail(404, "unsupported_action_version", `${req.action} v${req.version}`);
+    }
     return performChain(req, ctx);
   }
 
@@ -171,7 +190,13 @@ export function createComposer<Ctx = undefined, Req = Request>(
     const params = req.params ?? {};
     const load = scope.load.bind(scope);
     const lc: LayoutContext<Ctx> = attachScope(
-      { screen: screen.id, params, client: req.client, ctx, load },
+      {
+        screen: screen.id,
+        params,
+        client: req.client,
+        ctx,
+        load,
+      },
       scope,
     );
 
@@ -180,8 +205,14 @@ export function createComposer<Ctx = undefined, Req = Request>(
       placements = await placementsFor(screen, lc);
     } catch (err) {
       const res = protocolError(err);
-      if (res) return res;
-      report({ kind: "layout", screen: screen.id, error: err });
+      if (res) {
+        return res;
+      }
+      report({
+        kind: "layout",
+        screen: screen.id,
+        error: err,
+      });
       return fail(500, "layout_failed");
     }
     // Started now so it runs alongside the islands (and can share their loads).
@@ -189,7 +220,11 @@ export function createComposer<Ctx = undefined, Req = Request>(
       ? Promise.resolve()
           .then(() => screen.meta!(lc))
           .catch((error) => {
-            report({ kind: "meta", screen: screen.id, error });
+            report({
+              kind: "meta",
+              screen: screen.id,
+              error,
+            });
             return undefined;
           })
       : undefined;
@@ -199,7 +234,9 @@ export function createComposer<Ctx = undefined, Req = Request>(
       island: negotiate(p.versions, req.islands[p.versions[0]?.type]),
     }));
     const unplaceable = negotiated.find((n) => !n.island && n.p.required);
-    if (unplaceable) return fail(502, "required_island_unsupported", unplaceable.p.key);
+    if (unplaceable) {
+      return fail(502, "required_island_unsupported", unplaceable.p.key);
+    }
 
     const entries = await Promise.all(
       negotiated
@@ -209,7 +246,9 @@ export function createComposer<Ctx = undefined, Req = Request>(
         .map(({ p, island }) => resolveEntry(screen, p, island, lc, scope)),
     );
     const failedRequired = entries.find((e) => e.status === "error" && e.required);
-    if (failedRequired) return fail(502, "required_island_failed", failedRequired.key);
+    if (failedRequired) {
+      return fail(502, "required_island_failed", failedRequired.key);
+    }
     const screenMeta = await meta;
 
     return {
@@ -230,9 +269,15 @@ export function createComposer<Ctx = undefined, Req = Request>(
     lc: LayoutContext<Ctx>,
   ): Promise<Placement<Ctx>[]> {
     for (const requirement of screen.requires ?? []) {
-      await requirement(lc.ctx, { screen: lc.screen, params: lc.params, client: lc.client });
+      await requirement(lc.ctx, {
+        screen: lc.screen,
+        params: lc.params,
+        client: lc.client,
+      });
     }
-    if (screen.layout) return screen.layout(lc);
+    if (screen.layout) {
+      return screen.layout(lc);
+    }
     const shown = await Promise.all(
       (screen.islands ?? []).map(async (p) => !p.when || (await p.when(lc))),
     );
@@ -246,7 +291,11 @@ export function createComposer<Ctx = undefined, Req = Request>(
     lc: LayoutContext<Ctx>,
     scope: RequestScope,
   ): Promise<IslandEntry & { required?: boolean }> {
-    const base = { key: p.key, type: island.type, version: island.version };
+    const base = {
+      key: p.key,
+      type: island.type,
+      version: island.version,
+    };
     try {
       const props = await withTimeout(p.timeoutMs ?? defaultTimeoutMs, (signal) =>
         resolveChain({
@@ -256,9 +305,19 @@ export function createComposer<Ctx = undefined, Req = Request>(
           rc: attachScope({ ...lc, signal }, scope),
         }),
       );
-      return { ...base, status: "ok", props: (props ?? {}) as Record<string, unknown> };
+      return {
+        ...base,
+        status: "ok",
+        props: (props ?? {}) as Record<string, unknown>,
+      };
     } catch (error) {
-      report({ kind: "island", screen: screen.id, key: p.key, type: island.type, error });
+      report({
+        kind: "island",
+        screen: screen.id,
+        key: p.key,
+        type: island.type,
+        error,
+      });
       const timedOut = error instanceof TimeoutError;
       return {
         ...base,
@@ -278,12 +337,16 @@ export function createComposer<Ctx = undefined, Req = Request>(
       let ctx = (config.context ? await config.context(request) : undefined) as Ctx;
       for (const p of plugins) {
         const extra = p.context ? await p.context(request, ctx) : undefined;
-        if (extra) ctx = { ...ctx, ...extra };
+        if (extra) {
+          ctx = { ...ctx, ...extra };
+        }
       }
       return { ctx };
     } catch (error) {
       const res = protocolError(error);
-      if (res) return { res };
+      if (res) {
+        return { res };
+      }
       report({ kind: "context", error });
       return { res: fail(500, kind === "screens" ? "layout_failed" : "action_failed") };
     }
@@ -295,9 +358,13 @@ export function createComposer<Ctx = undefined, Req = Request>(
     request: Req,
   ): Promise<HandleResult | undefined> {
     const route = matchRoute(path);
-    if (!route) return undefined;
+    if (!route) {
+      return undefined;
+    }
     const context = await contextFor(request, route.kind);
-    if ("res" in context) return context.res;
+    if ("res" in context) {
+      return context.res;
+    }
     let parsed: unknown;
     try {
       parsed = JSON.parse(body);
@@ -305,28 +372,37 @@ export function createComposer<Ctx = undefined, Req = Request>(
       return fail(400, "bad_request", "Body is not valid JSON");
     }
     if (route.kind === "screens") {
-      if (!isScreenRequestShape(parsed))
+      if (!isScreenRequestShape(parsed)) {
         return fail(400, "bad_request", "Body is not a screen request");
-      if (parsed.protocol !== PROTOCOL_VERSION)
+      }
+      if (parsed.protocol !== PROTOCOL_VERSION) {
         return fail(400, "unsupported_protocol", `Composer speaks protocol ${PROTOCOL_VERSION}`);
-      if (parsed.screen !== route.name)
+      }
+      if (parsed.screen !== route.name) {
         return fail(400, "screen_mismatch", `${parsed.screen} != ${route.name}`);
+      }
       return compose(parsed, context.ctx);
     }
-    if (!isActionRequestShape(parsed))
+    if (!isActionRequestShape(parsed)) {
       return fail(400, "bad_request", "Body is not an action request");
-    if (parsed.protocol !== PROTOCOL_VERSION)
+    }
+    if (parsed.protocol !== PROTOCOL_VERSION) {
       return fail(400, "unsupported_protocol", `Composer speaks protocol ${PROTOCOL_VERSION}`);
-    if (parsed.action !== route.name)
+    }
+    if (parsed.action !== route.name) {
       return fail(400, "action_mismatch", `${parsed.action} != ${route.name}`);
+    }
     return perform(parsed, context.ctx);
   }
 
   async function fetchHandler(request: Request): Promise<Response> {
     const path = new URL(request.url).pathname;
-    if (!matchRoute(path)) return new Response(null, { status: 404 });
-    if (request.method !== "POST")
+    if (!matchRoute(path)) {
+      return new Response(null, { status: 404 });
+    }
+    if (request.method !== "POST") {
       return new Response(null, { status: 405, headers: { allow: "POST" } });
+    }
     const res = (await handle(path, await request.text(), request as Req))!;
     return json(res.status, res.body);
   }
@@ -337,15 +413,25 @@ export function createComposer<Ctx = undefined, Req = Request>(
       for (const p of s.islands ?? []) {
         for (const v of p.versions) {
           const versions = (out[v.type] ??= []);
-          if (!versions.includes(v.version)) versions.push(v.version);
+          if (!versions.includes(v.version)) {
+            versions.push(v.version);
+          }
         }
       }
     }
-    for (const versions of Object.values(out)) versions.sort((a, b) => a - b);
+    for (const versions of Object.values(out)) {
+      versions.sort((a, b) => a - b);
+    }
     return out;
   }
 
-  return { fetch: fetchHandler as Composer<Ctx, Req>["fetch"], handle, compose, perform, islands };
+  return {
+    fetch: fetchHandler as Composer<Ctx, Req>["fetch"],
+    handle,
+    compose,
+    perform,
+    islands,
+  };
 }
 
 const json = (status: number, body: unknown) =>
@@ -356,7 +442,9 @@ export function matchRoute(
   path: string,
 ): { kind: "screens" | "actions"; name: string } | undefined {
   const match = path.split("?")[0].match(/\/(screens|actions)\/([^/]+)\/?$/);
-  if (!match) return undefined;
+  if (!match) {
+    return undefined;
+  }
   try {
     return { kind: match[1] as "screens" | "actions", name: decodeURIComponent(match[2]) };
   } catch {

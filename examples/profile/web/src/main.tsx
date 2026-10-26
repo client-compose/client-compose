@@ -21,7 +21,11 @@ function App() {
     () => ({
       registry,
       baseUrl: "", // same origin; Vite proxies /screens to the Go composer
-      client: { platform: "web", appVersion: "1.0.0", locale: navigator.language },
+      client: {
+        platform: "web",
+        appVersion: "1.0.0",
+        locale: navigator.language,
+      },
       headers: () => ({ "X-User-Id": viewer }),
       onSkipped: (entry, reason) => console.warn(`skipped island ${entry.key}: ${reason}`),
       onRenderError: (key, error) => console.error(`island ${key} crashed`, error),

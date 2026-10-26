@@ -29,7 +29,9 @@ export function createRequestListener<Ctx>(
       return;
     }
     let body = "";
-    for await (const chunk of req) body += chunk;
+    for await (const chunk of req) {
+      body += chunk;
+    }
     const result = (await composer.handle(path, body, req))!;
     res
       .writeHead(result.status, { "content-type": "application/json" })

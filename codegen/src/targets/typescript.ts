@@ -26,10 +26,15 @@ export function generateTypeScript(
   ];
 
   const doc = (indent: string, text?: string) => {
-    if (!text) return;
+    if (!text) {
+      return;
+    }
     const lines = text.split("\n");
-    if (lines.length === 1) out.push(`${indent}/** ${lines[0]} */`);
-    else out.push(`${indent}/**`, ...lines.map((l) => `${indent} * ${l}`), `${indent} */`);
+    if (lines.length === 1) {
+      out.push(`${indent}/** ${lines[0]} */`);
+    } else {
+      out.push(`${indent}/**`, ...lines.map((l) => `${indent} * ${l}`), `${indent} */`);
+    }
   };
 
   const typeName = (t: TypeRef): string => {
@@ -70,15 +75,21 @@ export function generateTypeScript(
       doc("  ", f.description);
       out.push(`  ${key(f.jsonName)}${f.required ? "" : "?"}: ${typeName(f.type)};`);
     }
-    if (def.fields.length) out.push("}");
+    if (def.fields.length) {
+      out.push("}");
+    }
     if (island) {
       out.push(
         `export const ${name}: IslandDescriptor<${name}> = { type: ${JSON.stringify(island.type)}, version: ${island.version} };`,
       );
     }
-    for (const child of def.children)
-      if (child.kind === "enum") emitEnum(child);
-      else emitObject(child);
+    for (const child of def.children) {
+      if (child.kind === "enum") {
+        emitEnum(child);
+      } else {
+        emitObject(child);
+      }
+    }
   };
 
   const emitAction = (action: Action) => {
@@ -90,9 +101,11 @@ export function generateTypeScript(
     ];
     emitObject(action.input);
     emitObject(action.result);
-    for (const e of action.errors)
-      if (e.details)
+    for (const e of action.errors) {
+      if (e.details) {
         emitObject({ ...e.details, description: e.description ?? e.details.description });
+      }
+    }
     out.push("");
     if (action.errors.length === 0) {
       out.push(
@@ -124,7 +137,11 @@ export function generateTypeScript(
     );
   };
 
-  for (const island of islands) emitObject(island.props, island);
-  for (const action of actions) emitAction(action);
-  return out.join("\n") + "\n";
+  for (const island of islands) {
+    emitObject(island.props, island);
+  }
+  for (const action of actions) {
+    emitAction(action);
+  }
+  return `${out.join("\n")}\n`;
 }

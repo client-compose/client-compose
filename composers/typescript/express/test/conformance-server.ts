@@ -13,7 +13,9 @@ export async function conformanceServer(options: { json: boolean }) {
     actions: conformanceActions(),
   });
   const app = express();
-  if (options.json) app.use(express.json());
+  if (options.json) {
+    app.use(express.json());
+  }
   app.use("/compose", composerHandler(composer));
   const server = app.listen(0);
   await new Promise((resolve) => server.once("listening", resolve));

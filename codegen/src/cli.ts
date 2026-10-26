@@ -23,8 +23,9 @@ const USAGE = `Usage:
   client-compose-codegen --version | --help`;
 
 function version(): string {
-  if (typeof __CLIENT_COMPOSE_CODEGEN_VERSION__ === "string")
+  if (typeof __CLIENT_COMPOSE_CODEGEN_VERSION__ === "string") {
     return __CLIENT_COMPOSE_CODEGEN_VERSION__;
+  }
   return (
     JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
       version: string;
@@ -40,8 +41,9 @@ function fail(message: string): never {
 function runGenerate(args: string[]): boolean {
   const check = args.includes("--check");
   const configs = args.filter((a) => a !== "--check");
-  if (configs.length === 0 || configs.some((c) => c.startsWith("-")))
+  if (configs.length === 0 || configs.some((c) => c.startsWith("-"))) {
     fail("Expected one or more config files.");
+  }
 
   let ok = true;
   for (const config of configs) {
@@ -49,24 +51,33 @@ function runGenerate(args: string[]): boolean {
       const files = generate(config);
       const outdated = stale(files);
       if (check) {
-        for (const f of outdated)
+        for (const f of outdated) {
           console.error(`✖ out of date: ${relative(process.cwd(), f.path)}`);
-        if (outdated.length) ok = false;
-        else console.log(`✔ ${config}: ${files.length} file(s) up to date`);
+        }
+        if (outdated.length) {
+          ok = false;
+        } else {
+          console.log(`✔ ${config}: ${files.length} file(s) up to date`);
+        }
       } else {
         write(outdated);
-        for (const f of files)
+        for (const f of files) {
           console.log(
             `${outdated.includes(f) ? "wrote" : "unchanged"} ${relative(process.cwd(), f.path)}`,
           );
+        }
       }
     } catch (err) {
-      if (!(err instanceof ManifestError)) throw err;
+      if (!(err instanceof ManifestError)) {
+        throw err;
+      }
       console.error(`✖ ${err.message}`);
       ok = false;
     }
   }
-  if (!ok && check) console.error("\nRun codegen without --check to update.");
+  if (!ok && check) {
+    console.error("\nRun codegen without --check to update.");
+  }
   return ok;
 }
 
@@ -77,7 +88,9 @@ function runCompat(args: string[]): boolean {
     const arg = args[i];
     if (arg === "--base" || arg === "--base-dir") {
       const value = args[++i];
-      if (!value) fail(`${arg} needs a value.`);
+      if (!value) {
+        fail(`${arg} needs a value.`);
+      }
       against = arg === "--base" ? { ref: value } : { dir: value };
     } else if (arg.startsWith("-")) {
       fail(`Unknown option ${arg}.`);
@@ -85,8 +98,12 @@ function runCompat(args: string[]): boolean {
       configs.push(arg);
     }
   }
-  if (configs.length === 0) fail("Expected one or more config files.");
-  if (!against) fail("Pass --base <git-ref> or --base-dir <dir> to compare against.");
+  if (configs.length === 0) {
+    fail("Expected one or more config files.");
+  }
+  if (!against) {
+    fail("Pass --base <git-ref> or --base-dir <dir> to compare against.");
+  }
   const baseLabel = "ref" in against ? against.ref : against.dir;
 
   let ok = true;
@@ -95,7 +112,9 @@ function runCompat(args: string[]): boolean {
     try {
       issues = checkCompat(config, against);
     } catch (err) {
-      if (!(err instanceof ManifestError)) throw err;
+      if (!(err instanceof ManifestError)) {
+        throw err;
+      }
       console.error(`✖ ${err.message}`);
       ok = false;
       continue;

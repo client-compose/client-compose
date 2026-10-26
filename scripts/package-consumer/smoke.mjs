@@ -45,7 +45,11 @@ const Greet = {
   action: "greet",
   version: 1,
   errors: ["nope"],
-  input: { type: "object", required: ["name"], properties: { name: { type: "string" } } },
+  input: {
+    type: "object",
+    required: ["name"],
+    properties: { name: { type: "string" } },
+  },
 };
 const composer = createComposer({
   screens: [
@@ -103,8 +107,9 @@ const cases = clientCases().filter((c) => !c.typedOnly);
 for (const c of cases) {
   const registry = new IslandRegistry();
   for (const [type, versions] of Object.entries(c.registered)) {
-    for (const version of versions)
+    for (const version of versions) {
       registry.register(type, version, (props) => `${type}@${version}:${props.v}`);
+    }
   }
   assert.deepEqual(registry.capabilities(), c.expectCapabilities, c.name);
   const skipped = [];
@@ -129,7 +134,13 @@ const [hello] = plan(registry, response);
 const html = renderToString(
   createElement(
     ClientComposeProvider,
-    { config: { registry, baseUrl, client: { platform: "node", appVersion: "0.0.0" } } },
+    {
+      config: {
+        registry,
+        baseUrl,
+        client: { platform: "node", appVersion: "0.0.0" },
+      },
+    },
     createElement(Island, { island: hello }),
   ),
 );
@@ -177,7 +188,11 @@ const manifest = parseManifest(
   {
     type: "greeting",
     version: 1,
-    props: { type: "object", required: ["name"], properties: { name: { type: "string" } } },
+    props: {
+      type: "object",
+      required: ["name"],
+      properties: { name: { type: "string" } },
+    },
   },
   "greeting.json",
 );

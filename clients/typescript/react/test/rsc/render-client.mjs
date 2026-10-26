@@ -8,14 +8,26 @@ const clientModuleUrls = [
   new URL("./counter.mjs", import.meta.url).href,
 ];
 const modules = {};
-for (const url of clientModuleUrls) modules[url] = await import(url);
+for (const url of clientModuleUrls) {
+  modules[url] = await import(url);
+}
 globalThis.__webpack_require__ = (id) => modules[id];
 globalThis.__webpack_chunk_load__ = () => Promise.resolve();
 
 const moduleMap = new Proxy(
   {},
   {
-    get: (_, id) => new Proxy({}, { get: (_, name) => ({ id, chunks: [], name }) }),
+    get: (_, id) =>
+      new Proxy(
+        {},
+        {
+          get: (_, name) => ({
+            id,
+            chunks: [],
+            name,
+          }),
+        },
+      ),
   },
 );
 
@@ -29,5 +41,7 @@ const { prelude } = await prerenderToNodeStream(await tree, {
   onError: (e) => errors.push(String(e?.message ?? e)),
 });
 let html = "";
-for await (const chunk of prelude) html += chunk;
+for await (const chunk of prelude) {
+  html += chunk;
+}
 process.stdout.write(JSON.stringify({ html, errors }));

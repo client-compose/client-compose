@@ -35,7 +35,9 @@ export class IslandRegistry<R> {
       typeof islandOrType === "string"
         ? [islandOrType, versionOrRender as number, maybeRender!]
         : [islandOrType.type, islandOrType.version, versionOrRender as IslandRenderer<R, P>];
-    if (!this.renderers.has(type)) this.renderers.set(type, new Map());
+    if (!this.renderers.has(type)) {
+      this.renderers.set(type, new Map());
+    }
     // The registry hands each renderer the props of its own island type and version.
     this.renderers.get(type)!.set(version, render as IslandRenderer<R>);
     return this;
@@ -61,7 +63,13 @@ export function buildRequest(
   client: ClientContext,
   params?: Record<string, string>,
 ): ScreenRequest {
-  return { protocol: PROTOCOL_VERSION, screen, params, client, islands: registry.capabilities() };
+  return {
+    protocol: PROTOCOL_VERSION,
+    screen,
+    params,
+    client,
+    islands: registry.capabilities(),
+  };
 }
 
 export interface PlannedIsland<R> {
@@ -88,7 +96,9 @@ export function plan<R>(
   for (const entry of response.islands) {
     if (entry.status === "error") {
       const fallback = options.onError?.(entry);
-      if (fallback !== undefined) out.push({ key: entry.key, render: () => fallback });
+      if (fallback !== undefined) {
+        out.push({ key: entry.key, render: () => fallback });
+      }
       continue;
     }
     if (entry.status !== "ok") {
@@ -140,7 +150,9 @@ export async function fetchScreen(
     headers: { "content-type": "application/json", ...init.headers },
     body: JSON.stringify(request),
   });
-  if (!res.ok) throw new ScreenFetchError(res.status, await res.text());
+  if (!res.ok) {
+    throw new ScreenFetchError(res.status, await res.text());
+  }
   return (await res.json()) as ScreenResponse;
 }
 
@@ -167,7 +179,9 @@ export class ActionFetchError extends Error {
 /** A fresh idempotency key: one per user intent, reused when retrying it (spec §5.2). */
 export function newIdempotencyKey(): string {
   const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
-  if (c?.randomUUID) return c.randomUUID();
+  if (c?.randomUUID) {
+    return c.randomUUID();
+  }
   // React Native's Hermes has no crypto.randomUUID. Uniqueness, not secrecy, is what matters here.
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (ch) => {
     const r = (Math.random() * 16) | 0;
@@ -209,7 +223,9 @@ export async function fetchAction(
     body: JSON.stringify(request),
   });
   const text = await res.text();
-  if (!res.ok) throw new ActionFetchError(res.status, text);
+  if (!res.ok) {
+    throw new ActionFetchError(res.status, text);
+  }
   try {
     return JSON.parse(text) as ActionResponse;
   } catch {
@@ -231,7 +247,9 @@ export function checkActionResponse<I, R, E extends DeclaredError>(
     r?.status === "error" &&
     typeof r.error?.code === "string" &&
     action.errors.includes(r.error.code);
-  if (r?.status === "ok" || declared) return response as ActionResponse<R, E>;
+  if (r?.status === "ok" || declared) {
+    return response as ActionResponse<R, E>;
+  }
   throw new ActionFetchError(200, JSON.stringify(response));
 }
 
