@@ -131,7 +131,7 @@ test("loadScreen declares capabilities and merges headers and request options", 
     broken: [1],
   });
   assert.deepEqual(f.requests[0].body.params, { userId: "u1" });
-  assert.equal((f.requests[0].init.headers as Record<string, string>).Authorization, "Bearer t");
+  assert.equal(new Headers(f.requests[0].init.headers).get("authorization"), "Bearer t");
   assert.equal(f.requests[0].init.cache, "no-store");
 });
 

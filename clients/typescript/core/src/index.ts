@@ -187,6 +187,18 @@ function errorCode(body: string): string | undefined {
   }
 }
 
+/**
+ * The caller's headers, given any way fetch takes them, sent as JSON unless they say otherwise.
+ * (Spreading a `Headers` object would drop them all.)
+ */
+function jsonHeaders(init: HeadersInit | undefined): Headers {
+  const headers = new Headers(init);
+  if (!headers.has("content-type")) {
+    headers.set("content-type", "application/json");
+  }
+  return headers;
+}
+
 export async function fetchScreen(
   baseUrl: string,
   request: ScreenRequest,
@@ -196,7 +208,7 @@ export async function fetchScreen(
   const res = await fetchImpl(`${baseUrl}/screens/${encodeURIComponent(request.screen)}`, {
     ...init,
     method: "POST",
-    headers: { "content-type": "application/json", ...init.headers },
+    headers: jsonHeaders(init.headers),
     body: JSON.stringify(request),
   });
   const text = await res.text();
@@ -249,7 +261,7 @@ export async function fetchIsland(
   const res = await fetchImpl(`${baseUrl}/screens/${path}`, {
     ...init,
     method: "POST",
-    headers: { "content-type": "application/json", ...init.headers },
+    headers: jsonHeaders(init.headers),
     body: JSON.stringify(request),
   });
   const text = await res.text();
@@ -355,7 +367,7 @@ export async function fetchAction(
   const res = await fetchImpl(`${baseUrl}/actions/${encodeURIComponent(request.action)}`, {
     ...init,
     method: "POST",
-    headers: { "content-type": "application/json", ...init.headers },
+    headers: jsonHeaders(init.headers),
     body: JSON.stringify(request),
   });
   const text = await res.text();

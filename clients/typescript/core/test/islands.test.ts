@@ -45,6 +45,29 @@ test("resolves with the island's entry, its next page's cursor and all", async (
   assert.equal(gateway.requests[0]?.url, "https://composer.test/screens/search/islands/results");
 });
 
+test("sends the caller's headers however they're given, as JSON unless they say otherwise", async () => {
+  const gateway = createFakeGateway({
+    islands: {
+      "search/results": () => islandResponse("search", island("results", List, { n: 2 })),
+    },
+  });
+  const headers = new Headers({ authorization: "Bearer t" });
+  await fetchIsland("https://composer.test", request, { headers }, gateway.fetch);
+  await fetchIsland(
+    "https://composer.test",
+    request,
+    { headers: [["content-type", "application/vnd.test+json"]] },
+    gateway.fetch,
+  );
+  assert.deepEqual(
+    gateway.requests.map((r) => [r.headers.authorization, r.headers["content-type"]]),
+    [
+      ["Bearer t", "application/json"],
+      [undefined, "application/vnd.test+json"],
+    ],
+  );
+});
+
 test("throws IslandFetchError for a failure, or an answer that isn't the island asked for", async () => {
   const answers = [
     screenError(400, "invalid_cursor"),

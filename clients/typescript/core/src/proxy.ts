@@ -135,8 +135,11 @@ const BAD_REQUEST = {
 
 export function createComposerProxy(options: ComposerProxyOptions): ComposerProxy {
   async function init(): Promise<RequestInit> {
-    const headers = (await options.headers?.()) ?? {};
-    return { ...options.requestInit, headers: { ...options.requestInit?.headers, ...headers } };
+    const headers = new Headers(options.requestInit?.headers);
+    for (const [name, value] of Object.entries((await options.headers?.()) ?? {})) {
+      headers.set(name, value);
+    }
+    return { ...options.requestInit, headers };
   }
 
   async function performAction(body: unknown): Promise<ProxyResult<ActionResponse>> {
