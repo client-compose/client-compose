@@ -26,7 +26,13 @@ function compose(
   const islands = resolvers.map((resolve, i): Placement<null> => ({
     key: String.fromCharCode(97 + i),
     timeoutMs,
-    versions: [{ type: `t${i}`, version: 1, resolve } as Island<null, unknown>],
+    versions: [
+      {
+        type: `t${i}`,
+        version: 1,
+        resolve,
+      } as Island<null, unknown>,
+    ],
   }));
   const s = screen<null>("s", {
     layout: async (rc) => {
@@ -185,7 +191,18 @@ test("NotFoundError (or a batch loader's missing key) in a layout is a 404, and 
     meta: () => {
       throw new Error("meta broke");
     },
-    islands: [{ key: "k", versions: [{ type: "t", version: 1, resolve: () => ({ ok: true }) }] }],
+    islands: [
+      {
+        key: "k",
+        versions: [
+          {
+            type: "t",
+            version: 1,
+            resolve: () => ({ ok: true }),
+          },
+        ],
+      },
+    ],
   });
   const result = await createComposer<null>({
     screens: [s],

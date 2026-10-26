@@ -10,9 +10,27 @@ const response = {
   protocol: 0,
   screen: "profile",
   islands: [
-    { key: "header", type: "header", version: 1, status: "ok", props: { name: "Ada" } },
-    { key: "broken", type: "broken", version: 1, status: "ok", props: {} },
-    { key: "counter", type: "counter", version: 1, status: "ok", props: { start: 1 } },
+    {
+      key: "header",
+      type: "header",
+      version: 1,
+      status: "ok",
+      props: { name: "Ada" },
+    },
+    {
+      key: "broken",
+      type: "broken",
+      version: 1,
+      status: "ok",
+      props: {},
+    },
+    {
+      key: "counter",
+      type: "counter",
+      version: 1,
+      status: "ok",
+      props: { start: 1 },
+    },
   ],
 };
 
@@ -36,7 +54,11 @@ const clientManifest = new Proxy(
   {
     get: (_, ref) => {
       const [id, name] = String(ref).split("#");
-      return { id, chunks: [], name };
+      return {
+        id,
+        chunks: [],
+        name,
+      };
     },
   },
 );

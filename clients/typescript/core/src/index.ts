@@ -31,13 +31,25 @@ export class IslandRegistry<R> {
     versionOrRender: number | IslandRenderer<R, P>,
     maybeRender?: IslandRenderer<R, P>,
   ): this {
-    const [type, version, render] =
-      typeof islandOrType === "string"
-        ? [islandOrType, versionOrRender as number, maybeRender!]
-        : [islandOrType.type, islandOrType.version, versionOrRender as IslandRenderer<R, P>];
-    if (!this.renderers.has(type)) this.renderers.set(type, new Map());
-    // The registry hands each renderer the props of its own island type and version.
-    this.renderers.get(type)!.set(version, render as IslandRenderer<R>);
+    if (typeof islandOrType !== "string") {
+      if (typeof versionOrRender === "number") {
+        throw new Error("register(descriptor, render): pass the renderer, not a version");
+      }
+      return this.add(islandOrType.type, islandOrType.version, versionOrRender);
+    }
+    if (typeof versionOrRender !== "number" || !maybeRender) {
+      throw new Error("register(type, version, render): pass a version and a renderer");
+    }
+    return this.add(islandOrType, versionOrRender, maybeRender);
+  }
+
+  private add<P>(type: string, version: number, render: IslandRenderer<R, P>): this {
+    const versions = this.renderers.get(type) ?? new Map<number, IslandRenderer<R>>();
+    // The registry hands each renderer the props of its own island type and version, so the
+    // renderer's props type holds. TypeScript can't see that through one map of every island.
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+    versions.set(version, render as IslandRenderer<R>);
+    this.renderers.set(type, versions);
     return this;
   }
 
@@ -61,7 +73,13 @@ export function buildRequest(
   client: ClientContext,
   params?: Record<string, string>,
 ): ScreenRequest {
-  return { protocol: PROTOCOL_VERSION, screen, params, client, islands: registry.capabilities() };
+  return {
+    protocol: PROTOCOL_VERSION,
+    screen,
+    params,
+    client,
+    islands: registry.capabilities(),
+  };
 }
 
 export interface PlannedIsland<R> {
@@ -88,7 +106,9 @@ export function plan<R>(
   for (const entry of response.islands) {
     if (entry.status === "error") {
       const fallback = options.onError?.(entry);
-      if (fallback !== undefined) out.push({ key: entry.key, render: () => fallback });
+      if (fallback !== undefined) {
+        out.push({ key: entry.key, render: () => fallback });
+      }
       continue;
     }
     if (entry.status !== "ok") {
@@ -103,6 +123,41 @@ export function plan<R>(
     out.push({ key: entry.key, render: () => renderer(entry.props, entry) });
   }
   return out;
+}
+
+// ---- Reading what the composer answered ----
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** The body as JSON, or undefined if it isn't JSON. */
+function parseJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+}
+
+function isIslandEntry(value: unknown): value is IslandEntry {
+  if (!isRecord(value)) {
+    return false;
+  }
+  const named = typeof value.key === "string" && typeof value.type === "string";
+  return named && typeof value.version === "number" && typeof value.status === "string";
+}
+
+function isScreenResponse(value: unknown): value is ScreenResponse {
+  if (!isRecord(value) || typeof value.screen !== "string") {
+    return false;
+  }
+  return Array.isArray(value.islands) && value.islands.every(isIslandEntry);
+}
+
+/** An action's outcome: what a client needs of one is its status (the client fixtures, spec §8.2). */
+function isActionResponse(value: unknown): value is ActionResponse {
+  return isRecord(value) && (value.status === "ok" || value.status === "error");
 }
 
 export class ScreenFetchError extends Error {
@@ -121,7 +176,9 @@ export class ScreenFetchError extends Error {
 
 function errorCode(body: string): string | undefined {
   try {
-    const code = (JSON.parse(body) as { error?: { code?: unknown } }).error?.code;
+    const parsed: unknown = JSON.parse(body);
+    const error = isRecord(parsed) ? parsed.error : undefined;
+    const code = isRecord(error) ? error.code : undefined;
     return typeof code === "string" ? code : undefined;
   } catch {
     return undefined;
@@ -140,8 +197,15 @@ export async function fetchScreen(
     headers: { "content-type": "application/json", ...init.headers },
     body: JSON.stringify(request),
   });
-  if (!res.ok) throw new ScreenFetchError(res.status, await res.text());
-  return (await res.json()) as ScreenResponse;
+  const text = await res.text();
+  if (!res.ok) {
+    throw new ScreenFetchError(res.status, text);
+  }
+  const response = parseJson(text);
+  if (!isScreenResponse(response)) {
+    throw new ScreenFetchError(res.status, text);
+  }
+  return response;
 }
 
 // ---- Actions (spec §5) ----
@@ -166,8 +230,11 @@ export class ActionFetchError extends Error {
 
 /** A fresh idempotency key: one per user intent, reused when retrying it (spec §5.2). */
 export function newIdempotencyKey(): string {
-  const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
-  if (c?.randomUUID) return c.randomUUID();
+  // React Native's Hermes may have no crypto, or crypto without randomUUID.
+  const c: Partial<Pick<Crypto, "randomUUID">> | undefined = globalThis.crypto;
+  if (c?.randomUUID) {
+    return c.randomUUID();
+  }
   // React Native's Hermes has no crypto.randomUUID. Uniqueness, not secrecy, is what matters here.
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (ch) => {
     const r = (Math.random() * 16) | 0;
@@ -209,12 +276,14 @@ export async function fetchAction(
     body: JSON.stringify(request),
   });
   const text = await res.text();
-  if (!res.ok) throw new ActionFetchError(res.status, text);
-  try {
-    return JSON.parse(text) as ActionResponse;
-  } catch {
+  if (!res.ok) {
     throw new ActionFetchError(res.status, text);
   }
+  const response = parseJson(text);
+  if (!isActionResponse(response)) {
+    throw new ActionFetchError(res.status, text);
+  }
+  return response;
 }
 
 /**
@@ -226,12 +295,16 @@ export function checkActionResponse<I, R, E extends DeclaredError>(
   action: ActionDescriptor<I, R, E>,
   response: unknown,
 ): ActionResponse<R, E> {
-  const r = response as { status?: unknown; error?: { code?: unknown } } | null;
-  const declared =
-    r?.status === "error" &&
-    typeof r.error?.code === "string" &&
-    action.errors.includes(r.error.code);
-  if (r?.status === "ok" || declared) return response as ActionResponse<R, E>;
+  const error = isRecord(response) ? response.error : undefined;
+  const code = isRecord(error) ? error.code : undefined;
+  const status = isRecord(response) ? response.status : undefined;
+  const declared = status === "error" && typeof code === "string" && action.errors.includes(code);
+  if (isActionResponse(response) && (status === "ok" || declared)) {
+    // The result's and error's types are the action's: generated from its manifest, which the
+    // composer checks its outcomes against. They exist only at the type level.
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+    return response as ActionResponse<R, E>;
+  }
   throw new ActionFetchError(200, JSON.stringify(response));
 }
 

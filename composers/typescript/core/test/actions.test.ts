@@ -34,11 +34,20 @@ test("handlers see validated input with null optionals removed", async () => {
     }),
   ]);
   const res = await perform(
-    request({ outcome: "ok", echo: "hi", count: null, extra: 1 }),
+    request({
+      outcome: "ok",
+      echo: "hi",
+      count: null,
+      extra: 1,
+    }),
     undefined,
   );
   assert.equal(res.status, 200);
-  assert.deepEqual(seen, { outcome: "ok", echo: "hi", extra: 1 });
+  assert.deepEqual(seen, {
+    outcome: "ok",
+    echo: "hi",
+    extra: 1,
+  });
 });
 
 test("failures and undeclared codes are reported and answered with action_failed", async () => {
@@ -46,7 +55,9 @@ test("failures and undeclared codes are reported and answered with action_failed
   const perform = performer(
     [
       action(ConformanceV1, (input) => {
-        if (input.outcome === "fail") throw new Error("boom");
+        if (input.outcome === "fail") {
+          throw new Error("boom");
+        }
         return { error: { code: "nope" } as never };
       }),
     ],

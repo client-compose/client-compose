@@ -30,7 +30,13 @@ for (const c of suite.requests) {
     let seen: { url: string; body: unknown } | undefined;
     const fetchImpl = async (url: string | URL | Request, init?: RequestInit) => {
       seen = { url: String(url), body: JSON.parse(String(init?.body)) };
-      return new Response(JSON.stringify({ protocol: 0, status: "ok", result: {} }));
+      return new Response(
+        JSON.stringify({
+          protocol: 0,
+          status: "ok",
+          result: {},
+        }),
+      );
     };
     await callAction(baseUrl, action, c.input, {
       client,
@@ -54,11 +60,23 @@ for (const c of suite.outcomes) {
     const outcome = await callAction(baseUrl, action, {}, options).then(
       (res) =>
         res.status === "ok"
-          ? { outcome: "ok", result: res.result, effects: knownEffects(res.effects ?? {}) }
-          : { outcome: "error", code: res.error.code, details: res.error.details ?? null },
+          ? {
+              outcome: "ok",
+              result: res.result,
+              effects: knownEffects(res.effects ?? {}),
+            }
+          : {
+              outcome: "error",
+              code: res.error.code,
+              details: res.error.details ?? null,
+            },
       (err: unknown) => {
         assert.ok(err instanceof ActionFetchError, String(err));
-        return { outcome: "failed", status: err.status, code: err.code ?? null };
+        return {
+          outcome: "failed",
+          status: err.status,
+          code: err.code ?? null,
+        };
       },
     );
     assert.deepEqual(outcome, c.expect);
@@ -73,7 +91,12 @@ for (const c of suite.screenRefs) {
 
 for (const c of suite.screenErrors) {
   test(`screen error: ${c.name}`, async () => {
-    const request: ScreenRequest = { protocol: 0, screen: "s", client, islands: {} };
+    const request: ScreenRequest = {
+      protocol: 0,
+      screen: "s",
+      client,
+      islands: {},
+    };
     const err = await fetchScreen(baseUrl, request, {}, respond(c) as typeof fetch).catch(
       (e: unknown) => e,
     );

@@ -71,7 +71,15 @@ at most, its usual JSON library.
 ## Style
 
 TypeScript and JavaScript are formatted by Prettier and linted by ESLint (`pnpm format`, `pnpm lint`;
-CI runs both). Go uses gofmt. Generated files, fixtures and manifests are left as they are.
+CI runs both). Besides the community's recommended rules, the lint asks for code that's easy to
+review: braces on every `if`, no nested ternaries, no type or non-null assertions outside tests
+(check values with a type guard instead), and one property per line for objects of three or more.
+Where TypeScript genuinely can't express something, a commented
+`// eslint-disable-next-line` says why.
+
+Go is formatted with gofumpt and goimports and linted with golangci-lint (`.golangci.yml`):
+`pnpm go:fix` formats and fixes, `pnpm go:lint` checks (CI runs it). Generated files, fixtures and
+manifests are left as they are.
 
 ## Changing an npm package
 

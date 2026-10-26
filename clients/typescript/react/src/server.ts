@@ -61,7 +61,9 @@ async function ScreenIslands(props: ServerComposedScreenProps): Promise<ReactNod
   try {
     response = await (props.response ?? loadScreen(config, props.screen, props.params));
   } catch (error) {
-    if (props.renderError) return props.renderError(error);
+    if (props.renderError) {
+      return props.renderError(error);
+    }
     throw error;
   }
 

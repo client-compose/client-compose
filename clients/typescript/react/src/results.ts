@@ -22,6 +22,8 @@ export function isUnexpected<E extends DeclaredError>(
   result: ActionResult<unknown, E> | undefined,
   handled: readonly E["code"][] = [],
 ): boolean {
-  if (result?.status === "failed") return true;
+  if (result?.status === "failed") {
+    return true;
+  }
   return result?.status === "error" && !handled.includes(result.error.code);
 }

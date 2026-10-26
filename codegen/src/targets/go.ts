@@ -36,7 +36,11 @@ export function generateGo(
   const out: string[] = [header.replace(/^/gm, "// "), "", `package ${opts.package}`];
 
   const doc = (indent: string, text?: string) => {
-    if (text) for (const line of text.split("\n")) out.push(`${indent}// ${line}`);
+    if (text) {
+      for (const line of text.split("\n")) {
+        out.push(`${indent}// ${line}`);
+      }
+    }
   };
 
   const typeName = (t: TypeRef): string => {
@@ -64,18 +68,23 @@ export function generateGo(
     out.push("");
     doc("", def.description);
     out.push(`type ${name} string`, "", "const (");
-    for (const v of def.values) out.push(`\t${name}${goName(v)} ${name} = ${JSON.stringify(v)}`);
+    for (const v of def.values) {
+      out.push(`\t${name}${goName(v)} ${name} = ${JSON.stringify(v)}`);
+    }
     out.push(")");
   };
 
   const emitObject = (def: ObjectDef, island?: Island, intro?: string) => {
     const name = typeIdent(def.path);
     out.push("");
-    if (island)
+    if (island) {
       out.push(
         `// ${name} holds the props of island ${JSON.stringify(island.type)} v${island.version}.`,
       );
-    if (intro) out.push(`// ${name} ${intro}`);
+    }
+    if (intro) {
+      out.push(`// ${name} ${intro}`);
+    }
     doc("", island?.description ?? def.description);
     out.push(`type ${name} struct${def.fields.length ? " {" : "{}"}`);
     for (const f of def.fields) {
@@ -87,7 +96,9 @@ export function generateGo(
       const tag = `json:"${f.jsonName}${f.required ? "" : ",omitempty"}"`;
       out.push(`\t${goName(f.jsonName)} ${pointer ? "*" : ""}${base} \`${tag}\``);
     }
-    if (def.fields.length) out.push("}");
+    if (def.fields.length) {
+      out.push("}");
+    }
     if (island) {
       out.push(
         "",
@@ -96,9 +107,13 @@ export function generateGo(
         `func (${name}) IslandVersion() int { return ${island.version} }`,
       );
     }
-    for (const child of def.children)
-      if (child.kind === "enum") emitEnum(child);
-      else emitObject(child);
+    for (const child of def.children) {
+      if (child.kind === "enum") {
+        emitEnum(child);
+      } else {
+        emitObject(child);
+      }
+    }
   };
 
   const emitAction = (action: Action) => {
@@ -106,7 +121,11 @@ export function generateGo(
     const input = typeIdent(action.input.path);
     const result = typeIdent(action.result.path);
     emitObject(
-      { ...action.input, children: [], description: action.description },
+      {
+        ...action.input,
+        children: [],
+        description: action.description,
+      },
       undefined,
       `is the input of ${label}.`,
     );
@@ -125,9 +144,13 @@ export function generateGo(
       `// ActionResult ties the input to its result type, ${result}.`,
       `func (${input}) ActionResult(${result}) {}`,
     );
-    for (const child of action.input.children)
-      if (child.kind === "enum") emitEnum(child);
-      else emitObject(child);
+    for (const child of action.input.children) {
+      if (child.kind === "enum") {
+        emitEnum(child);
+      } else {
+        emitObject(child);
+      }
+    }
     emitObject(action.result, undefined, `is the result of ${label}.`);
     for (const e of action.errors) {
       const name = typeIdent(e.path);
@@ -158,16 +181,22 @@ export function generateGo(
     }
   };
 
-  for (const island of islands) emitObject(island.props, island);
-  for (const action of actions) emitAction(action);
-  return gofmt(out.join("\n") + "\n");
+  for (const island of islands) {
+    emitObject(island.props, island);
+  }
+  for (const action of actions) {
+    emitAction(action);
+  }
+  return gofmt(`${out.join("\n")}\n`);
 }
 
 /** Align fields the way gofmt does. Go developers have gofmt; if it's missing, output is still valid Go. */
 function gofmt(src: string): string {
   const res = spawnSync("gofmt", [], { input: src, encoding: "utf8" });
   if (res.error || res.status !== 0) {
-    if (res.status) throw new Error(`gofmt rejected generated code:\n${res.stderr}`);
+    if (res.status) {
+      throw new Error(`gofmt rejected generated code:\n${res.stderr}`);
+    }
     console.warn("codegen: gofmt not found on PATH; Go output is unformatted");
     return src;
   }

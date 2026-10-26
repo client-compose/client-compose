@@ -30,9 +30,15 @@ export function conformanceScreen<Ctx = unknown>(): Screen<Ctx> {
   return screen<Ctx>("__conformance", {
     meta: ({ params }) => (params.meta ? JSON.parse(params.meta) : {}),
     layout: ({ params }) => {
-      if (params.notFound === "true") throw new NotFoundError("no such thing");
-      if (params.auth === "unauthenticated") throw new UnauthenticatedError();
-      if (params.auth === "forbidden") throw new ForbiddenError();
+      if (params.notFound === "true") {
+        throw new NotFoundError("no such thing");
+      }
+      if (params.auth === "unauthenticated") {
+        throw new UnauthenticatedError();
+      }
+      if (params.auth === "forbidden") {
+        throw new ForbiddenError();
+      }
       // How many times each load key's work actually ran during this request.
       const calls = new Map<string, number>();
       return (JSON.parse(params.placements ?? "[]") as MockPlacement[]).map((p) => ({
@@ -43,13 +49,19 @@ export function conformanceScreen<Ctx = unknown>(): Screen<Ctx> {
           type: p.type,
           version,
           resolve: async ({ signal, load }) => {
-            if (p.outcome === "error") throw new Error("mock failure");
+            if (p.outcome === "error") {
+              throw new Error("mock failure");
+            }
             if (p.outcome === "timeout") {
               return new Promise((_, reject) => signal.addEventListener("abort", reject));
             }
-            if (p.load === undefined) return { v: version };
+            if (p.load === undefined) {
+              return { v: version };
+            }
             const key = p.load;
-            if (p.startDelayMs) await new Promise((resolve) => setTimeout(resolve, p.startDelayMs));
+            if (p.startDelayMs) {
+              await new Promise((resolve) => setTimeout(resolve, p.startDelayMs));
+            }
             await load(key, (shared) => {
               calls.set(key, (calls.get(key) ?? 0) + 1);
               return new Promise<void>((resolve, reject) => {

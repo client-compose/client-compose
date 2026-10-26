@@ -76,14 +76,18 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 function strings(value: unknown): Record<string, string> {
-  if (!isRecord(value)) return {};
+  if (!isRecord(value)) {
+    return {};
+  }
   return Object.fromEntries(
     Object.entries(value).filter((e): e is [string, string] => typeof e[1] === "string"),
   );
 }
 
 function capabilities(value: unknown): Capabilities {
-  if (!isRecord(value)) return {};
+  if (!isRecord(value)) {
+    return {};
+  }
   return Object.fromEntries(
     Object.entries(value).map(([type, versions]) => [
       type,
@@ -97,13 +101,20 @@ function clientContext(value: unknown): ClientContext | undefined {
     !isRecord(value) ||
     typeof value.platform !== "string" ||
     typeof value.appVersion !== "string"
-  )
+  ) {
     return undefined;
-  return { ...value, platform: value.platform, appVersion: value.appVersion } as ClientContext;
+  }
+  return {
+    ...value,
+    platform: value.platform,
+    appVersion: value.appVersion,
+  } as ClientContext;
 }
 
 function parseBody(body: unknown): unknown {
-  if (typeof body !== "string") return body;
+  if (typeof body !== "string") {
+    return body;
+  }
   try {
     return JSON.parse(body) as unknown;
   } catch {
@@ -112,7 +123,9 @@ function parseBody(body: unknown): unknown {
 }
 
 function urlOf(input: RequestInfo | URL): string {
-  if (typeof input === "string") return input;
+  if (typeof input === "string") {
+    return input;
+  }
   return input instanceof URL ? input.href : input.url;
 }
 
@@ -124,8 +137,9 @@ function headersOf(init: HeadersInit | undefined): Record<string, string> {
 
 function asScreenRequest(request: RecordedRequest): RecordedScreenRequest | undefined {
   const { body } = request;
-  if (!request.url.includes("/screens/") || !isRecord(body) || typeof body.screen !== "string")
+  if (!request.url.includes("/screens/") || !isRecord(body) || typeof body.screen !== "string") {
     return undefined;
+  }
   return {
     ...request,
     screen: body.screen,
@@ -137,8 +151,9 @@ function asScreenRequest(request: RecordedRequest): RecordedScreenRequest | unde
 
 function asActionRequest(request: RecordedRequest): RecordedActionRequest | undefined {
   const { body } = request;
-  if (!request.url.includes("/actions/") || !isRecord(body) || typeof body.action !== "string")
+  if (!request.url.includes("/actions/") || !isRecord(body) || typeof body.action !== "string") {
     return undefined;
+  }
   return {
     ...request,
     action: body.action,
@@ -169,13 +184,19 @@ export function createFakeGateway(handlers: FakeGatewayHandlers = {}): FakeGatew
     requests.push(request);
 
     const other = handlers.other?.(request);
-    if (other) return respond(other);
+    if (other) {
+      return respond(other);
+    }
     const screenRequest = asScreenRequest(request);
     const screenHandler = screenRequest && handlers.screens?.[screenRequest.screen];
-    if (screenRequest && screenHandler) return respond(screenHandler(screenRequest));
+    if (screenRequest && screenHandler) {
+      return respond(screenHandler(screenRequest));
+    }
     const actionRequest = asActionRequest(request);
     const actionHandler = actionRequest && handlers.actions?.[actionRequest.action];
-    if (actionRequest && actionHandler) return respond(actionHandler(actionRequest));
+    if (actionRequest && actionHandler) {
+      return respond(actionHandler(actionRequest));
+    }
     throw new Error(
       `fake gateway: no handler for ${request.method} ${request.url} ${JSON.stringify(request.body)}`,
     );
@@ -213,7 +234,13 @@ export function installFakeGateway(handlers: FakeGatewayHandlers = {}): Installe
 
 /** An island in a screen response, typed by its generated descriptor. */
 export function island<P>(key: string, descriptor: IslandDescriptor<P>, props: P): IslandEntry<P> {
-  return { key, type: descriptor.type, version: descriptor.version, status: "ok", props };
+  return {
+    key,
+    type: descriptor.type,
+    version: descriptor.version,
+    status: "ok",
+    props,
+  };
 }
 
 /** An island that failed on the composer (spec §3.4). */
@@ -222,7 +249,13 @@ export function islandError(
   descriptor: IslandDescriptor<unknown>,
   error: IslandError,
 ): IslandEntry {
-  return { key, type: descriptor.type, version: descriptor.version, status: "error", error };
+  return {
+    key,
+    type: descriptor.type,
+    version: descriptor.version,
+    status: "error",
+    error,
+  };
 }
 
 /** A screen response. */
@@ -233,7 +266,12 @@ export function screen(
 ): FakeResponse {
   return {
     status: 200,
-    body: { protocol: PROTOCOL_VERSION, screen: id, islands, ...(meta && { meta }) },
+    body: {
+      protocol: PROTOCOL_VERSION,
+      screen: id,
+      islands,
+      ...(meta && { meta }),
+    },
   };
 }
 
@@ -248,8 +286,20 @@ export function actionOk<I, R, E extends DeclaredError>(
   result: R,
   effects?: ActionEffects,
 ): FakeResponse {
-  const base = { protocol: PROTOCOL_VERSION, action: action.action, version: action.version };
-  return { status: 200, body: { ...base, status: "ok", result, ...(effects && { effects }) } };
+  const base = {
+    protocol: PROTOCOL_VERSION,
+    action: action.action,
+    version: action.version,
+  };
+  return {
+    status: 200,
+    body: {
+      ...base,
+      status: "ok",
+      result,
+      ...(effects && { effects }),
+    },
+  };
 }
 
 /** An action that ended with one of its declared errors. */
@@ -257,8 +307,19 @@ export function actionError<I, R, E extends DeclaredError>(
   action: ActionDescriptor<I, R, E>,
   error: E,
 ): FakeResponse {
-  const base = { protocol: PROTOCOL_VERSION, action: action.action, version: action.version };
-  return { status: 200, body: { ...base, status: "error", error } };
+  const base = {
+    protocol: PROTOCOL_VERSION,
+    action: action.action,
+    version: action.version,
+  };
+  return {
+    status: 200,
+    body: {
+      ...base,
+      status: "error",
+      error,
+    },
+  };
 }
 
 /** An action the composer didn't perform, e.g. `actionFailure(401, "unauthenticated")` (spec §5.4). */

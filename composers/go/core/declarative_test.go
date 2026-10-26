@@ -52,7 +52,7 @@ func viewerFromHeader(ctx context.Context, r *http.Request) (context.Context, er
 }
 
 func profileScreen() cc.Screen {
-	header := cc.Define(func(ctx context.Context, r cc.Request) (headerV1, error) {
+	header := cc.Define(func(_ context.Context, r cc.Request) (headerV1, error) {
 		return headerV1{Name: r.Params["userId"]}, nil
 	})
 	return cc.Screen{

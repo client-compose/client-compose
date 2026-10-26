@@ -40,7 +40,11 @@ export function generateSwift(
   ];
 
   const doc = (indent: string, text?: string) => {
-    if (text) for (const line of text.split("\n")) out.push(`${indent}/// ${line}`);
+    if (text) {
+      for (const line of text.split("\n")) {
+        out.push(`${indent}/// ${line}`);
+      }
+    }
   };
 
   const typeName = (t: TypeRef): string => {
@@ -83,13 +87,15 @@ export function generateSwift(
       ? "IslandProps, Codable, Equatable, Sendable"
       : "Codable, Equatable, Sendable";
     out.push(`${indent}${access}struct ${name}: ${conformances} {`);
-    const inner = indent + "    ";
+    const inner = `${indent}    `;
     if (island) {
       out.push(`${inner}${access}static let islandType = ${JSON.stringify(island.type)}`);
       out.push(`${inner}${access}static let islandVersion = ${island.version}`);
       out.push("");
     }
-    for (const f of def.fields) emitField(f, inner);
+    for (const f of def.fields) {
+      emitField(f, inner);
+    }
     emitInit(def, inner);
     if (def.fields.some((f) => camel(f.jsonName) !== f.jsonName)) {
       out.push("", `${inner}enum CodingKeys: String, CodingKey {`);
@@ -103,15 +109,20 @@ export function generateSwift(
     }
     for (const child of def.children) {
       out.push("");
-      if (child.kind === "enum") emitEnum(child, inner);
-      else emitObject(child, inner);
+      if (child.kind === "enum") {
+        emitEnum(child, inner);
+      } else {
+        emitObject(child, inner);
+      }
     }
     out.push(`${indent}}`);
   };
 
   // A memberwise initializer, so apps (and tests) can build values, also when the types are public.
   const emitInit = (def: ObjectDef, indent: string) => {
-    if (def.fields.length) out.push("");
+    if (def.fields.length) {
+      out.push("");
+    }
     const params = def.fields.map(
       (f) => `${ident(camel(f.jsonName))}: ${typeName(f.type)}${f.required ? "" : "? = nil"}`,
     );
@@ -157,8 +168,8 @@ export function generateSwift(
       out.push("}");
       return;
     }
-    const e2 = inner + "    ";
-    const e3 = e2 + "    ";
+    const e2 = `${inner}    `;
+    const e3 = `${e2}    `;
     out.push(
       `${inner}/// The errors ${JSON.stringify(action.action)} v${action.version} declares. A newer composer may send codes this`,
       `${inner}/// app doesn't know: \`ComposeClient.perform\` throws those as \`ActionFailure\`.`,
@@ -191,8 +202,9 @@ export function generateSwift(
       `${e2}${access}var code: String {`,
       `${e3}switch self {`,
     );
-    for (const e of action.errors)
+    for (const e of action.errors) {
       out.push(`${e3}case .${ident(camel(e.code))}: return ${JSON.stringify(e.code)}`);
+    }
     out.push(
       `${e3}}`,
       `${e2}}`,
@@ -210,7 +222,9 @@ export function generateSwift(
     }
     out.push(`${e3}}`, `${e2}}`, `${inner}}`);
     for (const e of action.errors) {
-      if (!e.details) continue;
+      if (!e.details) {
+        continue;
+      }
       out.push("");
       emitObject(e.details, inner, undefined, `The details of ${JSON.stringify(e.code)}.`);
     }
@@ -225,12 +239,14 @@ export function generateSwift(
   };
 
   islands.forEach((island, i) => {
-    if (i > 0) out.push("");
+    if (i > 0) {
+      out.push("");
+    }
     emitObject(island.props, "", island);
   });
   for (const action of actions) {
     out.push("");
     emitAction(action);
   }
-  return out.join("\n") + "\n";
+  return `${out.join("\n")}\n`;
 }

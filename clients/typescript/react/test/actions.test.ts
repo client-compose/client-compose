@@ -45,16 +45,37 @@ function fakeComposer(actionResponse: () => Response) {
   const impl = (async (url: string, init: RequestInit) => {
     const body = JSON.parse(String(init.body));
     if (url.includes("/actions/")) {
-      actions.push({ url, body, headers: init.headers as Record<string, string> });
+      actions.push({
+        url,
+        body,
+        headers: init.headers as Record<string, string>,
+      });
       return actionResponse();
     }
     const key = `${body.screen}:${JSON.stringify(body.params ?? {})}`;
     const n = (screenFetches.get(key) ?? 0) + 1;
     screenFetches.set(key, n);
-    const islands = [{ key: "c", type: "count", version: 1, status: "ok", props: { n } }];
-    return Response.json({ protocol: 0, screen: body.screen, islands, cache: { maxAge: 60 } });
+    const islands = [
+      {
+        key: "c",
+        type: "count",
+        version: 1,
+        status: "ok",
+        props: { n },
+      },
+    ];
+    return Response.json({
+      protocol: 0,
+      screen: body.screen,
+      islands,
+      cache: { maxAge: 60 },
+    });
   }) as typeof fetch;
-  return { impl, screenFetches, actions };
+  return {
+    impl,
+    screenFetches,
+    actions,
+  };
 }
 
 const okResponse = (effects?: object) =>
@@ -82,8 +103,12 @@ async function setup(
     ClientComposeProvider,
     { config: cfg },
     createElement(Harness),
-    ...screens.map((s, i) =>
-      createElement("section", { key: i }, createElement(ComposedScreen, s)),
+    ...screens.map((s) =>
+      createElement(
+        "section",
+        { key: `${s.screen}:${JSON.stringify(s.params ?? {})}` },
+        createElement(ComposedScreen, s),
+      ),
     ),
   );
   await act(async () => root.render(tree));

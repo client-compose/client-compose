@@ -9,9 +9,21 @@ on:
       - "conformance/**"
       - "composers/go/**"
       - "examples/profile/composer-go/**"
+      - ".golangci.yml"
+      - "scripts/go-lint.sh"
       - ".github/workflows/go.yml"
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: Formatting and lint (golangci-lint)
+        run: scripts/go-lint.sh check
+
   test:
     runs-on: ubuntu-latest
     steps:

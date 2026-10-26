@@ -47,10 +47,17 @@ function fakeFetch(
       headers: init.headers as Record<string, string>,
     });
     const next = responses.shift() ?? [];
-    if ("status" in next) return new Response("nope", { status: next.status });
+    if ("status" in next) {
+      return new Response("nope", { status: next.status });
+    }
     const islands = Array.isArray(next) ? next : next.islands;
     const cache = Array.isArray(next) ? undefined : { maxAge: next.maxAge };
-    return Response.json({ protocol: 0, screen: "profile", islands, cache });
+    return Response.json({
+      protocol: 0,
+      screen: "profile",
+      islands,
+      cache,
+    });
   }) as typeof fetch;
   return { impl, requests };
 }
@@ -96,7 +103,11 @@ test("renders islands in order and declares capabilities", async () => {
     ),
   );
   assert.equal(ui.html(), "<p>3 posts</p><h1>Ada</h1>");
-  assert.deepEqual(f.requests[0].body.islands, { header: [1], posts: [1], broken: [1] });
+  assert.deepEqual(f.requests[0].body.islands, {
+    header: [1],
+    posts: [1],
+    broken: [1],
+  });
   assert.deepEqual(f.requests[0].body.params, { userId: "u1" });
   assert.equal(f.requests[0].headers.Authorization, "Bearer t");
 });
@@ -127,7 +138,13 @@ test("a crashing island is isolated and reported", async () => {
 test("errored islands are hidden by default, or rendered with renderIslandError", async () => {
   const islands: Island[] = [
     ok("a", "header", { name: "Ada" }),
-    { key: "p", type: "posts", version: 1, status: "error", error: { code: "timeout" } },
+    {
+      key: "p",
+      type: "posts",
+      version: 1,
+      status: "error",
+      error: { code: "timeout" },
+    },
   ];
   const hidden = await render(
     withProvider(

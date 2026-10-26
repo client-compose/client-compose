@@ -86,7 +86,12 @@ const composer = createComposer<Ctx>({
 });
 export const fetchHandler: (request: Request) => Promise<Response> = composer.fetch;
 export const result: Promise<ComposeResult> = composer.compose(
-  { protocol: 0, screen: "home", client: { platform: "web", appVersion: "1" }, islands: {} },
+  {
+    protocol: 0,
+    screen: "home",
+    client: { platform: "web", appVersion: "1" },
+    islands: {},
+  },
   greeter,
 );
 export const listener = createRequestListener(

@@ -107,6 +107,8 @@ type BatchLoader[K comparable, V any] struct {
 	maxBatch int
 }
 
+// BatchOption configures a BatchLoader: how long it waits to combine keys, and how many it sends at
+// once.
 type BatchOption func(*batchOptions)
 
 type batchOptions struct {

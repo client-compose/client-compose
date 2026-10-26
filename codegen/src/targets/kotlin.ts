@@ -38,10 +38,15 @@ export function generateKotlin(
   let usesSerialName = false;
 
   const doc = (indent: string, text?: string) => {
-    if (!text) return;
+    if (!text) {
+      return;
+    }
     const lines = text.split("\n");
-    if (lines.length === 1) body.push(`${indent}/** ${lines[0]} */`);
-    else body.push(`${indent}/**`, ...lines.map((l) => `${indent} * ${l}`), `${indent} */`);
+    if (lines.length === 1) {
+      body.push(`${indent}/** ${lines[0]} */`);
+    } else {
+      body.push(`${indent}/**`, ...lines.map((l) => `${indent} * ${l}`), `${indent} */`);
+    }
   };
 
   const typeName = (t: TypeRef): string => {
@@ -68,8 +73,9 @@ export function generateKotlin(
     doc(indent, def.description);
     usesSerialName = true;
     body.push(`${indent}@Serializable`, `${indent}enum class ${def.path[def.path.length - 1]} {`);
-    for (const v of def.values)
+    for (const v of def.values) {
       body.push(`${indent}    @SerialName(${JSON.stringify(v)}) ${constant(v)},`);
+    }
     body.push(`${indent}}`);
   };
 
@@ -90,23 +96,34 @@ export function generateKotlin(
     doc(indent, island?.description ?? description ?? def.description);
     body.push(`${indent}@Serializable`);
     const head = def.fields.length ? `${indent}data class ${name}(` : `${indent}class ${name}`;
-    const inner = indent + "    ";
+    const inner = `${indent}    `;
     const hasBody = island || def.children.length > 0;
     if (def.fields.length) {
       body.push(head);
-      for (const f of def.fields) emitField(f, inner);
+      for (const f of def.fields) {
+        emitField(f, inner);
+      }
       body.push(`${indent})${hasBody ? " {" : ""}`);
     } else {
       body.push(head + (hasBody ? " {" : ""));
     }
-    if (!hasBody) return;
+    if (!hasBody) {
+      return;
+    }
     def.children.forEach((child, i) => {
-      if (i > 0) body.push("");
-      if (child.kind === "enum") emitEnum(child, inner);
-      else emitObject(child, inner);
+      if (i > 0) {
+        body.push("");
+      }
+      if (child.kind === "enum") {
+        emitEnum(child, inner);
+      } else {
+        emitObject(child, inner);
+      }
     });
     if (island) {
-      if (def.children.length) body.push("");
+      if (def.children.length) {
+        body.push("");
+      }
       body.push(
         `${inner}companion object : IslandDescriptor<${name}> {`,
         `${inner}    override val type: String = ${JSON.stringify(island.type)}`,
@@ -180,7 +197,9 @@ export function generateKotlin(
         `${i}sealed interface ${errorType} : DeclaredError {`,
       );
       action.errors.forEach((e, n) => {
-        if (n > 0) body.push("");
+        if (n > 0) {
+          body.push("");
+        }
         doc(`${i}    `, e.description);
         const cls = pascalCase(e.code);
         body.push(
@@ -193,7 +212,9 @@ export function generateKotlin(
       });
       body.push(`${i}}`);
       for (const e of action.errors) {
-        if (!e.details) continue;
+        if (!e.details) {
+          continue;
+        }
         body.push("");
         emitObject(e.details, i, undefined, `The details of ${JSON.stringify(e.code)}.`);
       }
@@ -202,7 +223,9 @@ export function generateKotlin(
   };
 
   islands.forEach((island, i) => {
-    if (i > 0) body.push("");
+    if (i > 0) {
+      body.push("");
+    }
     emitObject(island.props, "", island);
   });
   for (const action of actions) {
@@ -224,15 +247,13 @@ export function generateKotlin(
       ? ["kotlinx.serialization.json.JsonNull"]
       : []),
   ];
-  return (
-    [
-      header.replace(/^/gm, "// "),
-      "",
-      `package ${opts.package}`,
-      "",
-      ...imports.map((i) => `import ${i}`),
-      "",
-      ...body,
-    ].join("\n") + "\n"
-  );
+  return `${[
+    header.replace(/^/gm, "// "),
+    "",
+    `package ${opts.package}`,
+    "",
+    ...imports.map((i) => `import ${i}`),
+    "",
+    ...body,
+  ].join("\n")}\n`;
 }

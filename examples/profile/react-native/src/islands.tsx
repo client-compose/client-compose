@@ -43,8 +43,18 @@ export const registry = new ReactIslandRegistry()
   .registerComponent(PostGridV1, PostGrid);
 
 const styles = StyleSheet.create({
-  header: { flexDirection: "row", alignItems: "center", gap: 12, padding: 16 },
-  avatar: { width: 64, height: 64, borderRadius: 32, backgroundColor: "#ddd" },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 16,
+  },
+  avatar: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "#ddd",
+  },
   name: { fontSize: 22, fontWeight: "700" },
   badge: {
     fontSize: 12,
@@ -65,6 +75,16 @@ const styles = StyleSheet.create({
   },
   followText: { color: "#fff", fontWeight: "600" },
   // flex-start so each thumbnail's height comes from aspectRatio rather than stretching to the row.
-  grid: { flexDirection: "row", flexWrap: "wrap", alignItems: "flex-start", gap: 2, marginTop: 16 },
-  thumb: { width: "33%", aspectRatio: 1, backgroundColor: "#ddd" },
+  grid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "flex-start",
+    gap: 2,
+    marginTop: 16,
+  },
+  thumb: {
+    width: "33%",
+    aspectRatio: 1,
+    backgroundColor: "#ddd",
+  },
 });

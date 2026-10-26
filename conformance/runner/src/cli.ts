@@ -13,7 +13,9 @@ if (suite !== "composer" || !baseUrl) {
 const results = await runComposerConformance(baseUrl);
 for (const r of results) {
   console.log(`${r.passed ? "✔" : "✖"} ${r.name}`);
-  if (r.message) console.log(`  ${r.message}`);
+  if (r.message) {
+    console.log(`  ${r.message}`);
+  }
 }
 const failed = results.filter((r) => !r.passed).length;
 console.log(`\n${results.length - failed}/${results.length} passed`);

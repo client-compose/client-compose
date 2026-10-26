@@ -9,6 +9,7 @@ import {
   PROTOCOL_VERSION,
 } from "@client-compose/protocol";
 
+import { isRecord } from "./guards.ts";
 import {
   attachScope,
   ForbiddenError,
@@ -71,16 +72,26 @@ export function action<I, R, E extends DeclaredError, Ctx = unknown>(
   perform: Action<Ctx, I, R, E>["perform"],
   options: ActionOptions<Ctx> = {},
 ): Action<Ctx, I, R, E> {
-  return { descriptor, perform, requires: options.requires };
+  return {
+    descriptor,
+    perform,
+    requires: options.requires,
+  };
 }
 
 class UndeclaredErrorCode extends Error {}
 
 /** The response for NotFoundError, UnauthenticatedError and ForbiddenError, if err is one of them. */
 export function protocolError(err: unknown) {
-  if (err instanceof NotFoundError) return fail(404, "not_found");
-  if (err instanceof UnauthenticatedError) return fail(401, "unauthenticated");
-  if (err instanceof ForbiddenError) return fail(403, "forbidden");
+  if (err instanceof NotFoundError) {
+    return fail(404, "not_found");
+  }
+  if (err instanceof UnauthenticatedError) {
+    return fail(401, "unauthenticated");
+  }
+  if (err instanceof ForbiddenError) {
+    return fail(403, "forbidden");
+  }
   return undefined;
 }
 
@@ -92,19 +103,28 @@ export async function performAction<Ctx>(
 ): Promise<PerformResult> {
   const { descriptor } = handler;
   const reportFailure = (error: unknown) =>
-    report({ kind: "action", action: descriptor.action, version: descriptor.version, error });
+    report({
+      kind: "action",
+      action: descriptor.action,
+      version: descriptor.version,
+      error,
+    });
   try {
     for (const requirement of handler.requires ?? []) {
       await requirement(ctx, { params: {}, client: req.client });
     }
   } catch (err) {
     const res = protocolError(err);
-    if (res) return res;
+    if (res) {
+      return res;
+    }
     reportFailure(err);
     return fail(500, "action_failed");
   }
   const input = validate(descriptor.input, req.input);
-  if (!input.ok) return fail(400, "invalid_input", input.message);
+  if (!input.ok) {
+    return fail(400, "invalid_input", input.message);
+  }
 
   const request = new AbortController();
   const scope = new RequestScope(request.signal);
@@ -129,7 +149,14 @@ export async function performAction<Ctx>(
       if (!descriptor.errors.includes(outcome.error.code)) {
         throw new UndeclaredErrorCode(`returned undeclared error code ${outcome.error.code}`);
       }
-      return { status: 200, body: { ...base, status: "error", error: outcome.error } };
+      return {
+        status: 200,
+        body: {
+          ...base,
+          status: "error",
+          error: outcome.error,
+        },
+      };
     }
     const effects = outcome.effects;
     const hasEffects = Boolean(effects?.invalidate?.length || effects?.navigate);
@@ -139,13 +166,15 @@ export async function performAction<Ctx>(
         ...base,
         status: "ok",
         // Results are objects: the manifest's result schema says so (spec §5.1).
-        result: (outcome.result ?? {}) as Record<string, unknown>,
-        ...(hasEffects && { effects: compactEffects(effects!) }),
+        result: isRecord(outcome.result) ? outcome.result : {},
+        ...(hasEffects && effects && { effects: compactEffects(effects) }),
       },
     };
   } catch (err) {
     const res = protocolError(err);
-    if (res) return res;
+    if (res) {
+      return res;
+    }
     reportFailure(err);
     return fail(500, "action_failed");
   } finally {
@@ -161,18 +190,11 @@ function compactEffects(effects: ActionEffects): ActionEffects {
 }
 
 export function isActionRequestShape(v: unknown): v is ActionRequest {
-  const r = v as ActionRequest;
-  return (
-    typeof r === "object" &&
-    r !== null &&
-    typeof r.protocol === "number" &&
-    typeof r.action === "string" &&
-    r.action !== "" &&
-    Number.isInteger(r.version) &&
-    r.version > 0 &&
-    r.input !== undefined &&
-    r.input !== null &&
-    typeof r.client === "object" &&
-    r.client !== null
-  );
+  if (!isRecord(v)) {
+    return false;
+  }
+  const named = typeof v.protocol === "number" && typeof v.action === "string" && v.action !== "";
+  const versioned = typeof v.version === "number" && Number.isInteger(v.version) && v.version > 0;
+  const hasInput = v.input !== undefined && v.input !== null;
+  return named && versioned && hasInput && isRecord(v.client);
 }

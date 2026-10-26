@@ -183,7 +183,7 @@ func TestBatchLoaderSplitsAtMaxBatchSize(t *testing.T) {
 }
 
 func TestBatchLoaderOutsideARequestFetchesDirectly(t *testing.T) {
-	l := NewBatchLoader(func(_ context.Context, ids []string) (map[string]int, error) { return map[string]int{"a": 1}, nil })
+	l := NewBatchLoader(func(context.Context, []string) (map[string]int, error) { return map[string]int{"a": 1}, nil })
 	if v, err := l.Load(context.Background(), "a"); v != 1 || err != nil {
 		t.Fatalf("got %v %v", v, err)
 	}
@@ -193,12 +193,12 @@ func TestBatchLoaderOutsideARequestFetchesDirectly(t *testing.T) {
 }
 
 func TestLayoutNotFoundAndMetaFailure(t *testing.T) {
-	users := NewBatchLoader(func(_ context.Context, ids []string) (map[string]string, error) { return map[string]string{}, nil })
+	users := NewBatchLoader(func(context.Context, []string) (map[string]string, error) { return map[string]string{}, nil })
 	protocol := ProtocolVersion
 	req := ScreenRequest{Protocol: &protocol, Screen: "s", Client: &ClientContext{}, Islands: map[string][]int{"x": {1}}}
 
 	// A batch loader's missing key in the layout is a 404 not_found.
-	notFound := New(Config{Screens: []Screen{{ID: "s", Layout: func(ctx context.Context, r Request) ([]Placement, error) {
+	notFound := New(Config{Screens: []Screen{{ID: "s", Layout: func(ctx context.Context, _ Request) ([]Placement, error) {
 		_, err := users.Load(ctx, "missing")
 		return nil, err
 	}}}})

@@ -56,6 +56,7 @@ type IslandCall struct {
 // FailureKind says what failed.
 type FailureKind string
 
+// What can fail: an island, a screen's layout or meta, an action, or a Context function.
 const (
 	IslandFailed  FailureKind = "island"
 	LayoutFailed  FailureKind = "layout"

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -15,7 +16,7 @@ func perform(t *testing.T, c *Composer, input string) (int, map[string]any) {
 	t.Helper()
 	body := `{"protocol":0,"action":"conformance","version":1,"client":{"platform":"web","appVersion":"1"},"input":` + input + `}`
 	rec := httptest.NewRecorder()
-	c.ServeHTTP(rec, httptest.NewRequest("POST", "/actions/conformance", strings.NewReader(body)))
+	c.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/actions/conformance", strings.NewReader(body)))
 	var out map[string]any
 	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
 		t.Fatalf("decode %q: %v", rec.Body.String(), err)

@@ -69,9 +69,16 @@ class ScreenStore {
 
   /** Keep a response for its `cache.maxAge`. */
   remember(key: string, screen: string, params: Record<string, string>, response: ScreenResponse) {
-    if (!response.cache || response.cache.maxAge <= 0) return;
+    if (!response.cache || response.cache.maxAge <= 0) {
+      return;
+    }
     const expiresAt = Date.now() + response.cache.maxAge * 1000;
-    this.cache.set(key, { screen, params, response, expiresAt });
+    this.cache.set(key, {
+      screen,
+      params,
+      response,
+      expiresAt,
+    });
   }
 
   /** A screen on show. Returns the function that takes it off. */
@@ -85,10 +92,14 @@ class ScreenStore {
     const matches = (screen: string, params: Record<string, string>) =>
       refs.some((ref) => screenRefMatches(ref, screen, params));
     for (const [key, entry] of this.cache) {
-      if (matches(entry.screen, entry.params)) this.cache.delete(key);
+      if (matches(entry.screen, entry.params)) {
+        this.cache.delete(key);
+      }
     }
     for (const m of this.mounted) {
-      if (matches(m.screen, m.params)) m.reload();
+      if (matches(m.screen, m.params)) {
+        m.reload();
+      }
     }
   }
 }
@@ -114,19 +125,26 @@ export function ClientComposeProvider(props: {
         screens.invalidate(refs);
         config.onInvalidate?.(refs);
       }
-      if (effects.navigate) config.onNavigate?.(effects.navigate);
+      if (effects.navigate) {
+        config.onNavigate?.(effects.navigate);
+      }
     };
-    return { config, screens, applyEffects };
+    return {
+      config,
+      screens,
+      applyEffects,
+    };
   }, [props.config, screens]);
   return createElement(ClientComposeContext.Provider, { value }, props.children);
 }
 
 function useClientCompose(): ContextValue {
   const ctx = useContext(ClientComposeContext);
-  if (!ctx)
+  if (!ctx) {
     throw new Error(
       "Client Compose hooks and components must be used inside <ClientComposeProvider>",
     );
+  }
   return ctx;
 }
 
@@ -198,18 +216,28 @@ export function useScreen(
     if (!forced && seed.key === key && seed.response) {
       // Use the server's response without a request (StrictMode remounts land here too).
       const response = seed.response;
-      if (config.cache !== false) store(response);
+      if (config.cache !== false) {
+        store(response);
+      }
       setState((prev) =>
         prev.key === key && prev.response === response
           ? prev
-          : { key, response, refreshing: false },
+          : {
+              key,
+              response,
+              refreshing: false,
+            },
       );
       return;
     }
 
     const fresh = forced ? undefined : cached();
     if (fresh) {
-      setState({ key, response: fresh, refreshing: false });
+      setState({
+        key,
+        response: fresh,
+        refreshing: false,
+      });
       return;
     }
 
@@ -223,9 +251,17 @@ export function useScreen(
           signal: controller.signal,
         });
         store(response);
-        if (!controller.signal.aborted) setState({ key, response, refreshing: false });
+        if (!controller.signal.aborted) {
+          setState({
+            key,
+            response,
+            refreshing: false,
+          });
+        }
       } catch (error) {
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted) {
+          return;
+        }
         setState((prev) => ({
           key,
           response: prev.key === key ? prev.response : undefined,
@@ -245,7 +281,11 @@ export function useScreen(
   const current: FetchState =
     state.key === key
       ? state
-      : { key, response: seeded ?? cached(), refreshing: seeded === undefined };
+      : {
+          key,
+          response: seeded ?? cached(),
+          refreshing: seeded === undefined,
+        };
   const { response } = current;
 
   const islands = useMemo(
@@ -266,19 +306,35 @@ export function useScreen(
 
   // Let actions that change this screen reload it (spec §5.3).
   useEffect(() => {
-    return screens.mount({ screen, params: latestParams.current, reload });
+    return screens.mount({
+      screen,
+      params: latestParams.current,
+      reload,
+    });
     // `key` covers screen and params.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, screens, reload]);
 
   return {
-    status: response ? "ready" : current.error !== undefined ? "error" : "loading",
+    status: screenStatus(response, current.error),
     islands,
     response,
     error: current.error,
     refreshing: current.refreshing,
     reload,
   };
+}
+
+function screenStatus(response: ScreenResponse | undefined, error: unknown): ScreenState["status"] {
+  if (response) {
+    return "ready";
+  }
+  return error !== undefined ? "error" : "loading";
+}
+
+/** A class component's context (typed unknown by React): the provider's value, if there is one. */
+function isContextValue(value: unknown): value is ContextValue {
+  return typeof value === "object" && value !== null && "config" in value && "screens" in value;
 }
 
 interface BoundaryProps {
@@ -300,7 +356,9 @@ export class IslandBoundary extends Component<BoundaryProps, { failed: boolean }
   }
 
   componentDidCatch(error: unknown): void {
-    (this.context as ContextValue | null)?.config.onRenderError?.(this.props.islandKey, error);
+    if (isContextValue(this.context)) {
+      this.context.config.onRenderError?.(this.props.islandKey, error);
+    }
   }
 
   render(): ReactNode {
@@ -351,8 +409,12 @@ export interface ComposedScreenProps {
 /** Fetch a screen and render its islands in order. */
 export function ComposedScreen(props: ComposedScreenProps): ReactNode {
   const screen = useScreen(props.screen, props.params, { initialResponse: props.initialResponse });
-  if (screen.status === "loading") return props.loading ?? null;
-  if (screen.status === "error") return props.renderError?.(screen.error, screen.reload) ?? null;
+  if (screen.status === "loading") {
+    return props.loading ?? null;
+  }
+  if (screen.status === "error") {
+    return props.renderError?.(screen.error, screen.reload) ?? null;
+  }
   const nodes = screen.islands.map((island) => createElement(Island, { key: island.key, island }));
   return props.children ? props.children(nodes, screen) : createElement(Fragment, null, ...nodes);
 }
@@ -425,7 +487,9 @@ export function useAction<I, R, E extends DeclaredError>(
               config.fetch,
             );
         outcome = checkActionResponse(action, response);
-        if (outcome.status === "ok" && outcome.effects) applyEffects(outcome.effects);
+        if (outcome.status === "ok" && outcome.effects) {
+          applyEffects(outcome.effects);
+        }
       } catch (error) {
         outcome = { status: "failed", error };
       } finally {
@@ -438,5 +502,10 @@ export function useAction<I, R, E extends DeclaredError>(
   );
 
   const reset = useCallback(() => setLast(undefined), []);
-  return { run, pending: inFlight > 0, last, reset };
+  return {
+    run,
+    pending: inFlight > 0,
+    last,
+    reset,
+  };
 }

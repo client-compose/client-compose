@@ -32,11 +32,15 @@ interface Ctx {
 
 // What an auth integration would provide.
 const signedIn: Requirement<Ctx> = (ctx) => {
-  if (!ctx.viewer) throw new UnauthenticatedError();
+  if (!ctx.viewer) {
+    throw new UnauthenticatedError();
+  }
 };
 const viewerFrom = (request: Request): Ctx => {
   const token = request.headers.get("authorization");
-  if (token === "bad") throw new UnauthenticatedError();
+  if (token === "bad") {
+    throw new UnauthenticatedError();
+  }
   return { viewer: token ?? undefined };
 };
 const as = (viewer: string) => ({ headers: { authorization: viewer } });
@@ -79,7 +83,11 @@ test("requirements and the context function answer 401 before anything runs", as
     { requires: [signedIn] },
   );
   const app = testComposer(
-    createComposer<Ctx>({ screens: [profile], actions: [echo], context: viewerFrom }),
+    createComposer<Ctx>({
+      screens: [profile],
+      actions: [echo],
+      context: viewerFrom,
+    }),
   );
 
   assert.equal((await app.screen("profile")).error, "unauthenticated");
@@ -95,8 +103,12 @@ test("requirements and the context function answer 401 before anything runs", as
 
 test("requirements see params, and `when` can fail like a layout", async () => {
   const ownProfileOnly: Requirement<Ctx> = (ctx, { params }) => {
-    if (params.userId === "nobody") throw new NotFoundError();
-    if (ctx.viewer !== params.userId) throw new ForbiddenError();
+    if (params.userId === "nobody") {
+      throw new NotFoundError();
+    }
+    if (ctx.viewer !== params.userId) {
+      throw new ForbiddenError();
+    }
   };
   const profile = screen<Ctx>("profile", {
     requires: [signedIn, ownProfileOnly],
@@ -105,8 +117,12 @@ test("requirements see params, and `when` can fail like a layout", async () => {
       {
         ...placeStatic("edit", FormV1, { label: "Edit" }),
         when: ({ params }) => {
-          if (params.form === "gone") throw new NotFoundError();
-          if (params.form === "broken") throw new Error("forms service down");
+          if (params.form === "gone") {
+            throw new NotFoundError();
+          }
+          if (params.form === "broken") {
+            throw new Error("forms service down");
+          }
           return true;
         },
       },

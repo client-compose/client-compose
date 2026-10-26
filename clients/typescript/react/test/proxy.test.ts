@@ -12,7 +12,11 @@ const ok: ActionResponse = {
   status: "ok",
   result: { followers: 8 },
 };
-const home: ScreenResponse = { protocol: 0, screen: "home", islands: [] };
+const home: ScreenResponse = {
+  protocol: 0,
+  screen: "home",
+  islands: [],
+};
 const request = {
   protocol: 0 as const,
   action: "follow",
@@ -47,19 +51,31 @@ test("fetch hands the screen request to loadScreen, and answers like the compose
       bodies.push(body);
       return bodies.length === 1
         ? { ok: true, response: home }
-        : { ok: false, status: 404, body: "gone" };
+        : {
+            ok: false,
+            status: 404,
+            body: "gone",
+          };
     },
   });
   const init = {
     method: "POST",
-    body: JSON.stringify({ protocol: 0, screen: "home", islands: {} }),
+    body: JSON.stringify({
+      protocol: 0,
+      screen: "home",
+      islands: {},
+    }),
   };
   const found = await transport.fetch("ignored", init);
   assert.deepEqual(await found.json(), home);
   const missing = await transport.fetch("ignored", init);
   assert.equal(missing.status, 404);
   assert.equal(await missing.text(), "gone");
-  assert.deepEqual(bodies[0], { protocol: 0, screen: "home", islands: {} });
+  assert.deepEqual(bodies[0], {
+    protocol: 0,
+    screen: "home",
+    islands: {},
+  });
 });
 
 test("fetch fails clearly without loadScreen", async () => {

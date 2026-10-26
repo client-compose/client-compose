@@ -21,7 +21,11 @@ function App() {
     () => ({
       registry,
       baseUrl: "", // same origin; Vite proxies /screens to the Go composer
-      client: { platform: "web", appVersion: "1.0.0", locale: navigator.language },
+      client: {
+        platform: "web",
+        appVersion: "1.0.0",
+        locale: navigator.language,
+      },
       headers: () => ({ "X-User-Id": viewer }),
       onSkipped: (entry, reason) => console.warn(`skipped island ${entry.key}: ${reason}`),
       onRenderError: (key, error) => console.error(`island ${key} crashed`, error),
@@ -66,7 +70,11 @@ function App() {
   );
 }
 
-createRoot(document.getElementById("root")!).render(
+const root = document.getElementById("root");
+if (!root) {
+  throw new Error('index.html needs <div id="root">');
+}
+createRoot(root).render(
   <StrictMode>
     <App />
   </StrictMode>,

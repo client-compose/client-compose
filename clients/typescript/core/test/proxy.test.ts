@@ -16,14 +16,22 @@ const SignIn: ActionDescriptor<{ email: string }, { token: string }, never> = {
   errors: [],
   input: { type: "object" },
 };
-const server = { platform: "web", appVersion: "2.0.0", locale: "fr" };
+const server = {
+  platform: "web",
+  appVersion: "2.0.0",
+  locale: "fr",
+};
 const actionBody = {
   protocol: 0,
   action: "sign-in",
   version: 1,
   input: { email: "ada@example.com" },
 };
-const screenBody = { protocol: 0, screen: "home", islands: { feed: [1] } };
+const screenBody = {
+  protocol: 0,
+  screen: "home",
+  islands: { feed: [1] },
+};
 
 function proxyFor(gateway: ReturnType<typeof createFakeGateway>) {
   return createComposerProxy({
@@ -115,7 +123,13 @@ test("answers malformed requests with bad_request, without sending them", async 
 test("guards accept requests with or without optional fields", () => {
   assert.ok(isProxiedActionRequest({ ...actionBody, idempotencyKey: "k" }));
   assert.ok(!isProxiedActionRequest({ ...actionBody, idempotencyKey: 1 }));
-  assert.ok(!isProxiedActionRequest({ protocol: 0, action: "a", version: 1 }));
+  assert.ok(
+    !isProxiedActionRequest({
+      protocol: 0,
+      action: "a",
+      version: 1,
+    }),
+  );
   assert.ok(isProxiedScreenRequest({ ...screenBody, params: { id: "1" } }));
   assert.ok(!isProxiedScreenRequest({ ...screenBody, islands: { feed: ["1"] } }));
 });

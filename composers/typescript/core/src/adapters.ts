@@ -51,16 +51,28 @@ export async function resolveCached<Ctx>(
   report: (failure: Failure) => void,
 ): Promise<unknown> {
   const opts = call.island.cache;
-  if (!cache || !opts) return call.island.resolve(call.rc);
+  if (!cache || !opts) {
+    return call.island.resolve(call.rc);
+  }
   const appKey = opts.key(call.rc);
-  if (!appKey) return call.island.resolve(call.rc);
+  if (!appKey) {
+    return call.island.resolve(call.rc);
+  }
   const key = `island:${call.island.type}:${call.island.version}:${appKey}`;
   const failed = (error: unknown) =>
-    report({ kind: "cache", screen: call.screen, key: call.key, type: call.island.type, error });
+    report({
+      kind: "cache",
+      screen: call.screen,
+      key: call.key,
+      type: call.island.type,
+      error,
+    });
 
   try {
     const cached = await cache.get(key);
-    if (cached !== undefined) return JSON.parse(cached);
+    if (cached !== undefined) {
+      return JSON.parse(cached);
+    }
   } catch (error) {
     failed(error);
   }
@@ -120,12 +132,19 @@ export async function performIdempotent<Ctx>(
   perform: (req: ActionRequest, ctx: Ctx) => Promise<PerformResult>,
   report: (failure: Failure) => void,
 ): Promise<PerformResult> {
-  if (!idempotency || !req.idempotencyKey) return perform(req, ctx);
+  if (!idempotency || !req.idempotencyKey) {
+    return perform(req, ctx);
+  }
   const { store } = idempotency;
   const ttlMs = idempotency.ttlMs ?? 24 * 60 * 60 * 1000;
   const key = `action:${req.action}:${req.version}:${idempotency.scope(ctx)}:${req.idempotencyKey}`;
   const failed = (error: unknown) =>
-    report({ kind: "idempotency", action: req.action, version: req.version, error });
+    report({
+      kind: "idempotency",
+      action: req.action,
+      version: req.version,
+      error,
+    });
 
   const deadline = Date.now() + (idempotency.waitMs ?? 10_000);
   for (;;) {
@@ -136,8 +155,12 @@ export async function performIdempotent<Ctx>(
       failed(error);
       return perform(req, ctx);
     }
-    if (begun.stored !== undefined) return { status: 200, body: JSON.parse(begun.stored) };
-    if (begun.claimed) break;
+    if (begun.stored !== undefined) {
+      return { status: 200, body: JSON.parse(begun.stored) };
+    }
+    if (begun.claimed) {
+      break;
+    }
     if (Date.now() > deadline) {
       failed(new Error(`idempotency ${key}: still running`));
       return fail(500, "action_failed", "a call with this idempotency key is still running");
@@ -147,8 +170,11 @@ export async function performIdempotent<Ctx>(
 
   const res = await perform(req, ctx);
   try {
-    if (res.status === 200) await store.finish(key, JSON.stringify(res.body), ttlMs);
-    else await store.release(key);
+    if (res.status === 200) {
+      await store.finish(key, JSON.stringify(res.body), ttlMs);
+    } else {
+      await store.release(key);
+    }
   } catch (error) {
     failed(error);
   }

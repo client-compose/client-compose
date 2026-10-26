@@ -47,7 +47,12 @@ export function compareIslands(base: Island[], head: Island[]): CompatIssue[] {
       continue;
     }
     const report = (path: string, message: string) =>
-      issues.push({ severity: "breaking", island: label, path, message });
+      issues.push({
+        severity: "breaking",
+        island: label,
+        path,
+        message,
+      });
     compareObject(old.props, current.props, "props", report);
   }
   return issues;
@@ -76,22 +81,31 @@ export function compareActions(base: Action[], head: Action[]): CompatIssue[] {
       continue;
     }
     const report = (path: string, message: string) =>
-      issues.push({ severity: "breaking", island: label, path, message });
+      issues.push({
+        severity: "breaking",
+        island: label,
+        path,
+        message,
+      });
     compareObject(old.input, current.input, "input", report);
     compareObject(old.result, current.result, "result", report);
     const currentErrors = new Map(current.errors.map((e) => [e.code, e]));
     for (const before of old.errors) {
       const after = currentErrors.get(before.code);
-      if (!after) continue;
+      if (!after) {
+        continue;
+      }
       const path = `errors.${before.code}.details`;
-      if (before.details && after.details)
+      if (before.details && after.details) {
         compareObject(before.details, after.details, path, report);
-      else if (before.details) report(path, "details removed: old apps expect them");
-      else if (after.details)
+      } else if (before.details) {
+        report(path, "details removed: old apps expect them");
+      } else if (after.details) {
         report(
           path,
           "details added: new apps would expect them from a composer that doesn't send them",
         );
+      }
     }
   }
   return issues;
@@ -106,7 +120,9 @@ function compareObject(old: ObjectDef, current: ObjectDef, path: string, report:
     const after = currentFields.get(before.jsonName);
     if (!after) {
       // Removing an optional property is fine: old apps already handle it being absent.
-      if (before.required) report(p, "required property removed: old apps require it");
+      if (before.required) {
+        report(p, "required property removed: old apps require it");
+      }
       continue;
     }
     if (before.required && !after.required) {
@@ -128,50 +144,43 @@ function compareObject(old: ObjectDef, current: ObjectDef, path: string, report:
 }
 
 function compareType(old: TypeRef, current: TypeRef, path: string, report: Report): void {
-  if (old.kind !== current.kind) {
+  if (old.kind === "string" && current.kind === "string") {
+    if (old.format !== current.format) {
+      report(path, `format changed from ${describe(old)} to ${describe(current)}`);
+    }
+  } else if (old.kind === "integer" && current.kind === "integer") {
+    if (old.int64 !== current.int64) {
+      report(path, `integer size changed from ${describe(old)} to ${describe(current)}`);
+    }
+  } else if (old.kind === "array" && current.kind === "array") {
+    compareType(old.items, current.items, `${path}[]`, report);
+  } else if (old.kind === "map" && current.kind === "map") {
+    compareType(old.values, current.values, `${path}{}`, report);
+  } else if (old.kind === "object" && current.kind === "object") {
+    compareObject(old.def, current.def, path, report);
+  } else if (old.kind === "enum" && current.kind === "enum") {
+    compareEnum(old.def.values, current.def.values, path, report);
+  } else if (old.kind !== current.kind) {
     report(path, `type changed from ${describe(old)} to ${describe(current)}`);
-    return;
   }
-  switch (old.kind) {
-    case "string": {
-      const after = current as typeof old;
-      if (old.format !== after.format)
-        report(path, `format changed from ${describe(old)} to ${describe(after)}`);
-      return;
-    }
-    case "integer": {
-      const after = current as typeof old;
-      if (old.int64 !== after.int64)
-        report(path, `integer size changed from ${describe(old)} to ${describe(after)}`);
-      return;
-    }
-    case "array":
-      return compareType(old.items, (current as typeof old).items, `${path}[]`, report);
-    case "map":
-      return compareType(old.values, (current as typeof old).values, `${path}{}`, report);
-    case "object":
-      return compareObject(old.def, (current as typeof old).def, path, report);
-    case "enum": {
-      const before = new Set(old.def.values);
-      const after = new Set((current as typeof old).def.values);
-      const added = [...after].filter((v) => !before.has(v));
-      const removed = [...before].filter((v) => !after.has(v));
-      if (added.length)
-        report(
-          path,
-          `enum value${added.length > 1 ? "s" : ""} added (${quote(added)}): old apps can't decode them`,
-        );
-      if (removed.length) {
-        report(
-          path,
-          `enum value${removed.length > 1 ? "s" : ""} removed (${quote(removed)}): new apps can't decode them from a composer that still sends them`,
-        );
-      }
-      return;
-    }
-    case "number":
-    case "boolean":
-      return;
+}
+
+function compareEnum(old: string[], current: string[], path: string, report: Report): void {
+  const before = new Set(old);
+  const after = new Set(current);
+  const added = [...after].filter((v) => !before.has(v));
+  const removed = [...before].filter((v) => !after.has(v));
+  if (added.length) {
+    report(
+      path,
+      `enum value${added.length > 1 ? "s" : ""} added (${quote(added)}): old apps can't decode them`,
+    );
+  }
+  if (removed.length) {
+    report(
+      path,
+      `enum value${removed.length > 1 ? "s" : ""} removed (${quote(removed)}): new apps can't decode them from a composer that still sends them`,
+    );
   }
 }
 
@@ -255,7 +264,7 @@ function loadAtRef<T>(
         severity: "warning",
         island: file,
         path: "",
-        message: `skipped: ${(err as Error).message}`,
+        message: `skipped: ${err instanceof Error ? err.message : String(err)}`,
       });
     }
   }

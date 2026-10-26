@@ -1,0 +1,45 @@
+# Go lint and format rules for every Go module in this repo: golangci-lint's standard linters
+# (errcheck, govet, ineffassign, staticcheck, unused) plus widely used ones for bugs and
+# readability, and gofumpt and goimports for formatting.
+#
+#   go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run ./...      (in a module)
+#   go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 fmt ./...
+version: "2"
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/client-compose/client-compose
+
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - copyloopvar
+    - errorlint
+    - gocritic
+    - misspell
+    - nolintlint
+    - predeclared
+    - revive
+    - unconvert
+    - usestdlibvars
+    - whitespace
+  settings:
+    misspell:
+      locale: UK
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+  exclusions:
+    presets:
+      - std-error-handling
+
+issues:
+  # Report everything, not the first few of each kind.
+  max-issues-per-linter: 0
+  max-same-issues: 0

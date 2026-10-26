@@ -31,7 +31,11 @@ export function composerHandler<Ctx>(
       return;
     }
     try {
-      const result = (await composer.handle(req.originalUrl, await rawBody(req), req))!;
+      const result = await composer.handle(req.originalUrl, await rawBody(req), req);
+      if (!result) {
+        next();
+        return;
+      }
       res.status(result.status).json(result.body);
     } catch (err) {
       next(err);
@@ -52,15 +56,19 @@ export function composerHandler<Ctx>(
 
 /** body-parser's error for a body it couldn't parse. */
 const isParseError = (err: unknown) =>
-  typeof err === "object" &&
-  err !== null &&
-  (err as { type?: unknown }).type === "entity.parse.failed";
+  typeof err === "object" && err !== null && "type" in err && err.type === "entity.parse.failed";
 
 async function rawBody(req: Request): Promise<string> {
   // A body parser in front of us has already read the stream.
-  if (typeof req.body === "string") return req.body;
-  if (req.body !== undefined && req.readableEnded) return JSON.stringify(req.body);
+  if (typeof req.body === "string") {
+    return req.body;
+  }
+  if (req.body !== undefined && req.readableEnded) {
+    return JSON.stringify(req.body);
+  }
   let body = "";
-  for await (const chunk of req) body += chunk;
+  for await (const chunk of req) {
+    body += chunk;
+  }
   return body;
 }
