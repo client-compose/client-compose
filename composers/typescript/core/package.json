@@ -1,6 +1,6 @@
 {
   "name": "@client-compose/composer",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Framework-agnostic Client Compose composer: decide a screen's islands and resolve their props from your backend services.",
   "keywords": [
     "client-compose",

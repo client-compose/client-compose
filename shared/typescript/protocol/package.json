@@ -1,6 +1,6 @@
 {
   "name": "@client-compose/protocol",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Wire types for the Client Compose protocol: server-composed screens made of client-owned islands.",
   "keywords": [
     "client-compose",
