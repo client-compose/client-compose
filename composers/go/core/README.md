@@ -65,6 +65,22 @@ islands and shares their loads; if it fails, the response just has no meta.
 
 A panicking island or layout is treated like a failing one; it doesn't take the server down.
 
+## Streaming
+
+Every screen is answered as a stream (spec §4.6), so apps can show it as it arrives. The composer
+sends its head once everything that could fail the whole screen is settled: its requirements and
+layout (including each `When`), its `Required` islands and its `Meta`. Islands not ready by then are
+`pending` in the head, and follow, each on its own line, as they're resolved. Then the stream ends.
+
+So which islands are worth marking `Required`, and what conditions cost, now decide how soon a screen
+shows: a required island holds back the head, and so does a `When` that waits on slow data. Shared
+loads (`cc.Load`) live until the stream ends.
+
+`ServeHTTP` writes the stream, flushing each line as it's ready. In process, a successful
+`composer.Compose(ctx, req)` result's `Body` is a `*cc.ScreenStream` (its `Head`, and a channel of the
+`Islands` still to come); `stream.Collect()` puts the screen together. `cc.ReadScreen(body)` reads a
+stream from HTTP, for Go clients and tests.
+
 ## Context and requirements
 
 `Config.Context` runs once per HTTP request, before anything else. Use it to put the viewer, their
@@ -326,8 +342,9 @@ func TestProfile(t *testing.T) {
 
 - By default the app declares every island your declared screens place. To test an older app,
   `cctest.Declare(ProfileHeaderV1{}, PostGridV1{})` declares just those.
-- `Screen` has `Status`, `Keys()`, `Island(key)` and the full `Response`; errors come back as their
-  protocol code (`"not_found"`, `"unauthenticated"`).
+- `Screen` has `Status`, `Keys()`, `Island(key)` and the full `Response`, with every island in
+  place; `Head` is its stream's head, to check what was pending. Errors come back as their protocol
+  code (`"not_found"`, `"unauthenticated"`).
 - `Perform` returns the typed result, effects, and the declared or protocol error code.
 - Pass your own `http.Handler` instead of the composer if it wraps the composer in middleware.
 

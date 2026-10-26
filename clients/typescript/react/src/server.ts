@@ -21,7 +21,13 @@ export type { ErrorEntry, ScreenConfig } from "./config.ts";
 export { loadScreen, streamScreen } from "./load.ts";
 export { ReactIslandRegistry } from "./registry.ts";
 // Re-exported so React apps (including codegen output) only need this one package.
-export type { IslandDescriptor, ScreenMeta, ScreenResponse } from "@client-compose/protocol";
+export type { ScreenStream } from "@client-compose/client";
+export type {
+  IslandDescriptor,
+  ScreenHead,
+  ScreenMeta,
+  ScreenResponse,
+} from "@client-compose/protocol";
 
 export interface ServerComposedScreenProps {
   config: ScreenConfig;
@@ -33,6 +39,12 @@ export interface ServerComposedScreenProps {
    * loader in React's `cache()` so both share one request.
    */
   response?: ScreenResponse | Promise<ScreenResponse>;
+  /**
+   * The screen's stream (or its promise) you've already opened with `streamScreen`, e.g. because
+   * `generateMetadata` reads its head's `meta`. Given this, the component doesn't fetch, and the
+   * screen still streams. Wrap your opener in React's `cache()` so both share one request.
+   */
+  stream?: ScreenStream | Promise<ScreenStream>;
   /**
    * Streamed until the screen's head arrives. Omit it to suspend to the nearest `<Suspense>`
    * boundary (or your framework's loading UI) instead.
@@ -109,7 +121,7 @@ async function screenFor(props: ServerComposedScreenProps): Promise<ScreenStream
   if (props.response) {
     return complete(await props.response);
   }
-  const stream = await streamScreen(props.config, props.screen, props.params);
+  const stream = await (props.stream ?? streamScreen(props.config, props.screen, props.params));
   const progressive = props.progressive ?? props.config.progressive ?? true;
   return progressive ? stream : complete(await collectScreen(stream));
 }

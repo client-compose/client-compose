@@ -33,7 +33,8 @@ import { FollowButtonV1, ProfileHeaderV2 } from "./islands.generated";
 
 export const registry = new ReactIslandRegistry()
   .registerComponent(ProfileHeaderV2, ProfileHeader) // ProfileHeader: (props: ProfileHeaderV2) => ReactNode
-  .registerComponent(FollowButtonV1, FollowButton);
+  .registerComponent(FollowButtonV1, FollowButton)
+  .registerComponent(PostGridV1, PostGrid, { placeholder: PostGridSkeleton }); // while it streams in
 ```
 
 ## Provide a config
@@ -88,14 +89,39 @@ return (
 );
 ```
 
-`useScreen` returns `{ status, islands, response, error, refreshing, reload }`. After the first
-response, a failed reload keeps the current islands (`status: "ready"` with `error` set).
+`useScreen` returns `{ status, islands, response, error, refreshing, streaming, reload }`. After the
+first response, a failed reload keeps the current islands (`status: "ready"` with `error` set).
+
+## Streaming
+
+Screens stream (spec §4.6), and render as they do: once the screen's head arrives, its islands show,
+each one still on its way as its placeholder, filled in as it comes. `streaming` is true until the
+last arrives.
+
+- **Placeholders** are yours: pass `placeholder` to `registerComponent`, usually a skeleton the
+  island's size so the screen doesn't jump. An island without one shows nothing until it arrives.
+  Say that it's loading (`aria-busy`, or `accessibilityState={{ busy: true }}` in React Native): the
+  placeholder is all there is.
+- **To wait for the whole screen** and show it at once, as before streaming, set
+  `progressive: false` in the config, or on one screen: `useScreen(screen, params, { progressive:
+  false })`, `<ComposedScreen progressive={false}>`. The screen's `loading` shows until it's all
+  there.
+- **A reload** keeps what's shown for an island until its new one arrives, rather than flashing back
+  to its placeholder.
+- An island that never arrives (the connection dropped) is an error, `incomplete`, retryable:
+  `renderIslandError` shows it if you set one.
+- **React Native**: its built-in `fetch` hands over a response all at once, so screens show whole.
+  Pass Expo's streaming fetch to show them as they arrive: `fetch: expoFetch` in the config, with
+  `import { fetch as expoFetch } from "expo/fetch"`.
+- Your server decides what's in the head: the islands it marks required, and any whose conditions
+  need data, hold it back (see your composer's README).
 
 ## Server rendering
 
 Fetch the screen in your loader with `loadScreen`, and pass the response to `<ComposedScreen>` (or
 `useScreen`) as `initialResponse`. The server renders the islands into the HTML, and the client
-hydrates without fetching again. The response is plain JSON, so loaders can return it as-is.
+hydrates without fetching again. `loadScreen` reads the screen's whole stream, so the response is
+plain JSON, and loaders can return it as-is.
 
 ```tsx
 // e.g. a React Router / Remix loader
@@ -151,22 +177,28 @@ export default async function Page({ params }: { params: Promise<{ userId: strin
 - `requestInit` is passed to every request, so framework fetch options such as
   `{ next: { revalidate: 30 } }` work too.
 - To refresh, use your framework's mechanism (e.g. `router.refresh()`).
-- If the page also needs the response (e.g. its `meta` in Next.js's `generateMetadata`), load it
-  once and pass it in, so the component doesn't fetch again:
+- The screen streams: islands still pending in its head render as their placeholders, each in its
+  own `<Suspense>`, and stream into the page as they arrive. `progressive={false}` (or the
+  config's `progressive: false`) waits for the whole screen instead.
+- If the page also needs the screen (e.g. its `meta` in Next.js's `generateMetadata`), open its
+  stream once with `streamScreen` and pass it in, so the component doesn't fetch again. The metadata
+  only needs the head, so the islands still stream:
 
   ```tsx
-  const getScreen = cache((id: string) => loadScreen(config, "recipe", { recipeId: id }));
+  const openRecipe = cache((id: string) => streamScreen(config, "recipe", { recipeId: id }));
 
   export async function generateMetadata({ params }) {
-    const { meta } = await getScreen((await params).recipeId);
-    return { title: meta?.title, description: meta?.description };
+    const { head } = await openRecipe((await params).recipeId);
+    return { title: head.meta?.title, description: head.meta?.description };
   }
 
   export default async function Page({ params }) {
     const { recipeId } = await params;
-    return <ComposedScreen config={config} screen="recipe" params={{ recipeId }} response={getScreen(recipeId)} />;
+    return <ComposedScreen config={config} screen="recipe" params={{ recipeId }} stream={openRecipe(recipeId)} />;
   }
   ```
+
+  Or pass a whole `response` from `loadScreen`, which renders without streaming.
 - `onRenderError` in this config sees errors thrown while creating an island's element on the
   server. Errors thrown inside a Server Component island are re-thrown in the browser and caught
   there; to report those, put a `<ClientComposeProvider>` with `onRenderError` above the page.
@@ -325,6 +357,9 @@ expect(navigations).toEqual([{ screen: "feed" }]);
   own too, and any other config (e.g. `client`) to override the defaults.
 - The response builders are typed by the generated descriptors: `island`, `islandError`, `screen`,
   `screenError`, `actionOk`, `actionError` and `actionFailure`.
+- A `screen` arrives whole. To test placeholders and islands streaming in, answer one request with
+  `streamedScreen("profile", [island("header", …), pending("posts", PostGridV1)])`, render, then
+  `send(island("posts", …))` and `end()` (or `cut()`, as a dropped connection would).
 - Requests without a handler reject, which fails the test. Answer anything else (such as uploads to
   storage) with `other`.
 - Wrap the provider in your app's own providers (theme, translations, session) in a `renderIsland`

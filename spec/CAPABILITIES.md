@@ -59,6 +59,7 @@ them to say what they add.
 | CMP-18 | **Cache adapter.** An optional cache the app supplies; islands opt in with a TTL and a key (see [Adapters](#adapters)). | — |
 | CMP-19 | **Idempotency adapter.** An optional store the app supplies, so retried actions return their first outcome (see [Adapters](#adapters)). | §5.2 |
 | CMP-20 | **Island requests.** Define an island with pages by its generated props type; it resolves the page a cursor asks for, and the cursor of the next. One island of a screen can be resolved again on its own, laid out as its screen would be. | §4.5 |
+| CMP-21 | **Streams.** Screens are answered as streams: the head once what can fail the screen is settled (requirements, layout and conditions, required islands, meta), then each other island as it's resolved, then the end. | §4.6 |
 
 ## The composer as a platform
 
@@ -189,6 +190,7 @@ own: the composer *is* their backend.
 | CLI-8 | **Test kit.** A fake composer answering screens and actions with typed builders, recording requests and effects. | — |
 | CLI-9 | **Conformance.** Passes the client fixtures, rendering and actions. | §8.2 |
 | CLI-10 | **Island requests.** Fetch an island's next page from its entry's `next`, or the island again; through a proxy too. | §4.5 |
+| CLI-11 | **Streams.** Read a screen's stream: its head, then each island as it arrives, or all of it at once; islands that never arrive are `incomplete`. | §4.6 |
 
 ## UI binding
 
@@ -204,6 +206,7 @@ own: the composer *is* their backend.
 | UI-8 | **Cancellation.** Leaving a screen or changing its params cancels its request. |
 | UI-9 | **Testing.** Render islands and screens in tests against the fake composer, in the platform's usual test tools. |
 | UI-10 | **Pages.** An island's pages so far, with loading, end and failed states and a way to load the next, starting again when the island is rendered with new props. |
+| UI-11 | **Progressive screens.** Show a screen once its head arrives, each pending island as the placeholder the app registered for it (or nothing) until it does; or, by choice, wait for all of it. A reload keeps what's shown until it's replaced. |
 
 Some rows are one platform's business: server rendering and React Server Components, and the
 proxy that keeps a session in an httpOnly cookie, are web-only.
@@ -279,6 +282,7 @@ Names in *italics* don't exist yet; the parity work below adds them.
 | CMP-18 cache adapter | ✅ `Config.Cache`, `Island.CacheFor` | ✅ `cache`, `island(…, { cache })` |
 | CMP-19 idempotency adapter | ✅ `Config.Idempotency` | ✅ `idempotency` |
 | CMP-20 island requests | ✅ `cc.DefinePaged`, `ComposeIsland` | ✅ `pagedIsland`, `composeIsland` |
+| CMP-21 streams | ✅ `cc.ScreenStream`, `cc.ReadScreen` | ✅ `ScreenStream`, `collect`, every adapter |
 
 ### Clients
 
@@ -304,6 +308,8 @@ Names in *italics* don't exist yet; the parity work below adds them.
 | UI-9 testing | ✅ | ✅ `FakeComposer` with `ScreenModel` and `ActionModel` | ✅ `FakeComposer` with Robolectric |
 | CLI-10 island requests | ✅ `fetchIsland`, `proxy.loadIsland` | ✗ (ignores `next`) | ✗ (ignores `next`) |
 | UI-10 pages | ✅ `usePages` | ✗ | ✗ |
+| CLI-11 streams | ✅ `openScreen`, `fetchScreen` | ◐ read to the end | ◐ read to the end |
+| UI-11 progressive screens | ✅ placeholders, `progressive`, streamed Server Components | ✗ (all at once) | ✗ (all at once) |
 
 SwiftUI and Compose can't catch a view that crashes while rendering the way React can, so UI-6
 there means islands whose props don't decode are skipped.
@@ -336,6 +342,6 @@ In order, each as its own pull request:
    Multiplatform comes later.
 7. **Publishing.** Swift through SwiftPM tags, Kotlin on Maven Central.
 
-Not in this round: streaming (a protocol v1 candidate, §7 of the protocol), and Kotlin
-Multiplatform. Island requests (§4.5) came later, in Go, TypeScript and React first; Swift and
-Kotlin render paged islands' first pages, and add CLI-10 and UI-10 next.
+Not in this round: Kotlin Multiplatform. Island requests (§4.5) and streams (§4.6) came later, in
+Go, TypeScript and React first. Swift and Kotlin render paged islands' first pages, and read
+screens' streams to their end; they add CLI-10, UI-10 and progressive screens (UI-11) next.

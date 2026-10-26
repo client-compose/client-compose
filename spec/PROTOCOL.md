@@ -471,8 +471,9 @@ screen with the same id whose params include every param in the reference. So
 
 ## 7. Open questions (v1 candidates)
 
-- **Deferred islands / streaming**: return fast islands first, stream slow ones
-  (NDJSON or SSE), marked `status: "pending"`.
+- **Islands that turn out not to be shown**: a placement's condition settled after a stream's head
+  (§4.6), so a screen whose conditions need slow data can send its head sooner. The island would
+  start pending, and its line could say it isn't shown.
 - **Capability hashing** to shrink requests.
 - **Per-island cache hints** vs screen-level `cache`.
 - **Analytics/experiment metadata** on each island (`experiment`, `variant`).

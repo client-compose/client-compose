@@ -113,7 +113,14 @@ for (const c of cases) {
   }
   assert.deepEqual(registry.capabilities(), c.expectCapabilities, c.name);
   const skipped = [];
-  const rendered = plan(registry, c.response, {
+  const stream = c.stream.map((line) => `${JSON.stringify(line)}\n`).join("");
+  const response = await fetchScreen(
+    "",
+    buildRequest(registry, "s", { platform: "node", appVersion: "0" }),
+    {},
+    async () => new Response(stream, { headers: { "content-type": "application/jsonl" } }),
+  );
+  const rendered = plan(registry, response, {
     onError: c.renderErrors ? (e) => `error:${e.key}:${e.error.code}` : undefined,
     onSkipped: (e) => skipped.push(e.key),
   }).map((i) => i.render());
