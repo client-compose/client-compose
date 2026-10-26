@@ -146,28 +146,37 @@ function arrivals(
     }
   }
   if (waiting.size > 0) {
-    void (async () => {
-      try {
-        for await (const entry of islands) {
-          waiting.get(entry.key)?.(entry);
-          waiting.delete(entry.key);
-        }
-      } finally {
-        // The stream broke off: what never came is incomplete (spec §4.6).
-        for (const [key, resolve] of waiting) {
-          const e = head.islands.find((i) => i.key === key);
-          resolve({
-            key,
-            type: e?.type ?? "",
-            version: e?.version ?? 0,
-            status: "error",
-            error: { code: "incomplete", retryable: true },
-          });
-        }
-      }
-    })().catch(() => undefined);
+    void deliver(head, islands, waiting).catch(() => undefined);
   }
   return out;
+}
+
+/**
+ * Hands each island the stream brings to whoever's waiting for it, as it comes. If the stream breaks
+ * off, the islands that never came are errors: `incomplete`, retryable (spec §4.6).
+ */
+async function deliver(
+  head: ScreenHead,
+  islands: AsyncIterable<IslandEntry>,
+  waiting: Map<string, (entry: IslandEntry) => void>,
+): Promise<void> {
+  try {
+    for await (const entry of islands) {
+      waiting.get(entry.key)?.(entry);
+      waiting.delete(entry.key);
+    }
+  } finally {
+    for (const [key, resolve] of waiting) {
+      const pending = head.islands.find((e) => e.key === key);
+      resolve({
+        key,
+        type: pending?.type ?? "",
+        version: pending?.version ?? 0,
+        status: "error",
+        error: { code: "incomplete", retryable: true },
+      });
+    }
+  }
 }
 
 interface ArrivingProps {
