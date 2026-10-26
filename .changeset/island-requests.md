@@ -13,8 +13,10 @@ again, for the page a cursor asks for or from its first page.
 - Protocol: `IslandRequest`, `IslandResponse`, and `next` on island entries.
 - Composer: `pagedIsland`, `rc.cursor`, `InvalidCursorError`, `composeIsland`, and island requests in
   `testComposer` (`island`, `nextPage`, `next`).
-- Client: `buildIslandRequest`, `fetchIsland`, `proxy.loadIsland`, and island handlers in the fake
-  composer (`islands`, `islandResponse`, `island(…, next)`).
-- React: `usePages`, and `viaProxy`'s `loadIsland`.
+- Client: `buildIslandRequest`, `fetchIsland` (which throws `IslandFetchError` when the request
+  fails), `proxy.loadIsland`, and island handlers in the fake composer (`islands`,
+  `islandResponse`, `island(…, next)`).
+- React: `usePages`, `loadIsland` in the config (to fetch pages another way), and `viaProxy`'s
+  `loadIsland`. `ClientComposeProvider` and `usePages` live in their own client modules.
 - Conformance: island cases (`islandCases`, `runIslandCase`), paged mocks, and a client fixture for
   `next`.

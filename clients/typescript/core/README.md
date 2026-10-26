@@ -97,7 +97,7 @@ For React, `@client-compose/react/testing` adds a provider config built around i
 
 ## Through your own server
 
-`@client-compose/client/proxy` passes a browser's screen and action requests to the composer
+`@client-compose/client/proxy` passes a browser's screen, island and action requests to the composer
 through your server, so it can add what the browser mustn't hold, such as a session kept in an
 httpOnly cookie. `createComposerProxy({ baseUrl, client, headers, onActionResponse })` checks each
 request (anyone can call a server endpoint with anything), sets the client context and headers,

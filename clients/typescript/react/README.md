@@ -174,15 +174,35 @@ export default async function Page({ params }: { params: Promise<{ userId: strin
 ## Islands with pages
 
 A paged island (spec §4.5) gets its first page as props, and `next` in its entry while there are
-more. `usePages` fetches them, in the island's own component, from the screen it's on:
+more. `usePages` fetches them, in the island's own component, from the screen it's on. On the
+web, e.g. with a "Show more" button:
 
 ```tsx
 function Results(props: ResultListV1) {
   const { pages, status, loadMore } = usePages(props);
-  const items = pages.flatMap((page) => page.items);
+  return (
+    <section>
+      <ul>
+        {pages.flatMap((page) => page.items).map((item) => (
+          <li key={item.id}>{item.title}</li>
+        ))}
+      </ul>
+      {status === "more" && <button onClick={loadMore}>Show more</button>}
+      {status === "loading" && <p role="status">Loading…</p>}
+      {status === "failed" && <button onClick={loadMore}>Try again</button>}
+    </section>
+  );
+}
+```
+
+Or in React Native, loading the next page as the list nears its end:
+
+```tsx
+function Results(props: ResultListV1) {
+  const { pages, status, loadMore } = usePages(props);
   return (
     <FlatList
-      data={items}
+      data={pages.flatMap((page) => page.items)}
       renderItem={renderResult}
       onEndReached={loadMore}
       ListFooterComponent={status === "loading" ? <Spinner /> : null}
@@ -193,8 +213,12 @@ function Results(props: ResultListV1) {
 
 `status` is `more`, `loading`, `end` or `failed` (with `error`: the island's error from the
 composer, or the request's; `loadMore` tries again). When the island is rendered with new props
-(the screen reloaded, or opened with other params) it starts again from them. On the web through
-your server, give `viaProxy` a `loadIsland` that calls `proxy.loadIsland`.
+(the screen reloaded, or opened with other params) it starts again from them, and a page still on
+its way for the old props is dropped.
+
+Pages are fetched from `${baseUrl}/screens/{screen}/islands/{key}` with your `headers()`. To fetch
+them another way, set `loadIsland(request)` in the config; through your server, `viaProxy` gives
+you one (below).
 
 In tests, answer island requests from `handlers.islands["{screen}/{key}"]` with
 `islandResponse(screen, island(key, ResultListV1, props, next))`.
@@ -234,8 +258,8 @@ way, set `performAction(request)` in the config.
 To keep a session in an httpOnly cookie, send screens and actions through your own server, which
 adds it. `createComposerProxy` (from `@client-compose/client/proxy`) is the server half: it checks
 what the browser sent, sets the client context and headers, and returns failures as data.
-`viaProxy` is the browser half: it turns the server's functions into the config's `fetch` and
-`performAction`. With Next.js Server Actions:
+`viaProxy` is the browser half: it turns the server's functions into the config's `fetch`,
+`performAction` and `loadIsland`. With Next.js Server Actions:
 
 ```ts
 // actions.ts
@@ -249,12 +273,17 @@ const proxy = createComposerProxy({
 });
 export async function performComposerAction(body: unknown) { return proxy.performAction(body); }
 export async function loadComposerScreen(body: unknown) { return proxy.loadScreen(body); }
+export async function loadComposerIsland(body: unknown) { return proxy.loadIsland(body); }
 ```
 
 ```tsx
 // in a client component
-const transport = viaProxy({ performAction: performComposerAction, loadScreen: loadComposerScreen });
-const config = { registry, baseUrl: "", client, fetch: transport.fetch, performAction: transport.performAction };
+const transport = viaProxy({
+  performAction: performComposerAction,
+  loadScreen: loadComposerScreen,
+  loadIsland: loadComposerIsland, // leave out if no island has pages
+});
+const config = { registry, baseUrl: "", client, ...transport };
 ```
 
 To show an action's errors, `declaredError(follow.last)` gives the declared error the last call
