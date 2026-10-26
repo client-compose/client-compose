@@ -94,36 +94,48 @@ function isStringRecord(value: unknown): value is Record<string, string> {
   return isRecord(value) && Object.values(value).every((v) => typeof v === "string");
 }
 
+// Each guard returns at the first thing a request gets wrong, so it checks no more than it must.
+
 export function isProxiedScreenRequest(value: unknown): value is ProxiedScreenRequest {
-  return (
-    isRecord(value) &&
-    value.protocol === PROTOCOL_VERSION &&
-    typeof value.screen === "string" &&
-    (value.params === undefined || isStringRecord(value.params)) &&
-    isCapabilities(value.islands)
-  );
+  if (!isRecord(value) || value.protocol !== PROTOCOL_VERSION) {
+    return false;
+  }
+  if (typeof value.screen !== "string") {
+    return false;
+  }
+  if (value.params !== undefined && !isStringRecord(value.params)) {
+    return false;
+  }
+  return isCapabilities(value.islands);
 }
 
 export function isProxiedIslandRequest(value: unknown): value is ProxiedIslandRequest {
   if (!isRecord(value) || value.protocol !== PROTOCOL_VERSION) {
     return false;
   }
-  const addressed = typeof value.screen === "string" && typeof value.key === "string";
-  const versioned = typeof value.version === "number" && Number.isInteger(value.version);
-  const paramsOk = value.params === undefined || isStringRecord(value.params);
-  const cursorOk = value.cursor === undefined || typeof value.cursor === "string";
-  return addressed && versioned && paramsOk && cursorOk;
+  if (typeof value.screen !== "string" || typeof value.key !== "string") {
+    return false;
+  }
+  if (typeof value.version !== "number" || !Number.isInteger(value.version)) {
+    return false;
+  }
+  if (value.params !== undefined && !isStringRecord(value.params)) {
+    return false;
+  }
+  return value.cursor === undefined || typeof value.cursor === "string";
 }
 
 export function isProxiedActionRequest(value: unknown): value is ProxiedActionRequest {
-  return (
-    isRecord(value) &&
-    value.protocol === PROTOCOL_VERSION &&
-    typeof value.action === "string" &&
-    typeof value.version === "number" &&
-    "input" in value &&
-    (value.idempotencyKey === undefined || typeof value.idempotencyKey === "string")
-  );
+  if (!isRecord(value) || value.protocol !== PROTOCOL_VERSION) {
+    return false;
+  }
+  if (typeof value.action !== "string" || typeof value.version !== "number") {
+    return false;
+  }
+  if (!("input" in value)) {
+    return false;
+  }
+  return value.idempotencyKey === undefined || typeof value.idempotencyKey === "string";
 }
 
 /** What the composer itself answers to a malformed request. */

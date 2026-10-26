@@ -673,26 +673,32 @@ function islandAsked<Ctx>(
   return { placement, island };
 }
 
+// Each shape check returns at the first thing a request gets wrong.
+
 function isScreenRequestShape(v: unknown): v is ScreenRequest {
-  if (!isRecord(v)) {
+  if (!isRecord(v) || typeof v.protocol !== "number") {
     return false;
   }
-  const fieldsOk = typeof v.protocol === "number" && typeof v.screen === "string";
-  return fieldsOk && isRecord(v.client) && isRecord(v.islands);
+  if (typeof v.screen !== "string") {
+    return false;
+  }
+  return isRecord(v.client) && isRecord(v.islands);
 }
 
 function isIslandRequestShape(v: unknown): v is IslandRequest {
-  if (!isRecord(v)) {
+  if (!isRecord(v) || typeof v.protocol !== "number") {
     return false;
   }
-  const addressed = typeof v.screen === "string" && typeof v.key === "string";
-  const versioned =
-    typeof v.protocol === "number" &&
-    typeof v.version === "number" &&
-    Number.isInteger(v.version) &&
-    v.version >= 1;
-  const cursorOk = v.cursor === undefined || typeof v.cursor === "string";
-  return addressed && versioned && cursorOk && isRecord(v.client);
+  if (typeof v.screen !== "string" || typeof v.key !== "string") {
+    return false;
+  }
+  if (typeof v.version !== "number" || !Number.isInteger(v.version) || v.version < 1) {
+    return false;
+  }
+  if (v.cursor !== undefined && typeof v.cursor !== "string") {
+    return false;
+  }
+  return isRecord(v.client);
 }
 
 class TimeoutError extends Error {}
