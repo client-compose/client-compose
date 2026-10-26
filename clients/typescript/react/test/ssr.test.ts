@@ -5,6 +5,7 @@ import "./setup.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { screenLines } from "@client-compose/client";
 import type { IslandDescriptor, ScreenRequest, ScreenResponse } from "@client-compose/protocol";
 import { act, createElement, type ReactNode, StrictMode, useState } from "react";
 import { hydrateRoot } from "react-dom/client";
@@ -55,6 +56,12 @@ const response = (name: string): ScreenResponse => ({
   ],
 });
 
+/** A screen's stream, all at once: what the composer answers (spec §4.6). */
+const streamed = (screen: object) =>
+  new Response(screenLines(screen as ScreenResponse), {
+    headers: { "content-type": "application/jsonl" },
+  });
+
 function recordingFetch(...responses: ScreenResponse[]) {
   const requests: { url: string; init: RequestInit; body: ScreenRequest }[] = [];
   const impl = (async (url: string, init: RequestInit) => {
@@ -63,7 +70,7 @@ function recordingFetch(...responses: ScreenResponse[]) {
       init,
       body: JSON.parse(String(init.body)),
     });
-    return Response.json(responses.shift() ?? response("?"));
+    return streamed(responses.shift() ?? response("?"));
   }) as typeof fetch;
   return { impl, requests };
 }

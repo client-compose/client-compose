@@ -66,7 +66,8 @@ export interface ClientCase {
   registered: Record<string, number[]>;
   expectCapabilities: Record<string, number[]>;
   renderErrors?: boolean;
-  response: unknown;
+  /** The lines of a screen's stream (spec §4.6), each to be sent as one line of JSON. */
+  stream: unknown[];
   expectRendered: string[];
   expectSkipped: string[];
 }

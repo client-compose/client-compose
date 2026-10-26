@@ -5,7 +5,7 @@
 //     const transport = viaProxy({ performAction, loadScreen, loadIsland });
 //     const config = { registry, baseUrl: "", client, ...transport };
 
-import { ActionFetchError, IslandFetchError } from "@client-compose/client";
+import { ActionFetchError, IslandFetchError, screenLines } from "@client-compose/client";
 import type { ProxyResult } from "@client-compose/client/proxy";
 import type {
   ActionRequest,
@@ -55,8 +55,11 @@ export function viaProxy(proxy: ProxyFunctions): ProxyTransport {
       throw new Error("viaProxy: no loadScreen given, so the browser can't load screens");
     }
     const result = await proxy.loadScreen(parseBody(init?.body));
+    // Your server reads the screen to its end, so it comes as one head and an end (spec §4.6).
     return result.ok
-      ? Response.json(result.response)
+      ? new Response(screenLines(result.response), {
+          headers: { "content-type": "application/jsonl" },
+        })
       : new Response(result.body, { status: result.status });
   }
 

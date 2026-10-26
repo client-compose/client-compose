@@ -12,7 +12,9 @@ import {
   type IslandEntry,
   type IslandRequest,
   type IslandResponse,
+  type PendingIsland,
   PROTOCOL_VERSION,
+  type ScreenHead,
   type ScreenRequest,
   type ScreenResponse,
 } from "@client-compose/protocol";
@@ -94,18 +96,30 @@ export type SkipReason = "unknown_island" | "unknown_status";
 export interface PlanOptions<R> {
   /** Render something for errored islands. Default: omit them (spec §4.3). */
   onError?: (entry: ErrorEntry) => R | undefined;
+  /**
+   * Render something for islands still pending in a stream's head (spec §4.6), such as a
+   * placeholder. Default: omit them until they arrive.
+   */
+  onPending?: (entry: PendingIsland) => R | undefined;
   /** Called for islands the client can't render (spec §4.4). Useful for telemetry. */
   onSkipped?: (entry: IslandEntry, reason: SkipReason) => void;
 }
 
-/** Turn a response into an ordered list of renderable islands. */
+/** Turn a screen, or a stream's head (spec §4.6), into an ordered list of renderable islands. */
 export function plan<R>(
   registry: IslandRegistry<R>,
-  response: ScreenResponse,
+  response: ScreenResponse | ScreenHead,
   options: PlanOptions<R> = {},
 ): PlannedIsland<R>[] {
   const out: PlannedIsland<R>[] = [];
   for (const entry of response.islands) {
+    if (entry.status === "pending") {
+      const placeholder = registry.get(entry.type, entry.version) && options.onPending?.(entry);
+      if (placeholder !== undefined) {
+        out.push({ key: entry.key, render: () => placeholder });
+      }
+      continue;
+    }
     if (entry.status === "error") {
       const fallback = options.onError?.(entry);
       if (fallback !== undefined) {
@@ -150,13 +164,6 @@ function isIslandEntry(value: unknown): value is IslandEntry {
   return named && typeof value.version === "number" && typeof value.status === "string";
 }
 
-function isScreenResponse(value: unknown): value is ScreenResponse {
-  if (!isRecord(value) || typeof value.screen !== "string") {
-    return false;
-  }
-  return Array.isArray(value.islands) && value.islands.every(isIslandEntry);
-}
-
 /** An action's outcome: what a client needs of one is its status (the client fixtures, spec §8.2). */
 function isActionResponse(value: unknown): value is ActionResponse {
   return isRecord(value) && (value.status === "ok" || value.status === "error");
@@ -199,27 +206,163 @@ function jsonHeaders(init: HeadersInit | undefined): Headers {
   return headers;
 }
 
+/**
+ * Fetch a screen, all of it: its stream (spec §4.6) read to the end. Throws ScreenFetchError for a
+ * non-2xx response (e.g. `not_found`) or one that isn't a screen. To show its islands as they
+ * arrive, use openScreen.
+ */
 export async function fetchScreen(
   baseUrl: string,
   request: ScreenRequest,
   init: RequestInit = {},
   fetchImpl: typeof fetch = fetch,
 ): Promise<ScreenResponse> {
+  return collectScreen(await openScreen(baseUrl, request, init, fetchImpl));
+}
+
+// ---- Streams (spec §4.6) ----
+
+/** A screen as it arrives: its head, then each pending island as the composer resolves it. */
+export interface ScreenStream {
+  /** The screen, its islands resolved or pending. */
+  head: ScreenHead;
+  /**
+   * Each pending island's entry, as it arrives. If the stream ends early, those that never came
+   * arrive as errors: `incomplete`, retryable.
+   */
+  islands: AsyncIterable<IslandEntry>;
+}
+
+/**
+ * Request a screen, and resolve once its head has arrived. Throws ScreenFetchError for a non-2xx
+ * response (e.g. `not_found`) or one that isn't a screen's stream.
+ */
+export async function openScreen(
+  baseUrl: string,
+  request: ScreenRequest,
+  init: RequestInit = {},
+  fetchImpl: typeof fetch = fetch,
+): Promise<ScreenStream> {
   const res = await fetchImpl(`${baseUrl}/screens/${encodeURIComponent(request.screen)}`, {
     ...init,
     method: "POST",
     headers: jsonHeaders(init.headers),
     body: JSON.stringify(request),
   });
-  const text = await res.text();
   if (!res.ok) {
-    throw new ScreenFetchError(res.status, text);
+    throw new ScreenFetchError(res.status, await res.text());
   }
-  const response = parseJson(text);
-  if (!isScreenResponse(response)) {
-    throw new ScreenFetchError(res.status, text);
+  const lines = linesOf(res)[Symbol.asyncIterator]();
+  const first = await lines.next();
+  const head = first.done ? undefined : parseJson(first.value);
+  if (!isRecord(head) || head.kind !== "head" || !isScreenHead(head)) {
+    await lines.return?.();
+    throw new ScreenFetchError(res.status, first.done ? "" : first.value);
   }
-  return response;
+  const { kind: _kind, ...screen } = head;
+  return { head: screen, islands: pendingIslands(screen, lines) };
+}
+
+/** Reads the rest of a stream, and returns the screen with every island in place. */
+export async function collectScreen(stream: ScreenStream): Promise<ScreenResponse> {
+  let head = stream.head;
+  for await (const entry of stream.islands) {
+    head = withIsland(head, entry);
+  }
+  return {
+    ...head,
+    islands: head.islands.filter((e): e is IslandEntry => e.status !== "pending"),
+  };
+}
+
+/** The head with a pending island's entry in its place; unchanged if the key isn't pending. */
+export function withIsland(head: ScreenHead, entry: IslandEntry): ScreenHead {
+  return {
+    ...head,
+    islands: head.islands.map((e) => (e.key === entry.key && e.status === "pending" ? entry : e)),
+  };
+}
+
+/** A screen's head and end as a stream, for a screen that's already complete (spec §4.6). */
+export function screenLines(screen: ScreenResponse): string {
+  return `${JSON.stringify({ kind: "head", ...screen })}\n${JSON.stringify({ kind: "end" })}\n`;
+}
+
+function isScreenHead(
+  value: Record<string, unknown>,
+): value is Record<string, unknown> & ScreenHead {
+  return (
+    typeof value.screen === "string" &&
+    Array.isArray(value.islands) &&
+    value.islands.every(isIslandEntry)
+  );
+}
+
+/** The islands pending in `head`, as `lines` bring them, until the end line. */
+async function* pendingIslands(
+  head: ScreenHead,
+  lines: AsyncIterator<string>,
+): AsyncIterable<IslandEntry> {
+  const waiting = new Map(
+    head.islands.filter((e) => e.status === "pending").map((e) => [e.key, e]),
+  );
+  try {
+    while (waiting.size > 0) {
+      const next = await lines.next();
+      if (next.done) {
+        break;
+      }
+      const line = parseJson(next.value);
+      if (!isRecord(line) || line.kind === "end") {
+        break;
+      }
+      // Lines of a kind it doesn't know, or for an island that isn't pending, are skipped (spec §4.6).
+      const entry = line.kind === "island" && isRecord(line.island) ? line.island : undefined;
+      if (entry?.status !== "pending" && isIslandEntry(entry) && waiting.delete(entry.key)) {
+        yield entry;
+      }
+    }
+  } finally {
+    await lines.return?.();
+  }
+  for (const e of waiting.values()) {
+    yield {
+      key: e.key,
+      type: e.type,
+      version: e.version,
+      status: "error",
+      error: { code: "incomplete", retryable: true },
+    };
+  }
+}
+
+/** A body's lines, as they arrive if the body can be read as a stream, or all at once. */
+async function* linesOf(res: Response): AsyncIterable<string> {
+  if (!res.body) {
+    yield* (await res.text()).split("\n").filter((line) => line !== "");
+    return;
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffered = "";
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      buffered += decoder.decode(value, { stream: true });
+      const lines = buffered.split("\n");
+      buffered = lines.pop() ?? "";
+      yield* lines.filter((line) => line !== "");
+    }
+    buffered += decoder.decode();
+    if (buffered.trim() !== "") {
+      yield buffered;
+    }
+  } finally {
+    await reader.cancel().catch(() => undefined);
+  }
 }
 
 // ---- Island requests (spec §4.5) ----

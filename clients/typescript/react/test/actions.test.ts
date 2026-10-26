@@ -3,11 +3,13 @@ import "./setup.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { screenLines } from "@client-compose/client";
 import type {
   ActionDescriptor,
   ActionRequest,
   IslandDescriptor,
   ScreenRef,
+  ScreenResponse,
 } from "@client-compose/protocol";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
@@ -34,6 +36,12 @@ const Follow: ActionDescriptor<{ userId: string }, { followers: number }, Follow
   errors: ["blocked", "limit"],
   input: { type: "object" },
 };
+
+/** A screen's stream, all at once: what the composer answers (spec §4.6). */
+const streamed = (screen: object) =>
+  new Response(screenLines(screen as ScreenResponse), {
+    headers: { "content-type": "application/jsonl" },
+  });
 
 /**
  * A composer stand-in: screens answer with how many times each screen+params was fetched; the
@@ -64,7 +72,7 @@ function fakeComposer(actionResponse: () => Response) {
         props: { n },
       },
     ];
-    return Response.json({
+    return streamed({
       protocol: 0,
       screen: body.screen,
       islands,

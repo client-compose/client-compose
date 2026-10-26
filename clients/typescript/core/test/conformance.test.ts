@@ -4,12 +4,17 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { clientCases } from "@client-compose/conformance";
-import type { ScreenResponse } from "@client-compose/protocol";
 
-import { IslandRegistry, plan } from "../src/index.ts";
+import { buildRequest, fetchScreen, IslandRegistry, plan } from "../src/index.ts";
+
+/** A fetch answering with the case's stream, a line at a time. */
+const streaming = (lines: unknown[]) => async () =>
+  new Response(lines.map((line) => `${JSON.stringify(line)}\n`).join(""), {
+    headers: { "content-type": "application/jsonl" },
+  });
 
 for (const c of clientCases().filter((c) => !c.typedOnly)) {
-  test(c.name, () => {
+  test(c.name, async () => {
     const registry = new IslandRegistry<string>();
     for (const [type, versions] of Object.entries(c.registered)) {
       for (const version of versions) {
@@ -19,7 +24,9 @@ for (const c of clientCases().filter((c) => !c.typedOnly)) {
     assert.deepEqual(registry.capabilities(), c.expectCapabilities);
 
     const skipped: string[] = [];
-    const planned = plan(registry, c.response as ScreenResponse, {
+    const request = buildRequest(registry, "s", { platform: "test", appVersion: "1" });
+    const response = await fetchScreen("", request, {}, streaming(c.stream));
+    const planned = plan(registry, response, {
       onError: c.renderErrors ? (e) => `error:${e.key}:${e.error.code}` : undefined,
       onSkipped: (e) => skipped.push(e.key),
     });

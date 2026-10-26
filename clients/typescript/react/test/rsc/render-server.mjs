@@ -45,7 +45,10 @@ const config = {
     ? async () => {
         throw new Error("fetched although a response was passed in");
       }
-    : async () => Response.json(response),
+    : async () =>
+        new Response(`${JSON.stringify({ kind: "head", ...response })}\n{"kind":"end"}\n`, {
+          headers: { "content-type": "application/jsonl" },
+        }),
 };
 
 // Client references are "<file url>#<export>"; this test loads modules by URL, so map them as-is.
