@@ -15,9 +15,15 @@ import {
   createFakeGateway,
   type FakeGateway,
   type FakeGatewayHandlers,
+  island,
+  islandResponse,
+  screen,
+  screenError,
 } from "@client-compose/client/testing";
-import type { ScreenRef } from "@client-compose/protocol";
+import type { IslandDescriptor, ScreenRef } from "@client-compose/protocol";
+import { createElement, type ReactElement } from "react";
 
+import { ComposedScreen } from "./client.ts";
 import type { ClientComposeConfig } from "./config.ts";
 
 export * from "@client-compose/client/testing";
@@ -72,5 +78,62 @@ export function createTestConfig(options: TestConfigOptions): TestConfig {
     gateway,
     navigations,
     invalidations,
+  };
+}
+
+/** A page of a paged island: its props, and the cursor for the page after it (none at the end). */
+export interface IslandPage<P> {
+  props: P;
+  next?: string;
+}
+
+export interface PagedIslandOptions<P> {
+  island: IslandDescriptor<P>;
+  /** The page the screen comes with. */
+  first: IslandPage<P>;
+  /** The pages after it, by the cursor that asks for each. Any other cursor is `invalid_cursor`. */
+  pages: Record<string, IslandPage<P>>;
+  /** The screen it's on, and its key there. Default: "paged" and "island". */
+  screen?: string;
+  key?: string;
+}
+
+export interface PagedIsland {
+  /** The screen, to render inside your provider: the island fetches its pages from it. */
+  element: ReactElement;
+  /** How the fake composer answers: the screen, and the island's pages. Add your own to them. */
+  handlers: FakeGatewayHandlers;
+}
+
+/**
+ * A paged island on a screen of its own, for testing it: `usePages` fetches the next pages of the
+ * island it's in from the screen it's on, so the island is rendered from a screen, not alone.
+ *
+ *     const paged = pagedIsland({
+ *       island: ResultListV1,
+ *       first: { props: { items: ["a", "b"] }, next: "c2" },
+ *       pages: { c2: { props: { items: ["c"] } } },
+ *     });
+ *     const { config, gateway } = createTestConfig({ registry, handlers: paged.handlers });
+ *     render(<ClientComposeProvider config={config}>{paged.element}</ClientComposeProvider>);
+ *     // ...scroll to the end, then:
+ *     expect(gateway.islandRequests().map((r) => r.cursor)).toEqual(["c2"]);
+ *
+ * The registry renders the island: register its component as the app does.
+ */
+export function pagedIsland<P>(options: PagedIslandOptions<P>): PagedIsland {
+  const { island: descriptor, first, pages, screen: id = "paged", key = "island" } = options;
+  const entry = (page: IslandPage<P>) => island(key, descriptor, page.props, page.next);
+  return {
+    element: createElement(ComposedScreen, { screen: id }),
+    handlers: {
+      screens: { [id]: () => screen(id, [entry(first)]) },
+      islands: {
+        [`${id}/${key}`]: (request) => {
+          const page = request.cursor === undefined ? undefined : pages[request.cursor];
+          return page ? islandResponse(id, entry(page)) : screenError(400, "invalid_cursor");
+        },
+      },
+    },
   };
 }

@@ -329,6 +329,19 @@ expect(navigations).toEqual([{ screen: "feed" }]);
   storage) with `other`.
 - Wrap the provider in your app's own providers (theme, translations, session) in a `renderIsland`
   helper of your own.
+- A paged island fetches its pages from the screen it's on, so test it on one: `pagedIsland` gives
+  a screen with the island (`element`, to render) and the fake composer's answers (`handlers`): the
+  screen with its first page, and the pages after it by cursor.
+
+  ```tsx
+  const paged = pagedIsland({
+    island: ResultListV1,
+    first: { props: { items: [ada, grace] }, next: "c2" },
+    pages: { c2: { props: { items: [linus] } } },
+  });
+  const { config, gateway } = createTestConfig({ registry, handlers: paged.handlers });
+  render(<ClientComposeProvider config={config}>{paged.element}</ClientComposeProvider>);
+  ```
 
 The fake composer itself (no React) is `@client-compose/client/testing`.
 

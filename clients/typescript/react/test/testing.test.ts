@@ -16,8 +16,16 @@ import {
   isUnexpected,
   ReactIslandRegistry,
   useAction,
+  usePages,
 } from "../src/index.ts";
-import { actionError, actionOk, createTestConfig, island, screen } from "../src/testing.ts";
+import {
+  actionError,
+  actionOk,
+  createTestConfig,
+  island,
+  pagedIsland,
+  screen,
+} from "../src/testing.ts";
 
 const Name: IslandDescriptor<{ name: string }> = { type: "name", version: 1 };
 const registry = new ReactIslandRegistry().registerComponent(Name, ({ name }) =>
@@ -124,4 +132,45 @@ test("actionError's error is typed by the descriptor", () => {
     status: "error",
     error: { code: "limit", details: { max: 5 } },
   });
+});
+
+test("pagedIsland puts a paged island on a screen, and answers its pages", async () => {
+  const List: IslandDescriptor<{ items: string[] }> = { type: "list", version: 1 };
+  const loadMore: { current?: () => void } = {};
+  function ListView(props: { items: string[] }): ReactNode {
+    const pages = usePages(props);
+    loadMore.current = pages.loadMore;
+    return createElement(
+      "ol",
+      null,
+      `${pages.pages.flatMap((p) => p.items).join(",")} ${pages.status}`,
+    );
+  }
+  const paged = pagedIsland({
+    island: List,
+    first: { props: { items: ["a", "b"] }, next: "c2" },
+    pages: { c2: { props: { items: ["c"] }, next: "c3" } },
+  });
+  const { config, gateway } = createTestConfig({
+    registry: new ReactIslandRegistry().registerComponent(List, ListView),
+    handlers: paged.handlers,
+  });
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  await act(async () =>
+    root.render(createElement(ClientComposeProvider, { config }, paged.element)),
+  );
+  assert.equal(container.textContent, "a,b more");
+  await act(async () => loadMore.current?.());
+  assert.equal(container.textContent, "a,b,c more");
+  await act(async () => loadMore.current?.()); // a cursor it wasn't given
+  assert.equal(container.textContent, "a,b,c failed");
+  assert.deepEqual(
+    gateway.islandRequests().map((r) => [r.url, r.cursor]),
+    [
+      ["http://composer.test/screens/paged/islands/island", "c2"],
+      ["http://composer.test/screens/paged/islands/island", "c3"],
+    ],
+  );
+  await act(async () => root.unmount());
 });
