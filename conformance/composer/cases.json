@@ -229,6 +229,73 @@
       }
     },
     {
+      "name": "an island below a slow one arrives as soon as it's ready",
+      "placements": [
+        {
+          "key": "header",
+          "type": "profile-header",
+          "versions": [
+            1
+          ],
+          "outcome": "ok",
+          "required": true
+        },
+        {
+          "key": "slow",
+          "type": "post-grid",
+          "versions": [
+            1
+          ],
+          "outcome": "ok",
+          "startDelayMs": 500
+        },
+        {
+          "key": "quick",
+          "type": "post-grid",
+          "versions": [
+            1
+          ],
+          "outcome": "ok",
+          "startDelayMs": 150
+        }
+      ],
+      "capabilities": {
+        "post-grid": [
+          1
+        ],
+        "profile-header": [
+          1
+        ]
+      },
+      "expect": {
+        "status": 200,
+        "pending": [
+          "slow",
+          "quick"
+        ],
+        "arrival": [
+          "quick",
+          "slow"
+        ],
+        "body": {
+          "islands": [
+            {
+              "key": "header",
+              "status": "ok"
+            },
+            {
+              "key": "slow",
+              "status": "ok"
+            },
+            {
+              "key": "quick",
+              "status": "ok"
+            }
+          ]
+        }
+      }
+    },
+    {
       "name": "omits islands the client cannot render",
       "placements": [
         {

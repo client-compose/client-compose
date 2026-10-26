@@ -30,6 +30,8 @@ export interface ScreenExpectation {
   body?: unknown;
   pending?: string[];
   resolved?: string[];
+  /** Keys of island lines that must arrive in this order: each as it's resolved, wherever it is. */
+  arrival?: string[];
 }
 
 /** An island request (spec §4.5) for the `__conformance` screen laid out with `placements`. */
@@ -181,7 +183,10 @@ export async function runComposerCase(
     if (typeof stream === "string") {
       return failed(c, `${stream}\n  got: ${text}`);
     }
-    const mismatch = headMismatch(c.expect, stream.head) ?? bodyMismatch(c.expect, stream.screen);
+    const mismatch =
+      headMismatch(c.expect, stream.head) ??
+      arrivalMismatch(c.expect, stream.arrived) ??
+      bodyMismatch(c.expect, stream.screen);
     return mismatch ? failed(c, `${mismatch}\n  got: ${text}`) : { name: c.name, passed: true };
   } catch (err) {
     return failed(c, `request failed: ${String(err)}`);
@@ -194,10 +199,12 @@ const failed = (c: { name: string }, message: string): CaseResult => ({
   message,
 });
 
-/** A screen's stream (spec §4.6): its head, and the screen put together. */
+/** A screen's stream (spec §4.6): its head, the screen put together, and the order islands came in. */
 export interface ReadStream {
   head: Record<string, unknown>;
   screen: Record<string, unknown>;
+  /** The keys of the island lines, in the order they came. */
+  arrived: string[];
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -210,43 +217,85 @@ const keyOf = (entry: unknown): unknown => (isRecord(entry) ? entry.key : undefi
  * island and none other, then an end, and nothing after. Returns what's wrong, if anything.
  */
 export function readStream(text: string): ReadStream | string {
-  const lines = text.split("\n").filter((line) => line !== "");
+  const lines = parseLines(text);
+  if (typeof lines === "string") {
+    return lines;
+  }
+  const framed = frame(lines);
+  if (typeof framed === "string") {
+    return framed;
+  }
+  const filled = fillIn(framed.head, framed.islandLines);
+  if (typeof filled === "string") {
+    return filled;
+  }
+  const { kind: _kind, ...head } = framed.head;
+  return {
+    head,
+    screen: { ...head, islands: filled.islands },
+    arrived: filled.arrived,
+  };
+}
+
+/** Each line of the stream as JSON, or what's wrong with the first that isn't. */
+function parseLines(text: string): unknown[] | string {
   const parsed: unknown[] = [];
-  for (const line of lines) {
+  for (const line of text.split("\n").filter((l) => l !== "")) {
     try {
       parsed.push(JSON.parse(line));
     } catch {
       return `a line isn't JSON: ${line}`;
     }
   }
-  const [head, ...rest] = parsed;
+  return parsed;
+}
+
+interface Framed {
+  head: Record<string, unknown> & { islands: unknown[] };
+  islandLines: unknown[];
+}
+
+/** The stream's head, first, and its end, last; what's between should be island lines. */
+function frame(lines: unknown[]): Framed | string {
+  const head = lines[0];
   if (!isRecord(head) || head.kind !== "head" || !Array.isArray(head.islands)) {
     return "the first line isn't a head";
   }
-  const end = rest.pop();
-  if (!isRecord(end) || end.kind !== "end") {
+  const end = lines.at(-1);
+  if (lines.length < 2 || !isRecord(end) || end.kind !== "end") {
     return "the last line isn't an end";
   }
-  const islands: unknown[] = [...head.islands];
+  return { head: { ...head, islands: head.islands }, islandLines: lines.slice(1, -1) };
+}
+
+/**
+ * The head's islands with each island line in its pending island's place: one line for every
+ * pending island, and none for any other.
+ */
+function fillIn(
+  head: Framed["head"],
+  islandLines: unknown[],
+): { islands: unknown[]; arrived: string[] } | string {
+  const islands = [...head.islands];
   const pending = new Set(
     islands.filter((e) => isRecord(e) && e.status === "pending").map((e) => keyOf(e)),
   );
-  for (const line of rest) {
+  const arrived: string[] = [];
+  for (const line of islandLines) {
     if (!isRecord(line) || line.kind !== "island" || !isRecord(line.island)) {
       return `expected an island line, got ${JSON.stringify(line)}`;
     }
     const key = line.island.key;
-    if (!pending.has(key)) {
+    if (typeof key !== "string" || !pending.delete(key)) {
       return `an island line for ${JSON.stringify(key)}, which isn't pending`;
     }
-    pending.delete(key);
     islands[islands.findIndex((e) => keyOf(e) === key)] = line.island;
+    arrived.push(key);
   }
   if (pending.size > 0) {
     return `no line for pending ${JSON.stringify([...pending])}`;
   }
-  const { kind: _kind, ...response } = head;
-  return { head: response, screen: { ...response, islands } };
+  return { islands, arrived };
 }
 
 function headMismatch(
@@ -262,6 +311,14 @@ function headMismatch(
   }
   const isPending = (expect.resolved ?? []).find((key) => statusOf(key) === "pending");
   return isPending === undefined ? undefined : `head: expected ${isPending} to be resolved`;
+}
+
+function arrivalMismatch(expect: ScreenExpectation, arrived: string[]): string | undefined {
+  const order = arrived.filter((key) => expect.arrival?.includes(key));
+  const expected = expect.arrival ?? [];
+  return order.join() === expected.join()
+    ? undefined
+    : `expected islands to arrive in the order ${JSON.stringify(expected)}, got ${JSON.stringify(order)}`;
 }
 
 function bodyMismatch(expect: ScreenExpectation, body: unknown): string | undefined {
