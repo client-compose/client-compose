@@ -332,6 +332,11 @@ function screenStatus(response: ScreenResponse | undefined, error: unknown): Scr
   return error !== undefined ? "error" : "loading";
 }
 
+/** A class component's context (typed unknown by React): the provider's value, if there is one. */
+function isContextValue(value: unknown): value is ContextValue {
+  return typeof value === "object" && value !== null && "config" in value && "screens" in value;
+}
+
 interface BoundaryProps {
   islandKey: string;
   children?: ReactNode;
@@ -344,7 +349,6 @@ interface BoundaryProps {
  */
 export class IslandBoundary extends Component<BoundaryProps, { failed: boolean }> {
   static contextType = ClientComposeContext;
-  declare context: ContextValue | null;
   state = { failed: false };
 
   static getDerivedStateFromError(): { failed: boolean } {
@@ -352,7 +356,9 @@ export class IslandBoundary extends Component<BoundaryProps, { failed: boolean }
   }
 
   componentDidCatch(error: unknown): void {
-    this.context?.config.onRenderError?.(this.props.islandKey, error);
+    if (isContextValue(this.context)) {
+      this.context.config.onRenderError?.(this.props.islandKey, error);
+    }
   }
 
   render(): ReactNode {
