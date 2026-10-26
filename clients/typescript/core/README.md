@@ -39,8 +39,34 @@ container.replaceChildren(...islands.map((island) => island.render()));
   never returns one it can't.
 - **`plan`** returns renderable islands in order. Errored islands are omitted unless you pass
   `onError`; islands with an unknown type, version or status are skipped and reported.
-- **`fetchScreen`** throws `ScreenFetchError` (with `status` and `body`) for non-2xx responses, and
-  accepts a custom `fetch` as its fourth argument.
+- **`fetchScreen`** reads the screen's stream to its end, and returns it whole. It throws
+  `ScreenFetchError` (with `status` and `body`) for non-2xx responses, and accepts a custom `fetch`
+  as its fourth argument.
+
+## Streams
+
+A screen arrives as a stream (spec §4.6): its head, with any island not yet ready `pending`, then
+each of those as the composer resolves it. **`openScreen`** resolves once the head is in, so you can
+show the screen and fill it in:
+
+```ts
+const stream = await openScreen(baseUrl, request, init);
+let screen = stream.head;
+show(plan(registry, screen)); // pending islands are their placeholders, or left out
+for await (const island of stream.islands) {
+  screen = withIsland(screen, island);
+  show(plan(registry, screen));
+}
+```
+
+- Register a placeholder for an island with `registry.registerPlaceholder(Descriptor, () => …)`:
+  `plan` shows it while the island is pending. Without one, the island is left out until it arrives.
+- An island the stream never brings (the connection dropped) arrives as an error, `incomplete`,
+  retryable.
+- `collectScreen(stream)` reads the rest and returns the whole screen.
+- The body is read as it comes when your `fetch` gives a readable stream (browsers, Node, Deno, Bun,
+  and `expo/fetch` in React Native). React Native's built-in `fetch` doesn't, so there the screen
+  arrives all at once.
 
 ## Actions
 
@@ -78,7 +104,10 @@ resolves the island again from its first page. The React binding's `usePages` do
 `@client-compose/client/testing` is a fake composer for tests, with no test framework of its own.
 `createFakeGateway` answers screen and action requests from handlers and records them; pass its
 `fetch` to the client. Build responses with `island`, `islandError`, `screen`, `screenError`,
-`actionOk`, `actionError` and `actionFailure`, typed by the generated descriptors.
+`actionOk`, `actionError` and `actionFailure`, typed by the generated descriptors. A `screen` is
+sent whole (a head and an end); to control when each island arrives, answer with
+`streamedScreen(id, [island(…), pending(key, Descriptor)])`, then call its `send(entry)`, `end()`,
+or `cut()` for a dropped connection.
 
 ```ts
 import { actionError, createFakeGateway } from "@client-compose/client/testing";

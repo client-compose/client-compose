@@ -1,5 +1,5 @@
 {
-  "$comment": "Composer conformance cases (spec \u00a78.1). The runner POSTs to {base}/screens/{path ?? request.screen} with a request built from `placements` and `capabilities`, merged with any `request` overrides; `rawBody` replaces the body entirely. Expected bodies are subset matches, except arrays, which must match in length and order.",
+  "$comment": "Composer conformance cases (spec §8.1). The runner POSTs to {base}/screens/{path ?? request.screen} with a request built from `placements` and `capabilities`, merged with any `request` overrides; `rawBody` replaces the body entirely. Expected bodies are subset matches, except arrays, which must match in length and order.",
   "cases": [
     {
       "name": "picks highest mutually supported version",
@@ -35,6 +35,261 @@
               "props": {
                 "v": 2
               }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "streams an island that isn't ready when the head is sent",
+      "placements": [
+        {
+          "key": "header",
+          "type": "profile-header",
+          "versions": [
+            1
+          ],
+          "outcome": "ok",
+          "required": true,
+          "startDelayMs": 50
+        },
+        {
+          "key": "quick",
+          "type": "post-grid",
+          "versions": [
+            1
+          ],
+          "outcome": "ok"
+        },
+        {
+          "key": "slow",
+          "type": "post-grid",
+          "versions": [
+            1
+          ],
+          "outcome": "ok",
+          "startDelayMs": 300
+        }
+      ],
+      "capabilities": {
+        "post-grid": [
+          1
+        ],
+        "profile-header": [
+          1
+        ]
+      },
+      "expect": {
+        "status": 200,
+        "resolved": [
+          "header",
+          "quick"
+        ],
+        "pending": [
+          "slow"
+        ],
+        "body": {
+          "protocol": 0,
+          "screen": "__conformance",
+          "islands": [
+            {
+              "key": "header",
+              "status": "ok",
+              "props": {
+                "v": 1
+              }
+            },
+            {
+              "key": "quick",
+              "status": "ok",
+              "props": {
+                "v": 1
+              }
+            },
+            {
+              "key": "slow",
+              "status": "ok",
+              "props": {
+                "v": 1
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a pending island that fails arrives with its error",
+      "placements": [
+        {
+          "key": "header",
+          "type": "profile-header",
+          "versions": [
+            1
+          ],
+          "outcome": "ok",
+          "required": true
+        },
+        {
+          "key": "posts",
+          "type": "post-grid",
+          "versions": [
+            1
+          ],
+          "outcome": "error",
+          "startDelayMs": 300
+        }
+      ],
+      "capabilities": {
+        "post-grid": [
+          1
+        ],
+        "profile-header": [
+          1
+        ]
+      },
+      "expect": {
+        "status": 200,
+        "resolved": [
+          "header"
+        ],
+        "pending": [
+          "posts"
+        ],
+        "body": {
+          "islands": [
+            {
+              "key": "header",
+              "status": "ok"
+            },
+            {
+              "key": "posts",
+              "type": "post-grid",
+              "version": 1,
+              "status": "error",
+              "error": {
+                "code": "resolve_failed"
+              },
+              "props": "$absent"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a required island is resolved in the head, however long it takes",
+      "placements": [
+        {
+          "key": "header",
+          "type": "profile-header",
+          "versions": [
+            1
+          ],
+          "outcome": "ok",
+          "required": true,
+          "startDelayMs": 200
+        },
+        {
+          "key": "posts",
+          "type": "post-grid",
+          "versions": [
+            1
+          ],
+          "outcome": "ok",
+          "startDelayMs": 600
+        }
+      ],
+      "capabilities": {
+        "post-grid": [
+          1
+        ],
+        "profile-header": [
+          1
+        ]
+      },
+      "expect": {
+        "status": 200,
+        "resolved": [
+          "header"
+        ],
+        "pending": [
+          "posts"
+        ],
+        "body": {
+          "islands": [
+            {
+              "key": "header",
+              "status": "ok"
+            },
+            {
+              "key": "posts",
+              "status": "ok"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "an island below a slow one arrives as soon as it's ready",
+      "placements": [
+        {
+          "key": "header",
+          "type": "profile-header",
+          "versions": [
+            1
+          ],
+          "outcome": "ok",
+          "required": true
+        },
+        {
+          "key": "slow",
+          "type": "post-grid",
+          "versions": [
+            1
+          ],
+          "outcome": "ok",
+          "startDelayMs": 500
+        },
+        {
+          "key": "quick",
+          "type": "post-grid",
+          "versions": [
+            1
+          ],
+          "outcome": "ok",
+          "startDelayMs": 150
+        }
+      ],
+      "capabilities": {
+        "post-grid": [
+          1
+        ],
+        "profile-header": [
+          1
+        ]
+      },
+      "expect": {
+        "status": 200,
+        "pending": [
+          "slow",
+          "quick"
+        ],
+        "arrival": [
+          "quick",
+          "slow"
+        ],
+        "body": {
+          "islands": [
+            {
+              "key": "header",
+              "status": "ok"
+            },
+            {
+              "key": "slow",
+              "status": "ok"
+            },
+            {
+              "key": "quick",
+              "status": "ok"
             }
           ]
         }

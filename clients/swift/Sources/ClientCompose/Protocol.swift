@@ -55,7 +55,8 @@ public struct IslandEntry: Decodable, Sendable {
     public let key: String
     public let type: String
     public let version: Int
-    /// Kept as a string so future statuses decode (and are then skipped, spec §4.4).
+    /// Kept as a string so future statuses decode (and are then skipped, spec §4.4). `pending` is
+    /// an island still on its way in a stream's head (spec §4.6).
     public let status: String
     public let props: JSONValue?
     public let error: IslandError?

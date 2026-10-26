@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://client-compose.dev/schema/v0/screen-stream-line.json",
+  "title": "Screen stream line",
+  "description": "One line of a screen's stream (spec §4.6): the head, first and once; an island line for each island pending in the head; then the end.",
+  "type": "object",
+  "required": [
+    "kind"
+  ],
+  "oneOf": [
+    {
+      "description": "The head: the screen response, its islands resolved or pending.",
+      "properties": {
+        "kind": {
+          "const": "head"
+        },
+        "protocol": {
+          "const": 0
+        },
+        "screen": {
+          "type": "string"
+        },
+        "islands": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "$ref": "screen-response.json#/$defs/island"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "key",
+                  "type",
+                  "version",
+                  "status"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "key": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string"
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "status": {
+                    "const": "pending"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "meta": {
+          "$ref": "screen-response.json#/properties/meta"
+        },
+        "cache": {
+          "$ref": "screen-response.json#/properties/cache"
+        }
+      },
+      "required": [
+        "protocol",
+        "screen",
+        "islands"
+      ]
+    },
+    {
+      "description": "A pending island, resolved.",
+      "required": [
+        "island"
+      ],
+      "properties": {
+        "kind": {
+          "const": "island"
+        },
+        "island": {
+          "$ref": "screen-response.json#/$defs/island"
+        }
+      }
+    },
+    {
+      "description": "The end: the screen is complete.",
+      "properties": {
+        "kind": {
+          "const": "end"
+        }
+      }
+    }
+  ]
+}

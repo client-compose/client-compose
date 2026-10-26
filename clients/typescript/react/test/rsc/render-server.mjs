@@ -36,6 +36,47 @@ const response = {
 
 // "preloaded": the page passes a response it already loaded, so the component must not fetch.
 const preloaded = process.argv[2] === "preloaded";
+// "streaming": the counter is pending in the stream's head, and arrives a moment later.
+// "out-of-order": the header is pending too, and arrives after the counter, below it.
+const outOfOrder = process.argv[2] === "out-of-order";
+const streaming = process.argv[2] === "streaming" || outOfOrder;
+const late = outOfOrder ? ["counter", "header"] : ["counter"];
+
+/** The composer's stream: the head at once, then each late island 30ms apart, and the end. */
+function streamed() {
+  const encoder = new TextEncoder();
+  const line = (l) => encoder.encode(`${JSON.stringify(l)}\n`);
+  const islands = streaming
+    ? response.islands.map((e) =>
+        late.includes(e.key)
+          ? {
+              key: e.key,
+              type: e.type,
+              version: e.version,
+              status: "pending",
+            }
+          : e,
+      )
+    : response.islands;
+  return new ReadableStream({
+    async start(controller) {
+      controller.enqueue(
+        line({
+          kind: "head",
+          ...response,
+          islands,
+        }),
+      );
+      for (const key of streaming ? late : []) {
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        const island = response.islands.find((e) => e.key === key);
+        controller.enqueue(line({ kind: "island", island }));
+      }
+      controller.enqueue(line({ kind: "end" }));
+      controller.close();
+    },
+  });
+}
 
 const config = {
   registry,
@@ -45,7 +86,7 @@ const config = {
     ? async () => {
         throw new Error("fetched although a response was passed in");
       }
-    : async () => Response.json(response),
+    : async () => new Response(streamed(), { headers: { "content-type": "application/jsonl" } }),
 };
 
 // Client references are "<file url>#<export>"; this test loads modules by URL, so map them as-is.

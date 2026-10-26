@@ -108,6 +108,9 @@ Clients SHOULD send identity/auth via transport headers, not the body.
 
 ## 4. Response
 
+A screen is answered as a stream (§4.6), so a client can show its islands as each is ready. Put
+together, the stream is the screen, in this shape (`schema/screen-response.schema.json`):
+
 ```json
 {
   "protocol": 0,
@@ -151,7 +154,7 @@ All three are optional strings. Clients use what applies to them and ignore the 
 | `key`     | Unique within the screen. Stable across requests (use for diffing/analytics). |
 | `type`    | Island type. MUST be one the client declared.                              |
 | `version` | Island version. MUST be one the client declared for that type.            |
-| `status`  | `ok` or `error`.                                                           |
+| `status`  | `ok` or `error`; `pending` in a stream's head, for an island still being resolved (§4.6). |
 | `props`   | Present iff `status` is `ok`. MUST validate against the manifest.         |
 | `error`   | Present iff `status` is `error`. `{ code, retryable?, message? }`.        |
 | `next`    | Optional, only with `status: "ok"`. The island has more pages: an opaque cursor for its next one (§4.5). |
@@ -185,8 +188,12 @@ For each island the composer wants to place:
 - Render islands in array order.
 - If the client receives an island/version it didn't declare (a composer bug), it MUST
   skip it rather than crash.
-- If an island has a `status` the client doesn't recognise (e.g. a future `pending`), it
-  MUST skip it.
+- If an island has a `status` the client doesn't recognise, it MUST skip it.
+- A `pending` island (§4.6) MAY be shown as a placeholder of the client's own until its line
+  arrives, or the client MAY wait for the whole stream before showing the screen. Placeholders
+  are the client's: the protocol says nothing about how a pending island looks.
+- A client that shows a screen as it streams MUST show each island as soon as its line arrives,
+  wherever it is on the screen: never waiting for an island above it.
 - Typed clients (Swift, Kotlin, …) that fail to decode an island's props MUST skip that
   island rather than fail the screen, and SHOULD report it.
 - Props SHOULD be validated client-side in debug builds only.
@@ -262,6 +269,49 @@ Other failures are as for screens (§8.1): `bad_request`, `unsupported_protocol`
 `unauthenticated`, `forbidden`, `layout_failed`.
 
 Clients that don't page or refresh islands ignore `next` (§4.3: unknown fields are ignored).
+
+### 4.6 Streams
+
+A composer answers a screen with `200`, `Content-Type: application/jsonl`, and a stream of JSON
+objects, one per line, each ending in a newline (`schema/screen-stream-line.schema.json`). Each
+line's `kind` says what it is:
+
+```jsonl
+{"kind":"head","protocol":0,"screen":"recipe","meta":{"title":"Charred broccoli"},"islands":[{"key":"recipe","type":"recipe","version":1,"status":"ok","props":{…}},{"key":"more","type":"recipe-list","version":1,"status":"pending"},{"key":"comments","type":"comment-list","version":1,"status":"pending"}]}
+{"kind":"island","island":{"key":"comments","type":"comment-list","version":1,"status":"ok","props":{…},"next":"c2"}}
+{"kind":"island","island":{"key":"more","type":"recipe-list","version":1,"status":"error","error":{"code":"timeout","retryable":true}}}
+{"kind":"end"}
+```
+
+1. **`head`**, first and once: the screen response (§4), whose islands are the screen's, in
+   order, each either resolved (`ok` or `error`) or `pending`, with its key, type and version and
+   nothing else. A client can lay the whole screen out from it.
+2. **`island`**, once for each pending island, as soon as it's resolved: its entry (§4.1), as an
+   island request answers it (§4.5). Lines come in the order islands are resolved, not the order
+   they're placed: a composer MUST NOT hold one back for an island above it. Its key says where it
+   goes.
+3. **`end`**, last: the screen is complete.
+
+What can fail the whole screen is settled before the head, so a screen's status is known before
+anything is sent:
+
+- its requirements and layout, including each placement's condition, so the head's islands are
+  the screen's (§4.3: `401`, `403`, `404`, `layout_failed`);
+- its required islands, which are resolved in the head, never pending (`required_island_failed`,
+  `required_island_unsupported`);
+- its `meta` and `cache`, which are in the head.
+
+A failure before the head is answered as today: a non-2xx status with a JSON error body (§4.3).
+A client checks the status before reading lines.
+
+Islands that aren't required MAY be resolved in the head, if they're ready when it's sent, or
+pending. A screen whose islands are all ready is a head and an `end`.
+
+If a stream ends without `end` (the connection dropped), each island still pending is an error
+with code `incomplete`, `retryable: true`, as if the composer had sent it. Clients MUST ignore
+lines with a `kind` they don't recognise, and an `island` line for a key that isn't pending.
+
+Island requests (§4.5) and actions (§5) aren't streams: each answers with one JSON body.
 
 ---
 
@@ -425,8 +475,9 @@ screen with the same id whose params include every param in the reference. So
 
 ## 7. Open questions (v1 candidates)
 
-- **Deferred islands / streaming**: return fast islands first, stream slow ones
-  (NDJSON or SSE), marked `status: "pending"`.
+- **Islands that turn out not to be shown**: a placement's condition settled after a stream's head
+  (§4.6), so a screen whose conditions need slow data can send its head sooner. The island would
+  start pending, and its line could say it isn't shown.
 - **Capability hashing** to shrink requests.
 - **Per-island cache hints** vs screen-level `cache`.
 - **Analytics/experiment metadata** on each island (`experiment`, `variant`).
@@ -458,9 +509,13 @@ The mock resolver for version `n`:
 | `error`   | fails                                                  |
 | `timeout` | never resolves on its own (it MUST honour cancellation) |
 
-`required` and `timeoutMs` map to the composer's own placement options. If
-`params.placements` is not valid JSON, the screen's layout fails. The runner then
-sends each case in `conformance/composer/cases.json` and checks status codes and bodies.
+`required` and `timeoutMs` map to the composer's own placement options. A mock's `startDelayMs`
+(without `load`) delays it before it resolves or fails. If `params.placements` is not valid JSON,
+the screen's layout fails. The runner then sends each case in `conformance/composer/cases.json`
+and checks status codes and bodies. For a `200`, it reads the stream, checks it (§4.6: a head
+first, one line per pending island, `end` last), and puts it together to compare the screen; a
+case's `expect.pending` lists the keys that must be pending in the head, and `expect.resolved`
+those that must not be.
 
 The `__conformance` screen also reads three optional params:
 - `meta` (JSON) is returned as the response's `meta`.
@@ -532,8 +587,8 @@ The runner POSTs each case in `conformance/composer/action-cases.json` to
 
 ### 8.2 Client conformance (fixtures)
 
-`conformance/client/cases.json` holds registry setups, raw response JSON and the expected
-render output. Each client implementation runs them in its own unit tests, using a test
+`conformance/client/cases.json` holds registry setups, raw response streams (§4.6, as an array of
+lines) and the expected render output. Each client implementation runs them in its own unit tests, using a test
 renderer that outputs `"{type}@{version}:{props.v}"` and, when a case sets
 `renderErrors`, an error fallback that outputs `"error:{key}:{error.code}"`.
 
@@ -554,7 +609,7 @@ need the profile's user). Composer cores MUST provide a request-scoped load:
 - `work` runs under the **request's** lifetime, not the calling island's: an island timing out MUST
   NOT cancel work that other islands are waiting on. Each caller still stops waiting at its own
   timeout.
-- Work still running when the response is ready is cancelled.
+- Work still running when the stream ends is cancelled.
 - Results are never shared between requests.
 
 Cores SHOULD also offer a batch loader that combines keys requested by different islands in the same

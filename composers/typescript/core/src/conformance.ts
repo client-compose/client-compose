@@ -26,7 +26,10 @@ interface MockPlacement {
   /** Load this key through the request-scoped `load` before resolving (spec §9). */
   load?: string;
   loadDelayMs?: number;
-  /** Wait this long before loading, so the case controls which island starts a shared load. */
+  /**
+   * Wait this long before resolving or failing: so a case controls which island starts a shared
+   * load, or which islands are ready when a stream's head is sent.
+   */
   startDelayMs?: number;
   /** The island has this many pages (spec §4.5). */
   pages?: number;
@@ -69,6 +72,9 @@ export function conformanceScreen<Ctx = unknown>(): Screen<Ctx> {
           version,
           ...(p.pages !== undefined && { paged: true }),
           resolve: async ({ signal, load, cursor }) => {
+            if (p.startDelayMs) {
+              await new Promise((resolve) => setTimeout(resolve, p.startDelayMs));
+            }
             if (p.outcome === "error") {
               throw new Error("mock failure");
             }
@@ -86,9 +92,6 @@ export function conformanceScreen<Ctx = unknown>(): Screen<Ctx> {
               return { v: version };
             }
             const key = p.load;
-            if (p.startDelayMs) {
-              await new Promise((resolve) => setTimeout(resolve, p.startDelayMs));
-            }
             await load(key, (shared) => {
               calls.set(key, (calls.get(key) ?? 0) + 1);
               return new Promise<void>((resolve, reject) => {

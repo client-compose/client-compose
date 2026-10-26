@@ -11,12 +11,27 @@ export interface ComposerCase {
     timeoutMs?: number;
     /** The island has this many pages (spec §4.5). */
     pages?: number;
+    /** It waits this long before it resolves or fails. */
+    startDelayMs?: number;
   }[];
   capabilities: Record<string, number[]>;
   request?: Record<string, unknown>;
   path?: string;
   rawBody?: string;
-  expect: { status: number; body?: unknown };
+  expect: ScreenExpectation;
+}
+
+/**
+ * What a screen case expects. For a 200, `body` is matched against the stream put together, and
+ * `pending` and `resolved` list keys that must be pending, or not, in its head (spec §4.6).
+ */
+export interface ScreenExpectation {
+  status: number;
+  body?: unknown;
+  pending?: string[];
+  resolved?: string[];
+  /** Keys of island lines that must arrive in this order: each as it's resolved, wherever it is. */
+  arrival?: string[];
 }
 
 /** An island request (spec §4.5) for the `__conformance` screen laid out with `placements`. */
@@ -53,7 +68,8 @@ export interface ClientCase {
   registered: Record<string, number[]>;
   expectCapabilities: Record<string, number[]>;
   renderErrors?: boolean;
-  response: unknown;
+  /** The lines of a screen's stream (spec §4.6), each to be sent as one line of JSON. */
+  stream: unknown[];
   expectRendered: string[];
   expectSkipped: string[];
 }
@@ -146,12 +162,167 @@ export async function runComposerCase(
     ...c.request,
   };
   const path = c.path ?? String(request.screen);
-  return post(
-    fetchImpl,
-    `${baseUrl.replace(/\/$/, "")}/screens/${encodeURIComponent(path)}`,
-    c.rawBody ?? JSON.stringify(request),
-    c,
+  try {
+    const res = await fetchImpl(
+      `${baseUrl.replace(/\/$/, "")}/screens/${encodeURIComponent(path)}`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: c.rawBody ?? JSON.stringify(request),
+      },
+    );
+    const text = await res.text();
+    if (res.status !== 200) {
+      return checkResponse(c, res.status, text);
+    }
+    const contentType = res.headers.get("content-type") ?? "";
+    if (!contentType.startsWith("application/jsonl")) {
+      return failed(c, `expected content-type application/jsonl, got ${contentType}`);
+    }
+    const stream = readStream(text);
+    if (typeof stream === "string") {
+      return failed(c, `${stream}\n  got: ${text}`);
+    }
+    const mismatch =
+      headMismatch(c.expect, stream.head) ??
+      arrivalMismatch(c.expect, stream.arrived) ??
+      bodyMismatch(c.expect, stream.screen);
+    return mismatch ? failed(c, `${mismatch}\n  got: ${text}`) : { name: c.name, passed: true };
+  } catch (err) {
+    return failed(c, `request failed: ${String(err)}`);
+  }
+}
+
+const failed = (c: { name: string }, message: string): CaseResult => ({
+  name: c.name,
+  passed: false,
+  message,
+});
+
+/** A screen's stream (spec §4.6): its head, the screen put together, and the order islands came in. */
+export interface ReadStream {
+  head: Record<string, unknown>;
+  screen: Record<string, unknown>;
+  /** The keys of the island lines, in the order they came. */
+  arrived: string[];
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const keyOf = (entry: unknown): unknown => (isRecord(entry) ? entry.key : undefined);
+
+/**
+ * Reads a stream strictly, as the suite checks it: a head first, one island line for each pending
+ * island and none other, then an end, and nothing after. Returns what's wrong, if anything.
+ */
+export function readStream(text: string): ReadStream | string {
+  const lines = parseLines(text);
+  if (typeof lines === "string") {
+    return lines;
+  }
+  const framed = frame(lines);
+  if (typeof framed === "string") {
+    return framed;
+  }
+  const filled = fillIn(framed.head, framed.islandLines);
+  if (typeof filled === "string") {
+    return filled;
+  }
+  const { kind: _kind, ...head } = framed.head;
+  return {
+    head,
+    screen: { ...head, islands: filled.islands },
+    arrived: filled.arrived,
+  };
+}
+
+/** Each line of the stream as JSON, or what's wrong with the first that isn't. */
+function parseLines(text: string): unknown[] | string {
+  const parsed: unknown[] = [];
+  for (const line of text.split("\n").filter((l) => l !== "")) {
+    try {
+      parsed.push(JSON.parse(line));
+    } catch {
+      return `a line isn't JSON: ${line}`;
+    }
+  }
+  return parsed;
+}
+
+interface Framed {
+  head: Record<string, unknown> & { islands: unknown[] };
+  islandLines: unknown[];
+}
+
+/** The stream's head, first, and its end, last; what's between should be island lines. */
+function frame(lines: unknown[]): Framed | string {
+  const head = lines[0];
+  if (!isRecord(head) || head.kind !== "head" || !Array.isArray(head.islands)) {
+    return "the first line isn't a head";
+  }
+  const end = lines.at(-1);
+  if (lines.length < 2 || !isRecord(end) || end.kind !== "end") {
+    return "the last line isn't an end";
+  }
+  return { head: { ...head, islands: head.islands }, islandLines: lines.slice(1, -1) };
+}
+
+/**
+ * The head's islands with each island line in its pending island's place: one line for every
+ * pending island, and none for any other.
+ */
+function fillIn(
+  head: Framed["head"],
+  islandLines: unknown[],
+): { islands: unknown[]; arrived: string[] } | string {
+  const islands = [...head.islands];
+  const pending = new Set(
+    islands.filter((e) => isRecord(e) && e.status === "pending").map((e) => keyOf(e)),
   );
+  const arrived: string[] = [];
+  for (const line of islandLines) {
+    if (!isRecord(line) || line.kind !== "island" || !isRecord(line.island)) {
+      return `expected an island line, got ${JSON.stringify(line)}`;
+    }
+    const key = line.island.key;
+    if (typeof key !== "string" || !pending.delete(key)) {
+      return `an island line for ${JSON.stringify(key)}, which isn't pending`;
+    }
+    islands[islands.findIndex((e) => keyOf(e) === key)] = line.island;
+    arrived.push(key);
+  }
+  if (pending.size > 0) {
+    return `no line for pending ${JSON.stringify([...pending])}`;
+  }
+  return { islands, arrived };
+}
+
+function headMismatch(
+  expect: ScreenExpectation,
+  head: Record<string, unknown>,
+): string | undefined {
+  const islands = Array.isArray(head.islands) ? head.islands : [];
+  const statusOf = (key: string) =>
+    islands.find((e) => keyOf(e) === key && isRecord(e) && "status" in e)?.status;
+  const notPending = (expect.pending ?? []).find((key) => statusOf(key) !== "pending");
+  if (notPending !== undefined) {
+    return `head: expected ${notPending} to be pending`;
+  }
+  const isPending = (expect.resolved ?? []).find((key) => statusOf(key) === "pending");
+  return isPending === undefined ? undefined : `head: expected ${isPending} to be resolved`;
+}
+
+function arrivalMismatch(expect: ScreenExpectation, arrived: string[]): string | undefined {
+  const order = arrived.filter((key) => expect.arrival?.includes(key));
+  const expected = expect.arrival ?? [];
+  return order.join() === expected.join()
+    ? undefined
+    : `expected islands to arrive in the order ${JSON.stringify(expected)}, got ${JSON.stringify(order)}`;
+}
+
+function bodyMismatch(expect: ScreenExpectation, body: unknown): string | undefined {
+  return expect.body === undefined ? undefined : subsetMismatch(expect.body, body, "body");
 }
 
 /** Sends one island case (spec §4.5). `fetchImpl` as for runComposerCase. */
@@ -203,11 +374,13 @@ export async function runActionCase(
   );
 }
 
+type JsonCase = { name: string; expect: { status: number; body?: unknown } };
+
 async function post(
   fetchImpl: typeof fetch,
   url: string,
   body: string,
-  c: { name: string; expect: { status: number; body?: unknown } },
+  c: JsonCase,
 ): Promise<CaseResult> {
   try {
     const res = await fetchImpl(url, {
@@ -215,42 +388,28 @@ async function post(
       headers: { "content-type": "application/json" },
       body,
     });
-    const text = await res.text();
-    if (res.status !== c.expect.status) {
-      return {
-        name: c.name,
-        passed: false,
-        message: `expected status ${c.expect.status}, got ${res.status}: ${text}`,
-      };
-    }
-    if (c.expect.body !== undefined) {
-      let body: unknown;
-      try {
-        body = JSON.parse(text);
-      } catch {
-        return {
-          name: c.name,
-          passed: false,
-          message: `response is not JSON: ${text}`,
-        };
-      }
-      const mismatch = subsetMismatch(c.expect.body, body, "body");
-      if (mismatch) {
-        return {
-          name: c.name,
-          passed: false,
-          message: `${mismatch}\n  got: ${text}`,
-        };
-      }
-    }
-    return { name: c.name, passed: true };
+    return checkResponse(c, res.status, await res.text());
   } catch (err) {
-    return {
-      name: c.name,
-      passed: false,
-      message: `request failed: ${String(err)}`,
-    };
+    return failed(c, `request failed: ${String(err)}`);
   }
+}
+
+/** Checks a JSON response's status and body. */
+function checkResponse(c: JsonCase, status: number, text: string): CaseResult {
+  if (status !== c.expect.status) {
+    return failed(c, `expected status ${c.expect.status}, got ${status}: ${text}`);
+  }
+  if (c.expect.body === undefined) {
+    return { name: c.name, passed: true };
+  }
+  let body: unknown;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    return failed(c, `response is not JSON: ${text}`);
+  }
+  const mismatch = subsetMismatch(c.expect.body, body, "body");
+  return mismatch ? failed(c, `${mismatch}\n  got: ${text}`) : { name: c.name, passed: true };
 }
 
 /**

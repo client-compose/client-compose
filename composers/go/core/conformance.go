@@ -97,6 +97,11 @@ func ConformanceScreen() Screen {
 						continue
 					}
 					p.Versions = append(p.Versions, NewIsland(m.Type, v, func(ctx context.Context, _ Request) (map[string]int, error) {
+						select {
+						case <-time.After(time.Duration(m.StartDelayMs) * time.Millisecond):
+						case <-ctx.Done():
+							return nil, ctx.Err()
+						}
 						switch m.Outcome {
 						case "error":
 							return nil, errors.New("mock failure")
@@ -106,11 +111,6 @@ func ConformanceScreen() Screen {
 						}
 						if m.Load == "" {
 							return map[string]int{"v": v}, nil
-						}
-						select {
-						case <-time.After(time.Duration(m.StartDelayMs) * time.Millisecond):
-						case <-ctx.Done():
-							return nil, ctx.Err()
 						}
 						_, err := Load(ctx, m.Load, func(shared context.Context) (struct{}, error) {
 							mu.Lock()

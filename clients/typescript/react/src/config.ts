@@ -34,6 +34,13 @@ export interface ScreenConfig {
   onSkipped?: (entry: IslandEntry, reason: SkipReason) => void;
   /** An island threw while rendering. The island is hidden; the rest of the screen stays. */
   onRenderError?: (key: string, error: unknown) => void;
+  /**
+   * Show each screen as its stream arrives (spec §4.6): its islands once its head does, with a
+   * placeholder (or nothing) for each still pending, filled in as they come. Set false to wait for
+   * the whole screen and show it at once. `useScreen` and `<ComposedScreen>` can say otherwise per
+   * screen. Default: true.
+   */
+  progressive?: boolean;
 }
 
 export interface ClientComposeConfig extends ScreenConfig {

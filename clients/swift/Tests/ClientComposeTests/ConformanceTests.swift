@@ -13,7 +13,8 @@ final class ConformanceTests: XCTestCase {
         let registered: [String: [Int]]
         let expectCapabilities: [String: [Int]]
         let renderErrors: Bool?
-        let response: JSONValue
+        /// The lines of a screen's stream (spec §4.6).
+        let stream: [JSONValue]
         let expectRendered: [String]
         let expectSkipped: [String]
     }
@@ -39,7 +40,8 @@ final class ConformanceTests: XCTestCase {
             }
             XCTAssertEqual(registry.capabilities, c.expectCapabilities, c.name)
 
-            let response = try c.response.decode(ScreenResponse.self)
+            let body = try c.stream.map { try String(decoding: JSONEncoder().encode($0), as: UTF8.self) }.joined(separator: "\n")
+            let response = try ScreenStream.read(Data(body.utf8))
             var skipped: [String] = []
             let planned = registry.plan(
                 response,

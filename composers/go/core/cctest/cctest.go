@@ -97,8 +97,11 @@ type Screen struct {
 	Params Params
 	// Status is the HTTP status.
 	Status int
-	// Response is the screen, when Status is 200.
+	// Response is the screen, when Status is 200, with every island in place.
 	Response cc.ScreenResponse
+	// Head is the stream's head (spec §4.6): the screen as it was first sent, its islands resolved
+	// or pending.
+	Head cc.ScreenResponse
 	// Error is the protocol error code otherwise, e.g. "not_found".
 	Error string
 }
@@ -130,11 +133,15 @@ func (a *App) Screen(screen string, params Params, opts ...RequestOption) Screen
 	body := cc.ScreenRequest{Protocol: &protocol, Screen: screen, Params: params, Client: &client, Islands: a.islands}
 	status, raw := a.post("/screens/"+screen, body, opts)
 	out := Screen{Params: params, Status: status}
-	if status == http.StatusOK {
-		decode(a.t, raw, &out.Response)
-	} else {
+	if status != http.StatusOK {
 		out.Error = errorCode(a.t, raw)
+		return out
 	}
+	head, composed, err := cc.ReadScreen(bytes.NewReader(raw))
+	if err != nil {
+		a.t.Fatalf("cctest: screen %q: %v", screen, err)
+	}
+	out.Head, out.Response = head, composed
 	return out
 }
 

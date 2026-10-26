@@ -37,8 +37,16 @@ export function createRequestListener<Ctx>(
       res.writeHead(404).end();
       return;
     }
-    res
-      .writeHead(result.status, { "content-type": "application/json" })
-      .end(JSON.stringify(result.body));
+    res.writeHead(result.status, { "content-type": result.contentType });
+    if (typeof result.body === "string") {
+      res.end(result.body);
+      return;
+    }
+    // A screen's stream: each line is sent as it comes (spec §4.6).
+    res.flushHeaders();
+    for await (const line of result.body) {
+      res.write(line);
+    }
+    res.end();
   };
 }

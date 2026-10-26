@@ -23,6 +23,7 @@ import {
   type Placement,
   type Screen,
 } from "./screens.ts";
+import { inOrderResolved, isScreenStream, streamLines } from "./stream.ts";
 
 export interface ComposerConfig<Ctx, Req = Request> {
   screens?: Screen<Ctx>[];
@@ -50,10 +51,14 @@ export interface ComposerConfig<Ctx, Req = Request> {
   defaultTimeoutMs?: number;
 }
 
-/** What `handle` answers: a status and a JSON body. */
+/**
+ * What `handle` answers: a status, and a body of that content type. A screen's is its stream, as
+ * JSON lines (`application/jsonl`, spec §4.6), to send as each arrives; everything else is JSON.
+ */
 export interface HandleResult {
   status: number;
-  body: unknown;
+  contentType: "application/json" | "application/jsonl";
+  body: string | AsyncIterable<string>;
 }
 
 export interface Composer<Ctx, Req = Request> {
@@ -71,7 +76,10 @@ export interface Composer<Ctx, Req = Request> {
    * request (for `context`). Returns undefined for any other path.
    */
   handle(path: string, body: string, request: Req): Promise<HandleResult | undefined>;
-  /** Compose a screen in-process, with a context you provide. Tests use the testing kit instead. */
+  /**
+   * Compose a screen in-process, with a context you provide: its stream, or its error. `collect`
+   * puts a stream together. Tests use the testing kit instead.
+   */
   compose(req: ScreenRequest, ctx: Ctx): Promise<ComposeResult>;
   /**
    * Resolve one island of a screen in-process (spec §4.5): its next page, for a request with a
@@ -265,13 +273,20 @@ export function createComposer<Ctx = undefined, Req = Request>(
     req: ScreenRequest,
     ctx: Ctx,
   ): Promise<ComposeResult> {
-    // Shared loads live as long as this request; whatever is still running when it's done is cancelled.
+    // Shared loads live as long as this request: until its last island is resolved, or it fails.
+    // Whatever is still running then is cancelled.
     const request = new AbortController();
     const scope = new RequestScope(request.signal);
+    const end = () => request.abort();
     try {
-      return await composeIn(screen, req, ctx, scope);
-    } finally {
-      request.abort();
+      const res = await composeIn(screen, req, ctx, scope, end);
+      if (res.status !== 200) {
+        end();
+      }
+      return res;
+    } catch (err) {
+      end();
+      throw err;
     }
   }
 
@@ -280,6 +295,7 @@ export function createComposer<Ctx = undefined, Req = Request>(
     req: ScreenRequest,
     ctx: Ctx,
     scope: RequestScope,
+    end: () => void,
   ): Promise<ComposeResult> {
     const params = req.params ?? {};
     const load = scope.load.bind(scope);
@@ -333,28 +349,51 @@ export function createComposer<Ctx = undefined, Req = Request>(
       return fail(502, "required_island_unsupported", unplaceable.p.key);
     }
 
-    const entries = await Promise.all(
-      negotiated
-        .filter(
-          (n): n is { p: Placement<Ctx>; island: Island<Ctx, unknown> } => n.island !== undefined,
-        )
-        .map(({ p, island }) => resolveEntry(screen, p, island, lc, scope)),
+    // Every island resolves at once; each records its entry when it's done.
+    const placed = negotiated.filter(
+      (n): n is { p: Placement<Ctx>; island: Island<Ctx, unknown> } => n.island !== undefined,
     );
-    const failedRequired = entries.find((e) => e.entry.status === "error" && e.required);
+    const done: (IslandEntry | undefined)[] = placed.map(() => undefined);
+    const resolving = placed.map(({ p, island }, i) =>
+      resolveEntry(screen, p, island, lc, scope).then(({ entry }) => {
+        done[i] = entry;
+        return entry;
+      }),
+    );
+    void Promise.all(resolving).then(end);
+
+    // The head waits for the required islands (spec §4.6): one failing fails the screen.
+    const required = await Promise.all(resolving.filter((_, i) => placed[i]?.p.required));
+    const failedRequired = required.find((e) => e.status === "error");
     if (failedRequired) {
-      return fail(502, "required_island_failed", failedRequired.entry.key);
+      return fail(502, "required_island_failed", failedRequired.key);
     }
     const screenMeta = await meta;
 
+    // It takes the other islands that are ready by then; the rest follow.
+    const islands = placed.map(({ p, island }, i) => {
+      return (
+        done[i] ?? {
+          key: p.key,
+          type: island.type,
+          version: island.version,
+          status: "pending" as const,
+        }
+      );
+    });
+    const pending = resolving.filter((_, i) => done[i] === undefined);
     return {
       status: 200,
       body: {
-        protocol: PROTOCOL_VERSION,
-        screen: screen.id,
-        islands: entries.map((e) => e.entry),
-        ...(screenMeta &&
-          Object.values(screenMeta).some((v) => v !== undefined) && { meta: screenMeta }),
-        ...(screen.cache && { cache: { maxAge: screen.cache.maxAge } }),
+        head: {
+          protocol: PROTOCOL_VERSION,
+          screen: screen.id,
+          islands,
+          ...(screenMeta &&
+            Object.values(screenMeta).some((v) => v !== undefined) && { meta: screenMeta }),
+          ...(screen.cache && { cache: { maxAge: screen.cache.maxAge } }),
+        },
+        islands: inOrderResolved(pending),
       },
     };
   }
@@ -442,7 +481,7 @@ export function createComposer<Ctx = undefined, Req = Request>(
   async function contextFor(
     request: Req,
     kind: Route["kind"],
-  ): Promise<{ ctx: Ctx } | { res: HandleResult }> {
+  ): Promise<{ ctx: Ctx } | { res: { status: number; body: unknown } }> {
     try {
       // Without a context function, Ctx is undefined (createComposer's default): TypeScript can't
       // tie the two together.
@@ -476,19 +515,19 @@ export function createComposer<Ctx = undefined, Req = Request>(
     }
     const context = await contextFor(request, route.kind);
     if ("res" in context) {
-      return context.res;
+      return answer(context.res);
     }
     const parsed = parseJson(body);
     if (!parsed.ok) {
-      return fail(400, "bad_request", "Body is not valid JSON");
+      return answer(fail(400, "bad_request", "Body is not valid JSON"));
     }
     switch (route.kind) {
       case "screens":
-        return handleScreen(route.name, parsed.value, context.ctx);
+        return answer(await handleScreen(route.name, parsed.value, context.ctx));
       case "islands":
-        return handleIsland(route.name, route.key, parsed.value, context.ctx);
+        return answer(await handleIsland(route.name, route.key, parsed.value, context.ctx));
       case "actions":
-        return handleAction(route.name, parsed.value, context.ctx);
+        return answer(await handleAction(route.name, parsed.value, context.ctx));
     }
   }
 
@@ -497,7 +536,7 @@ export function createComposer<Ctx = undefined, Req = Request>(
     screen: string,
     body: unknown,
     ctx: Ctx,
-  ): Promise<HandleResult> | HandleResult {
+  ): Promise<ComposeResult> | ComposeResult {
     if (!isScreenRequestShape(body)) {
       return fail(400, "bad_request", "Body is not a screen request");
     }
@@ -516,7 +555,7 @@ export function createComposer<Ctx = undefined, Req = Request>(
     key: string,
     body: unknown,
     ctx: Ctx,
-  ): Promise<HandleResult> | HandleResult {
+  ): Promise<IslandResult> | IslandResult {
     if (!isIslandRequestShape(body)) {
       return fail(400, "bad_request", "Body is not an island request");
     }
@@ -534,7 +573,7 @@ export function createComposer<Ctx = undefined, Req = Request>(
     action: string,
     body: unknown,
     ctx: Ctx,
-  ): Promise<HandleResult> | HandleResult {
+  ): Promise<PerformResult> | PerformResult {
     if (!isActionRequestShape(body)) {
       return fail(400, "bad_request", "Body is not an action request");
     }
@@ -561,7 +600,8 @@ export function createComposer<Ctx = undefined, Req = Request>(
     if (!res) {
       return new Response(null, { status: 404 });
     }
-    return json(res.status, res.body);
+    const body = typeof res.body === "string" ? res.body : encoded(res.body);
+    return new Response(body, { status: res.status, headers: { "content-type": res.contentType } });
   }
 
   function islands(): Capabilities {
@@ -594,8 +634,40 @@ export function createComposer<Ctx = undefined, Req = Request>(
   };
 }
 
-const json = (status: number, body: unknown) =>
-  new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+/** A result as `handle` answers it: a screen's stream as JSON lines, anything else as JSON. */
+function answer(res: { status: number; body: unknown }): HandleResult {
+  if (res.status === 200 && isScreenStream(res.body)) {
+    return {
+      status: 200,
+      contentType: "application/jsonl",
+      body: streamLines(res.body),
+    };
+  }
+  return {
+    status: res.status,
+    contentType: "application/json",
+    body: JSON.stringify(res.body),
+  };
+}
+
+/** Lines as a byte stream, for a fetch Response. */
+function encoded(lines: AsyncIterable<string>): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  const iterator = lines[Symbol.asyncIterator]();
+  return new ReadableStream({
+    async pull(controller) {
+      const next = await iterator.next();
+      if (next.done) {
+        controller.close();
+      } else {
+        controller.enqueue(encoder.encode(next.value));
+      }
+    },
+    async cancel() {
+      await iterator.return?.();
+    },
+  });
+}
 
 /** A composer route: a screen, one island of a screen (with its key), or an action. */
 export type Route =

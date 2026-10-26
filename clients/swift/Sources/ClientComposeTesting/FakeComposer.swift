@@ -100,6 +100,10 @@ public final class FakeComposer: Transport, @unchecked Sendable {
             }) else { throw Unhandled(path: path) }
             response = try handler(request)
         }
+        if let lines = response.stream {
+            let text = try lines.map { try String(decoding: JSONEncoder().encode($0), as: UTF8.self) + "\n" }.joined()
+            return TransportResponse(status: response.status, body: Data(text.utf8))
+        }
         return TransportResponse(status: response.status, body: try JSONEncoder().encode(response.body))
     }
 
@@ -114,22 +118,26 @@ public final class FakeComposer: Transport, @unchecked Sendable {
 public struct FakeResponse: Sendable {
     public let status: Int
     public let body: JSONValue
+    /// A screen's stream (spec §4.6), as its lines, sent in place of `body`.
+    public let stream: [JSONValue]?
 
-    public init(status: Int, body: JSONValue) {
+    public init(status: Int, body: JSONValue, stream: [JSONValue]? = nil) {
         self.status = status
         self.body = body
+        self.stream = stream
     }
 
-    /// A screen.
+    /// A screen, all at once: its stream's head with every island, then its end (spec §4.6).
     public static func screen(_ id: String, _ islands: [FakeIsland], title: String? = nil, cacheMaxAge: Int? = nil) -> FakeResponse {
         var body: [String: JSONValue] = [
+            "kind": .string("head"),
             "protocol": .int(ClientCompose.protocolVersion),
             "screen": .string(id),
             "islands": .array(islands.map(\.json)),
         ]
         if let title { body["meta"] = .object(["title": .string(title)]) }
         if let cacheMaxAge { body["cache"] = .object(["maxAge": .int(cacheMaxAge)]) }
-        return FakeResponse(status: 200, body: .object(body))
+        return FakeResponse(status: 200, body: .null, stream: [.object(body), .object(["kind": .string("end")])])
     }
 
     /// A failed screen or action request, e.g. `.failure(404, "not_found")`.

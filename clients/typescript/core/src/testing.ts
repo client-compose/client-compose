@@ -20,14 +20,20 @@ import {
   type IslandDescriptor,
   type IslandEntry,
   type IslandError,
+  type PendingIsland,
   PROTOCOL_VERSION,
   type ScreenMeta,
 } from "@client-compose/protocol";
 
-/** A response for the fake composer to send. */
+/**
+ * A response for the fake composer to send: a JSON body, or a screen's stream (spec §4.6), as
+ * lines that come when they're given.
+ */
 export interface FakeResponse {
   status: number;
-  body: unknown;
+  body?: unknown;
+  /** Opens the stream's body, for each request answered with it. */
+  stream?: () => ReadableStream<Uint8Array>;
 }
 
 /** A request the fake composer received. */
@@ -203,6 +209,12 @@ function asActionRequest(request: RecordedRequest): RecordedActionRequest | unde
 }
 
 function respond(response: FakeResponse): Response {
+  if (response.stream) {
+    return new Response(response.stream(), {
+      status: response.status,
+      headers: { "content-type": "application/jsonl" },
+    });
+  }
   return new Response(JSON.stringify(response.body), {
     status: response.status,
     headers: { "content-type": "application/json" },
@@ -312,21 +324,115 @@ export function islandError(
   };
 }
 
-/** A screen response. */
+/** A screen, all of it at once: its stream's head with every island, then its end (spec §4.6). */
 export function screen(
   id: string,
   islands: IslandEntry<unknown>[],
   meta?: ScreenMeta,
 ): FakeResponse {
+  const head = {
+    kind: "head",
+    protocol: PROTOCOL_VERSION,
+    screen: id,
+    islands,
+    ...(meta && { meta }),
+  };
   return {
     status: 200,
-    body: {
-      protocol: PROTOCOL_VERSION,
-      screen: id,
-      islands,
-      ...(meta && { meta }),
-    },
+    stream: () => linesStream([head, { kind: "end" }]),
   };
+}
+
+/** An island still being resolved, in a streamed screen's head (spec §4.6). */
+export function pending(key: string, descriptor: IslandDescriptor<unknown>): PendingIsland {
+  return {
+    key,
+    type: descriptor.type,
+    version: descriptor.version,
+    status: "pending",
+  };
+}
+
+/** A streamed screen whose lines a test sends, so it controls when each island arrives. */
+export interface StreamedScreen extends FakeResponse {
+  /** Sends a pending island's entry. */
+  send(entry: IslandEntry<unknown>): void;
+  /** Sends the end line. */
+  end(): void;
+  /** Ends the stream without its end line, as a dropped connection would. */
+  cut(): void;
+}
+
+/**
+ * A screen whose head is sent at once, with its islands resolved or `pending(…)`, and whose other
+ * lines are sent when the test says (spec §4.6). Answer one request with it.
+ *
+ *     const results = streamedScreen("search", [island("box", BoxV1, {}), pending("results", ResultsV1)]);
+ *     // render, check the placeholder, then:
+ *     results.send(island("results", ResultsV1, { items: [] }));
+ *     results.end();
+ */
+export function streamedScreen(
+  id: string,
+  islands: (IslandEntry<unknown> | PendingIsland)[],
+  meta?: ScreenMeta,
+): StreamedScreen {
+  const encoder = new TextEncoder();
+  const queued: string[] = [];
+  let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
+  let closed = false;
+  const write = (line: unknown) => {
+    const text = `${JSON.stringify(line)}\n`;
+    if (controller) {
+      controller.enqueue(encoder.encode(text));
+    } else {
+      queued.push(text);
+    }
+  };
+  const close = () => {
+    closed = true;
+    controller?.close();
+  };
+  write({
+    kind: "head",
+    protocol: PROTOCOL_VERSION,
+    screen: id,
+    islands,
+    ...(meta && { meta }),
+  });
+  return {
+    status: 200,
+    stream: () =>
+      new ReadableStream<Uint8Array>({
+        start(c) {
+          controller = c;
+          for (const text of queued.splice(0)) {
+            c.enqueue(encoder.encode(text));
+          }
+          if (closed) {
+            c.close();
+          }
+        },
+      }),
+    send: (entry) => write({ kind: "island", island: entry }),
+    end: () => {
+      write({ kind: "end" });
+      close();
+    },
+    cut: close,
+  };
+}
+
+function linesStream(lines: unknown[]): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  return new ReadableStream({
+    start(controller) {
+      for (const line of lines) {
+        controller.enqueue(encoder.encode(`${JSON.stringify(line)}\n`));
+      }
+      controller.close();
+    },
+  });
 }
 
 /** An island response (spec §4.5): a page of one island, or the island resolved again. */

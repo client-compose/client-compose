@@ -242,10 +242,26 @@ const composer = createComposer<Ctx>({
   failure.
 - In tests, `memoryIdempotencyStore()` from `@client-compose/composer/testing` is an in-memory store.
 
+## Streaming
+
+Every screen is answered as a stream (spec §4.6), so apps can show it as it arrives. The composer
+sends its head once everything that could fail the whole screen is settled: its requirements and
+layout (including each `when`), its `required` islands and its `meta`. Islands not ready by then are
+`pending` in the head, and follow, each on its own line, as they're resolved. Then the stream ends.
+
+So which islands are worth marking `required`, and what conditions cost, now decide how soon a screen
+shows: a required island holds back the head, and so does a `when` that waits on slow data. Shared
+loads live until the stream ends.
+
+`composer.fetch` and the adapters send each line as it's ready. In process, a successful
+`composer.compose(req, ctx)` result's `body` is a `ScreenStream` (its `head`, and the `islands` still
+to come, as an async iterable); `collect(stream)` puts the screen together.
+
 ## Serving it
 
 `composer.fetch` is a fetch-standard handler. It answers POST requests whose path ends in
-`/screens/{screen}` or `/actions/{action}`, so you can mount it under any prefix:
+`/screens/{screen}`, `/screens/{screen}/islands/{key}` or `/actions/{action}`, so you can mount it
+under any prefix:
 
 ```ts
 // Bun, Deno, Cloudflare Workers
@@ -267,7 +283,8 @@ For Node servers there are adapters, which pass their own request type to `conte
 | Fastify | [`@client-compose/fastify`](https://www.npmjs.com/package/@client-compose/fastify) |
 
 Writing one for another server is a few lines: hand `composer.handle(path, rawBody, request)` the
-request and write the status and JSON body it returns.
+request, and write the status, content type and body it returns. The body is a string, or for a
+screen, its stream's lines as an async iterable: write each as it comes.
 
 ## Loading data efficiently
 
@@ -325,8 +342,9 @@ assert.equal(followed.result?.followers, 8);
 
 - By default the app declares every island your declared screens place. To test an older app,
   `testComposer(composer, { declare: [ProfileHeaderV1, PostGridV1] })`.
-- Screens give `status`, `keys()`, `island(key)`, `props(Descriptor, key)` and the full `response`;
-  errors come back as their protocol code (`"not_found"`, `"unauthenticated"`).
+- Screens give `status`, `keys()`, `island(key)`, `props(Descriptor, key)` and the full `response`,
+  with every island in place; `head` is its stream's head, to check what was pending. Errors come
+  back as their protocol code (`"not_found"`, `"unauthenticated"`).
 - `perform` gives the typed `result`, `effects`, the declared `error`, or the protocol `failure`.
 - For a composer whose `context` takes an Express or Fastify request, pass `request` to build one.
 

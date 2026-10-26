@@ -58,6 +58,23 @@ export interface ScreenResponse {
   cache?: { maxAge: number };
 }
 
+/** An island in a stream's head that's still being resolved: it follows in an island line. */
+export interface PendingIsland {
+  key: string;
+  type: string;
+  version: number;
+  status: "pending";
+}
+
+/** A stream's head (spec §4.6): the screen, its islands resolved or pending. */
+export interface ScreenHead extends Omit<ScreenResponse, "islands"> {
+  islands: (IslandEntry | PendingIsland)[];
+}
+
+/** One line of a screen's stream (spec §4.6). */
+export type ScreenStreamLine =
+  ({ kind: "head" } & ScreenHead) | { kind: "island"; island: IslandEntry } | { kind: "end" };
+
 /**
  * Resolves one island of a screen again: its next page, given the cursor from its entry's `next`,
  * or from its first page without one (spec §4.5).

@@ -1,7 +1,7 @@
 // Fetching a screen without React: usable on the server (loaders, getServerSideProps, Server
 // Components) and in the browser.
 
-import { buildRequest, fetchScreen } from "@client-compose/client";
+import { buildRequest, collectScreen, openScreen, type ScreenStream } from "@client-compose/client";
 import type { ScreenResponse } from "@client-compose/protocol";
 
 import type { ScreenConfig } from "./config.ts";
@@ -19,9 +19,22 @@ export async function loadScreen(
   params: Record<string, string> = {},
   init: RequestInit = {},
 ): Promise<ScreenResponse> {
+  return collectScreen(await streamScreen(config, screen, params, init));
+}
+
+/**
+ * Request a screen from the composer, as loadScreen does, and resolve once its stream's head has
+ * arrived (spec §4.6): the rest follows in `islands`.
+ */
+export async function streamScreen(
+  config: ScreenConfig,
+  screen: string,
+  params: Record<string, string> = {},
+  init: RequestInit = {},
+): Promise<ScreenStream> {
   const headers = await config.headers?.();
   const request = buildRequest(config.registry, screen, config.client, params);
-  return fetchScreen(
+  return openScreen(
     config.baseUrl,
     request,
     {

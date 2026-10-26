@@ -1,4 +1,6 @@
-// Fastify adapter. The composer does the work; this registers its two routes.
+// Fastify adapter. The composer does the work; this registers its routes.
+
+import { Readable } from "node:stream";
 
 import type { Composer } from "@client-compose/composer";
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
@@ -28,12 +30,23 @@ export function composerPlugin<Ctx>(composer: Composer<Ctx, FastifyRequest>): Fa
       const body = typeof request.body === "string" ? request.body : "";
       const result = await composer.handle(request.url, body, request);
       // Only the composer's own routes are registered, so it always answers them.
-      return result ?? { status: 404, body: null };
+      return (
+        result ?? {
+          status: 404,
+          contentType: "application/json" as const,
+          body: "null",
+        }
+      );
     };
-    for (const route of ["/screens/:screen", "/actions/:action"]) {
+    for (const route of ["/screens/:screen", "/screens/:screen/islands/:key", "/actions/:action"]) {
       app.post(route, async (request, reply) => {
         const result = await handler(request);
-        return reply.code(result.status).type("application/json").send(JSON.stringify(result.body));
+        reply.code(result.status).type(result.contentType);
+        if (typeof result.body === "string") {
+          return reply.send(result.body);
+        }
+        // A screen's stream: each line is sent as it comes (spec §4.6).
+        return reply.send(Readable.from(result.body));
       });
     }
   };
