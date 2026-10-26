@@ -14,139 +14,26 @@ import {
 } from "@client-compose/client";
 import {
   type ActionDescriptor,
-  type ActionEffects,
   type ActionResponse,
   type DeclaredError,
-  type ScreenRef,
-  screenRefMatches,
   type ScreenResponse,
 } from "@client-compose/protocol";
 import {
   Component,
-  createContext,
   createElement,
   Fragment,
   type ReactNode,
   Suspense,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
 
-import type { ClientComposeConfig } from "./config.ts";
 import { loadScreen } from "./load.ts";
-
-interface CacheEntry {
-  screen: string;
-  params: Record<string, string>;
-  response: ScreenResponse;
-  expiresAt: number;
-}
-
-/** A screen currently shown with useScreen, so that actions can reload it. */
-interface MountedScreen {
-  screen: string;
-  params: Record<string, string>;
-  reload: () => void;
-}
-
-/**
- * The provider's screens: cached responses, and the screens on show, which actions that change them
- * reload (spec §5.3).
- */
-class ScreenStore {
-  private readonly cache = new Map<string, CacheEntry>();
-  private readonly mounted = new Set<MountedScreen>();
-
-  /** The cached response for a key, while it's fresh. */
-  cached(key: string): ScreenResponse | undefined {
-    const entry = this.cache.get(key);
-    return entry && entry.expiresAt > Date.now() ? entry.response : undefined;
-  }
-
-  /** Keep a response for its `cache.maxAge`. */
-  remember(key: string, screen: string, params: Record<string, string>, response: ScreenResponse) {
-    if (!response.cache || response.cache.maxAge <= 0) {
-      return;
-    }
-    const expiresAt = Date.now() + response.cache.maxAge * 1000;
-    this.cache.set(key, {
-      screen,
-      params,
-      response,
-      expiresAt,
-    });
-  }
-
-  /** A screen on show. Returns the function that takes it off. */
-  mount(screen: MountedScreen): () => void {
-    this.mounted.add(screen);
-    return () => void this.mounted.delete(screen);
-  }
-
-  /** Drop cached responses the refs match, and reload the screens on show that they match. */
-  invalidate(refs: ScreenRef[]) {
-    const matches = (screen: string, params: Record<string, string>) =>
-      refs.some((ref) => screenRefMatches(ref, screen, params));
-    for (const [key, entry] of this.cache) {
-      if (matches(entry.screen, entry.params)) {
-        this.cache.delete(key);
-      }
-    }
-    for (const m of this.mounted) {
-      if (matches(m.screen, m.params)) {
-        m.reload();
-      }
-    }
-  }
-}
-
-interface ContextValue {
-  config: ClientComposeConfig;
-  screens: ScreenStore;
-  applyEffects: (effects: ActionEffects) => void;
-}
-
-const ClientComposeContext = createContext<ContextValue | null>(null);
-
-export function ClientComposeProvider(props: {
-  config: ClientComposeConfig;
-  children?: ReactNode;
-}): ReactNode {
-  const [screens] = useState(() => new ScreenStore());
-  const value = useMemo((): ContextValue => {
-    const config = props.config;
-    const applyEffects = (effects: ActionEffects) => {
-      const refs = effects.invalidate ?? [];
-      if (refs.length) {
-        screens.invalidate(refs);
-        config.onInvalidate?.(refs);
-      }
-      if (effects.navigate) {
-        config.onNavigate?.(effects.navigate);
-      }
-    };
-    return {
-      config,
-      screens,
-      applyEffects,
-    };
-  }, [props.config, screens]);
-  return createElement(ClientComposeContext.Provider, { value }, props.children);
-}
-
-function useClientCompose(): ContextValue {
-  const ctx = useContext(ClientComposeContext);
-  if (!ctx) {
-    throw new Error(
-      "Client Compose hooks and components must be used inside <ClientComposeProvider>",
-    );
-  }
-  return ctx;
-}
+import { scopeIslands } from "./pages.ts";
+import { ClientComposeContext, isContextValue, useClientCompose } from "./provider.ts";
 
 export interface ScreenState {
   /** `loading` until the first response; `error` only if there's nothing to show. */
@@ -178,90 +65,112 @@ interface FetchState {
   refreshing: boolean;
 }
 
+/** The last response the server passed (`initialResponse`) that the screen took, and its key. */
+interface Taken {
+  key: string;
+  response?: ScreenResponse;
+}
+
 /** Fetch and plan a screen. Use this directly for custom layouts (e.g. a React Native FlatList). */
 export function useScreen(
   screen: string,
   params: Record<string, string> = {},
   options: UseScreenOptions = {},
 ): ScreenState {
-  const { config, screens } = useClientCompose();
   const key = `${screen}?${stableKey(params)}`;
-  const latestParams = useRef(params);
-  latestParams.current = params;
-  const force = useRef(false);
+  // The same object for as long as the params are the same, whatever object the caller passes.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const screenParams = useMemo(() => params, [key]);
+  const { current, reload } = useScreenResponse({
+    screen,
+    key,
+    params: screenParams,
+    initialResponse: options.initialResponse,
+  });
+  const islands = usePlannedIslands(current.response, screenParams);
+  useReloadWhenInvalidated(screen, screenParams, reload);
+
+  return {
+    status: screenStatus(current.response, current.error),
+    islands,
+    response: current.response,
+    error: current.error,
+    refreshing: current.refreshing,
+    reload,
+  };
+}
+
+interface ScreenResponseOptions {
+  screen: string;
+  key: string;
+  params: Record<string, string>;
+  initialResponse: ScreenResponse | undefined;
+}
+
+/**
+ * The screen's response: the server's (`initialResponse`), a cached one, or one fetched for it,
+ * and fetched again on `reload`. A response the server passes with a render is for that render's
+ * screen and params; it stays theirs, so the screen opened with other params never shows it.
+ */
+function useScreenResponse(options: ScreenResponseOptions): {
+  current: FetchState;
+  reload: () => void;
+} {
+  const { screen, key, params, initialResponse } = options;
+  const { config, screens } = useClientCompose();
+  // Set by reload, read once by the effect it re-runs: never in render.
+  const forceNext = useRef(false);
   const [reloads, setReloads] = useState(0);
-  const store = (response: ScreenResponse) =>
-    screens.remember(key, screen, latestParams.current, response);
-
-  // The latest server-provided response, and the screen key it was provided for.
-  const [seed, setSeed] = useState(() => ({
-    response: options.initialResponse,
-    key: options.initialResponse ? key : null,
-  }));
-  if (options.initialResponse && options.initialResponse !== seed.response) {
-    // A new response from the server (navigation or refresh): adopt it for the current key.
-    setSeed({ response: options.initialResponse, key });
-  }
-
   const cached = () => (config.cache === false ? undefined : screens.cached(key));
   const [state, setState] = useState<FetchState>(() => ({
     key,
-    response: options.initialResponse ?? cached(),
+    response: initialResponse ?? cached(),
     refreshing: false,
   }));
+  const [taken, setTaken] = useState<Taken>(() => ({ key, response: initialResponse }));
+  const fromServer = serverResponseFor(key, taken, initialResponse);
 
   useEffect(() => {
-    const forced = force.current;
-    force.current = false;
-    if (!forced && seed.key === key && seed.response) {
+    const forced = forceNext.current;
+    forceNext.current = false;
+    if (!forced && fromServer) {
       // Use the server's response without a request (StrictMode remounts land here too).
-      const response = seed.response;
       if (config.cache !== false) {
-        store(response);
+        screens.remember(key, screen, params, fromServer);
       }
-      setState((prev) =>
-        prev.key === key && prev.response === response
-          ? prev
-          : {
-              key,
-              response,
-              refreshing: false,
-            },
+      setTaken((prev) =>
+        prev.key === key && prev.response === fromServer ? prev : { key, response: fromServer },
       );
-      return;
+      setState((prev) =>
+        prev.key === key && prev.response === fromServer ? prev : settled(key, fromServer),
+      );
+      return undefined;
     }
-
     const fresh = forced ? undefined : cached();
+    const controller = new AbortController();
+    void loadInto(controller.signal, fresh);
+    return () => controller.abort();
+    // `key` covers screen and params; a new server response or config (e.g. a new registry) re-runs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, reloads, config, fromServer]);
+
+  /** Shows a cached response, or loads the screen; a failure keeps what's shown, with the error. */
+  async function loadInto(signal: AbortSignal, fresh: ScreenResponse | undefined) {
     if (fresh) {
-      setState({
-        key,
-        response: fresh,
-        refreshing: false,
-      });
+      setState(settled(key, fresh));
       return;
     }
-
-    const controller = new AbortController();
     setState((prev) =>
       prev.key === key ? { ...prev, refreshing: true } : { key, refreshing: true },
     );
-    (async () => {
-      try {
-        const response = await loadScreen(config, screen, latestParams.current, {
-          signal: controller.signal,
-        });
-        store(response);
-        if (!controller.signal.aborted) {
-          setState({
-            key,
-            response,
-            refreshing: false,
-          });
-        }
-      } catch (error) {
-        if (controller.signal.aborted) {
-          return;
-        }
+    try {
+      const response = await loadScreen(config, screen, params, { signal });
+      screens.remember(key, screen, params, response);
+      if (!signal.aborted) {
+        setState(settled(key, response));
+      }
+    } catch (error) {
+      if (!signal.aborted) {
         setState((prev) => ({
           key,
           response: prev.key === key ? prev.response : undefined,
@@ -269,60 +178,86 @@ export function useScreen(
           refreshing: false,
         }));
       }
-    })();
-    return () => controller.abort();
-    // `key` covers screen and params; a new server response or config (e.g. a new registry) re-runs.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, reloads, config, seed]);
+    }
+  }
+
+  const reload = useCallback(() => {
+    forceNext.current = true;
+    setReloads((n) => n + 1);
+  }, []);
 
   // Until the effect for a new key runs, show the server's response for it if there is one, and
   // never the previous key's islands.
-  const seeded = seed.key === key ? seed.response : undefined;
   const current: FetchState =
     state.key === key
       ? state
       : {
           key,
-          response: seeded ?? cached(),
-          refreshing: seeded === undefined,
+          response: fromServer ?? cached(),
+          refreshing: fromServer === undefined,
         };
-  const { response } = current;
+  return { current, reload };
+}
 
-  const islands = useMemo(
-    () =>
-      response
-        ? plan(config.registry, response, {
-            onError: config.renderIslandError,
-            onSkipped: config.onSkipped,
-          })
-        : [],
-    [response, config],
-  );
+/**
+ * The server's response for this key: one passed with this render that the screen hasn't taken
+ * yet is for it; otherwise the one it took, if it took it for this key.
+ */
+function serverResponseFor(
+  key: string,
+  taken: Taken,
+  initialResponse: ScreenResponse | undefined,
+): ScreenResponse | undefined {
+  if (initialResponse !== undefined && initialResponse !== taken.response) {
+    return initialResponse;
+  }
+  return taken.key === key ? taken.response : undefined;
+}
 
-  const reload = useCallback(() => {
-    force.current = true;
-    setReloads((n) => n + 1);
-  }, []);
-
-  // Let actions that change this screen reload it (spec §5.3).
-  useEffect(() => {
-    return screens.mount({
-      screen,
-      params: latestParams.current,
-      reload,
-    });
-    // `key` covers screen and params.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, screens, reload]);
-
+function settled(key: string, response: ScreenResponse): FetchState {
   return {
-    status: screenStatus(response, current.error),
-    islands,
+    key,
     response,
-    error: current.error,
-    refreshing: current.refreshing,
-    reload,
+    refreshing: false,
   };
+}
+
+/** The screen's islands to render, in order, each knowing where it is (for its pages). */
+function usePlannedIslands(
+  response: ScreenResponse | undefined,
+  params: Record<string, string>,
+): PlannedIsland<ReactNode>[] {
+  const { config } = useClientCompose();
+  return useMemo(() => {
+    if (!response) {
+      return [];
+    }
+    const planned = plan(config.registry, response, {
+      onError: config.renderIslandError,
+      onSkipped: config.onSkipped,
+    });
+    return scopeIslands(planned, response, params);
+    // A response is for one screen and params, so it plans the same whatever params are now.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [response, config]);
+}
+
+/** Lets actions that change this screen reload it (spec §5.3). */
+function useReloadWhenInvalidated(
+  screen: string,
+  params: Record<string, string>,
+  reload: () => void,
+): void {
+  const { screens } = useClientCompose();
+  useEffect(
+    () =>
+      screens.mount({
+        screen,
+        params,
+        reload,
+      }),
+    [screen, params, screens, reload],
+  );
 }
 
 function screenStatus(response: ScreenResponse | undefined, error: unknown): ScreenState["status"] {
@@ -330,11 +265,6 @@ function screenStatus(response: ScreenResponse | undefined, error: unknown): Scr
     return "ready";
   }
   return error !== undefined ? "error" : "loading";
-}
-
-/** A class component's context (typed unknown by React): the provider's value, if there is one. */
-function isContextValue(value: unknown): value is ContextValue {
-  return typeof value === "object" && value !== null && "config" in value && "screens" in value;
 }
 
 interface BoundaryProps {

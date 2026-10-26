@@ -81,6 +81,11 @@
             },
             "props": {
               "type": "object"
+            },
+            "next": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The island has more pages: an opaque cursor for its next one (spec \u00a74.5)."
             }
           },
           "required": [

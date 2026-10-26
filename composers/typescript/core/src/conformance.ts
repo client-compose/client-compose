@@ -8,7 +8,12 @@ import {
   type ConformanceV1Input,
   ConformanceV2,
 } from "./conformance-actions.generated.ts";
-import { ForbiddenError, NotFoundError, UnauthenticatedError } from "./loading.ts";
+import {
+  ForbiddenError,
+  InvalidCursorError,
+  NotFoundError,
+  UnauthenticatedError,
+} from "./loading.ts";
 import { type Island, type Screen, screen } from "./screens.ts";
 
 interface MockPlacement {
@@ -23,6 +28,20 @@ interface MockPlacement {
   loadDelayMs?: number;
   /** Wait this long before loading, so the case controls which island starts a shared load. */
   startDelayMs?: number;
+  /** The island has this many pages (spec §4.5). */
+  pages?: number;
+}
+
+/** The page a paged mock's cursor asks for: 1 without one, and only pages it has. */
+function mockPage(cursor: string | undefined, pages: number): number {
+  if (cursor === undefined) {
+    return 1;
+  }
+  const page = Number(/^page:(\d+)$/.exec(cursor)?.[1]);
+  if (!Number.isInteger(page) || page < 2 || page > pages || cursor !== `page:${page}`) {
+    throw new InvalidCursorError(`cursor ${cursor}`);
+  }
+  return page;
 }
 
 export function conformanceScreen<Ctx = unknown>(): Screen<Ctx> {
@@ -48,12 +67,20 @@ export function conformanceScreen<Ctx = unknown>(): Screen<Ctx> {
         versions: p.versions.map((version): Island<Ctx, unknown> => ({
           type: p.type,
           version,
-          resolve: async ({ signal, load }) => {
+          ...(p.pages !== undefined && { paged: true }),
+          resolve: async ({ signal, load, cursor }) => {
             if (p.outcome === "error") {
               throw new Error("mock failure");
             }
             if (p.outcome === "timeout") {
               return new Promise((_, reject) => signal.addEventListener("abort", reject));
+            }
+            if (p.pages !== undefined) {
+              const page = mockPage(cursor, p.pages);
+              return {
+                props: { v: version, page },
+                ...(page < p.pages && { next: `page:${page + 1}` }),
+              };
             }
             if (p.load === undefined) {
               return { v: version };

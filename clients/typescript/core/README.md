@@ -66,6 +66,13 @@ Props aren't validated at runtime; generate types with
 [`@client-compose/codegen`](https://www.npmjs.com/package/@client-compose/codegen) to keep them in
 sync with the composer.
 
+## Islands with pages
+
+An island entry carries `next` while the island has more pages (spec §4.5).
+`fetchIsland(baseUrl, buildIslandRequest(screen, params, entry, client, entry.next))` fetches the
+next one: the island's entry again, with that page's props and its own `next`. Without a cursor, it
+resolves the island again from its first page. The React binding's `usePages` does this for you.
+
 ## Testing
 
 `@client-compose/client/testing` is a fake composer for tests, with no test framework of its own.
@@ -90,7 +97,7 @@ For React, `@client-compose/react/testing` adds a provider config built around i
 
 ## Through your own server
 
-`@client-compose/client/proxy` passes a browser's screen and action requests to the composer
+`@client-compose/client/proxy` passes a browser's screen, island and action requests to the composer
 through your server, so it can add what the browser mustn't hold, such as a session kept in an
 httpOnly cookie. `createComposerProxy({ baseUrl, client, headers, onActionResponse })` checks each
 request (anyone can call a server endpoint with anything), sets the client context and headers,

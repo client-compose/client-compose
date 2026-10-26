@@ -40,11 +40,11 @@ const ok = (key: string, type: string, props: object): Island => ({
 function fakeFetch(
   ...responses: (Island[] | { status: number } | { islands: Island[]; maxAge: number })[]
 ) {
-  const requests: { body: ScreenRequest; headers: Record<string, string> }[] = [];
+  const requests: { body: ScreenRequest; headers: Headers }[] = [];
   const impl = (async (_url: string, init: RequestInit) => {
     requests.push({
       body: JSON.parse(String(init.body)),
-      headers: init.headers as Record<string, string>,
+      headers: new Headers(init.headers),
     });
     const next = responses.shift() ?? [];
     if ("status" in next) {
@@ -109,7 +109,7 @@ test("renders islands in order and declares capabilities", async () => {
     broken: [1],
   });
   assert.deepEqual(f.requests[0].body.params, { userId: "u1" });
-  assert.equal(f.requests[0].headers.Authorization, "Bearer t");
+  assert.equal(f.requests[0].headers.get("authorization"), "Bearer t");
 });
 
 test("a crashing island is isolated and reported", async () => {

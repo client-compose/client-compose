@@ -18,15 +18,26 @@ import {
   type ActionResponse,
   type Capabilities,
   type ClientContext,
+  type IslandEntry,
+  type IslandRequest,
   PROTOCOL_VERSION,
   type ScreenRequest,
   type ScreenResponse,
 } from "@client-compose/protocol";
 
-import { ActionFetchError, fetchAction, fetchScreen, ScreenFetchError } from "./index.ts";
+import {
+  ActionFetchError,
+  fetchAction,
+  fetchIsland,
+  fetchScreen,
+  IslandFetchError,
+  ScreenFetchError,
+} from "./index.ts";
 
 /** A screen request from the browser: the server sets the client context. */
 export type ProxiedScreenRequest = Omit<ScreenRequest, "client">;
+/** An island request from the browser: the server sets the client context. */
+export type ProxiedIslandRequest = Omit<IslandRequest, "client">;
 /** An action request from the browser: the server sets the client context. */
 export type ProxiedActionRequest = Omit<ActionRequest, "client">;
 
@@ -60,6 +71,11 @@ export interface ComposerProxy {
   performAction(body: unknown): Promise<ProxyResult<ActionResponse>>;
   /** Checks a browser's screen request, then loads it with the server's context and headers. */
   loadScreen(body: unknown): Promise<ProxyResult<ScreenResponse>>;
+  /**
+   * Checks a browser's island request (a page of an island, spec §4.5), then loads it with the
+   * server's context and headers. Resolves with the island's entry.
+   */
+  loadIsland(body: unknown): Promise<ProxyResult<IslandEntry>>;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -78,25 +94,48 @@ function isStringRecord(value: unknown): value is Record<string, string> {
   return isRecord(value) && Object.values(value).every((v) => typeof v === "string");
 }
 
+// Each guard returns at the first thing a request gets wrong, so it checks no more than it must.
+
 export function isProxiedScreenRequest(value: unknown): value is ProxiedScreenRequest {
-  return (
-    isRecord(value) &&
-    value.protocol === PROTOCOL_VERSION &&
-    typeof value.screen === "string" &&
-    (value.params === undefined || isStringRecord(value.params)) &&
-    isCapabilities(value.islands)
-  );
+  if (!isRecord(value) || value.protocol !== PROTOCOL_VERSION) {
+    return false;
+  }
+  if (typeof value.screen !== "string") {
+    return false;
+  }
+  if (value.params !== undefined && !isStringRecord(value.params)) {
+    return false;
+  }
+  return isCapabilities(value.islands);
+}
+
+export function isProxiedIslandRequest(value: unknown): value is ProxiedIslandRequest {
+  if (!isRecord(value) || value.protocol !== PROTOCOL_VERSION) {
+    return false;
+  }
+  if (typeof value.screen !== "string" || typeof value.key !== "string") {
+    return false;
+  }
+  if (typeof value.version !== "number" || !Number.isInteger(value.version)) {
+    return false;
+  }
+  if (value.params !== undefined && !isStringRecord(value.params)) {
+    return false;
+  }
+  return value.cursor === undefined || typeof value.cursor === "string";
 }
 
 export function isProxiedActionRequest(value: unknown): value is ProxiedActionRequest {
-  return (
-    isRecord(value) &&
-    value.protocol === PROTOCOL_VERSION &&
-    typeof value.action === "string" &&
-    typeof value.version === "number" &&
-    "input" in value &&
-    (value.idempotencyKey === undefined || typeof value.idempotencyKey === "string")
-  );
+  if (!isRecord(value) || value.protocol !== PROTOCOL_VERSION) {
+    return false;
+  }
+  if (typeof value.action !== "string" || typeof value.version !== "number") {
+    return false;
+  }
+  if (!("input" in value)) {
+    return false;
+  }
+  return value.idempotencyKey === undefined || typeof value.idempotencyKey === "string";
 }
 
 /** What the composer itself answers to a malformed request. */
@@ -108,8 +147,11 @@ const BAD_REQUEST = {
 
 export function createComposerProxy(options: ComposerProxyOptions): ComposerProxy {
   async function init(): Promise<RequestInit> {
-    const headers = (await options.headers?.()) ?? {};
-    return { ...options.requestInit, headers: { ...options.requestInit?.headers, ...headers } };
+    const headers = new Headers(options.requestInit?.headers);
+    for (const [name, value] of Object.entries((await options.headers?.()) ?? {})) {
+      headers.set(name, value);
+    }
+    return { ...options.requestInit, headers };
   }
 
   async function performAction(body: unknown): Promise<ProxyResult<ActionResponse>> {
@@ -157,5 +199,31 @@ export function createComposerProxy(options: ComposerProxyOptions): ComposerProx
     }
   }
 
-  return { performAction, loadScreen };
+  async function loadIsland(body: unknown): Promise<ProxyResult<IslandEntry>> {
+    if (!isProxiedIslandRequest(body)) {
+      return BAD_REQUEST;
+    }
+    const request: IslandRequest = { ...body, client: await options.client() };
+    try {
+      return {
+        ok: true,
+        response: await fetchIsland(options.baseUrl, request, await init(), options.fetch),
+      };
+    } catch (error) {
+      if (error instanceof IslandFetchError) {
+        return {
+          ok: false,
+          status: error.status,
+          body: error.body,
+        };
+      }
+      throw error;
+    }
+  }
+
+  return {
+    performAction,
+    loadScreen,
+    loadIsland,
+  };
 }

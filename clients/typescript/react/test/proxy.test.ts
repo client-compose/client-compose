@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 import type { ActionResponse, ScreenResponse } from "@client-compose/protocol";
 
-import { ActionFetchError, viaProxy } from "../src/index.ts";
+import { ActionFetchError, IslandFetchError, viaProxy } from "../src/index.ts";
 
 const ok: ActionResponse = {
   protocol: 0,
@@ -81,4 +81,50 @@ test("fetch hands the screen request to loadScreen, and answers like the compose
 test("fetch fails clearly without loadScreen", async () => {
   const transport = viaProxy({ performAction: async () => ({ ok: true, response: ok }) });
   await assert.rejects(transport.fetch("ignored", { body: "{}" }), /no loadScreen/);
+});
+
+test("loadIsland hands an island request to the server's loadIsland, and throws its failures", async () => {
+  const entry = {
+    key: "results",
+    type: "list",
+    version: 1,
+    status: "ok" as const,
+    props: { n: 2 },
+  };
+  const bodies: unknown[] = [];
+  const transport = viaProxy({
+    performAction: async () => ({ ok: true, response: ok }),
+    loadIsland: async (body) => {
+      bodies.push(body);
+      return bodies.length === 1
+        ? { ok: true, response: entry }
+        : {
+            ok: false,
+            status: 400,
+            body: '{"error":{"code":"invalid_cursor"}}',
+          };
+    },
+  });
+  const request = {
+    protocol: 0 as const,
+    screen: "search",
+    key: "results",
+    version: 1,
+    cursor: "c2",
+    client: { platform: "web", appVersion: "1" },
+  };
+  assert.ok(transport.loadIsland, "given the server's loadIsland, the transport has one");
+  assert.deepEqual(await transport.loadIsland(request), entry);
+  assert.deepEqual(bodies[0], request);
+  await assert.rejects(transport.loadIsland(request), (error) => {
+    assert.ok(error instanceof IslandFetchError);
+    assert.equal(error.code, "invalid_cursor");
+    return true;
+  });
+
+  // Without one, there's nothing to spread into the config.
+  assert.equal(
+    viaProxy({ performAction: async () => ({ ok: true, response: ok }) }).loadIsland,
+    undefined,
+  );
 });

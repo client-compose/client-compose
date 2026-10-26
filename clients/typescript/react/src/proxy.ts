@@ -1,12 +1,19 @@
-// The browser half of `@client-compose/client/proxy`: sends screens and actions through your server
-// (e.g. Next.js Server Actions wrapping a `createComposerProxy`) instead of to the composer.
+// The browser half of `@client-compose/client/proxy`: sends screens, islands' pages and actions
+// through your server (e.g. Next.js Server Actions wrapping a `createComposerProxy`) instead of to
+// the composer.
 //
-//     const transport = viaProxy({ performAction: performGatewayAction, loadScreen: loadGatewayScreen });
-//     const config = { registry, baseUrl: "", client, fetch: transport.fetch, performAction: transport.performAction };
+//     const transport = viaProxy({ performAction, loadScreen, loadIsland });
+//     const config = { registry, baseUrl: "", client, ...transport };
 
-import { ActionFetchError } from "@client-compose/client";
+import { ActionFetchError, IslandFetchError } from "@client-compose/client";
 import type { ProxyResult } from "@client-compose/client/proxy";
-import type { ActionRequest, ActionResponse, ScreenResponse } from "@client-compose/protocol";
+import type {
+  ActionRequest,
+  ActionResponse,
+  IslandEntry,
+  IslandRequest,
+  ScreenResponse,
+} from "@client-compose/protocol";
 
 import type { ClientComposeConfig } from "./config.ts";
 
@@ -15,9 +22,16 @@ export interface ProxyFunctions {
   performAction: (request: ActionRequest) => Promise<ProxyResult<ActionResponse>>;
   /** Calls the server's `proxy.loadScreen`. Leave out if the browser never loads screens itself. */
   loadScreen?: (request: unknown) => Promise<ProxyResult<ScreenResponse>>;
+  /**
+   * Calls the server's `proxy.loadIsland`, for islands' next pages (usePages). Leave out if no
+   * island loads pages.
+   */
+  loadIsland?: (request: unknown) => Promise<ProxyResult<IslandEntry>>;
 }
 
-export type ProxyTransport = Required<Pick<ClientComposeConfig, "fetch" | "performAction">>;
+/** What a config needs to go through your server: spread it into the config. */
+export type ProxyTransport = Required<Pick<ClientComposeConfig, "fetch" | "performAction">> &
+  Pick<ClientComposeConfig, "loadIsland">;
 
 function parseBody(body: BodyInit | null | undefined): unknown {
   if (typeof body !== "string") {
@@ -31,7 +45,10 @@ function parseBody(body: BodyInit | null | undefined): unknown {
   }
 }
 
-/** `fetch` and `performAction` for `ClientComposeConfig` that go through your server. */
+/**
+ * `fetch`, `performAction` and (given `loadIsland`) `loadIsland` for `ClientComposeConfig`, going
+ * through your server.
+ */
 export function viaProxy(proxy: ProxyFunctions): ProxyTransport {
   async function proxiedFetch(_input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
     if (!proxy.loadScreen) {
@@ -51,5 +68,21 @@ export function viaProxy(proxy: ProxyFunctions): ProxyTransport {
     return result.response;
   }
 
-  return { fetch: proxiedFetch, performAction };
+  const serverLoadIsland = proxy.loadIsland;
+  async function loadIsland(request: IslandRequest): Promise<IslandEntry> {
+    if (!serverLoadIsland) {
+      throw new Error("viaProxy: no loadIsland given, so islands can't load their pages");
+    }
+    const result = await serverLoadIsland(request);
+    if (!result.ok) {
+      throw new IslandFetchError(result.status, result.body);
+    }
+    return result.response;
+  }
+
+  return {
+    fetch: proxiedFetch,
+    performAction,
+    ...(serverLoadIsland && { loadIsland }),
+  };
 }

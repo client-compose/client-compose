@@ -41,14 +41,14 @@ const Follow: ActionDescriptor<{ userId: string }, { followers: number }, Follow
  */
 function fakeComposer(actionResponse: () => Response) {
   const screenFetches = new Map<string, number>();
-  const actions: { url: string; body: ActionRequest; headers: Record<string, string> }[] = [];
+  const actions: { url: string; body: ActionRequest; headers: Headers }[] = [];
   const impl = (async (url: string, init: RequestInit) => {
     const body = JSON.parse(String(init.body));
     if (url.includes("/actions/")) {
       actions.push({
         url,
         body,
-        headers: init.headers as Record<string, string>,
+        headers: new Headers(init.headers),
       });
       return actionResponse();
     }
@@ -146,7 +146,7 @@ test("run posts the action with the configured headers and resolves with the res
   const res = await ui.run({ userId: "u1" });
   assert.equal(res.status === "ok" && res.result.followers, 7);
   assert.equal(c.actions[0].url, "https://composer.test/actions/follow");
-  assert.equal(c.actions[0].headers.Authorization, "Bearer t");
+  assert.equal(c.actions[0].headers.get("authorization"), "Bearer t");
   assert.deepEqual(c.actions[0].body.input, { userId: "u1" });
   assert.equal(typeof c.actions[0].body.idempotencyKey, "string");
   assert.equal(ui.action().last?.status, "ok");

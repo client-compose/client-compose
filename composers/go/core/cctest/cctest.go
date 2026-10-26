@@ -6,6 +6,9 @@
 //	profile := app.Screen("profile", cctest.Params{"userId": "u1"}, cctest.Header("Authorization", "Bearer "+token))
 //	header := cctest.Props[ProfileHeaderV2](t, profile, "header")
 //
+//	more := app.NextPage(profile, "posts") // the next page of a paged island (spec §4.5)
+//	posts := cctest.IslandProps[PostListV1](t, more)
+//
 //	followed := cctest.Perform(app, FollowUserV1Input{UserID: "u1"})
 //	if followed.Status != "ok" || followed.Result.Followers != 8 { … }
 package cctest
@@ -90,6 +93,8 @@ func IdempotencyKey(key string) RequestOption {
 
 // Screen is a composed screen, or the error the composer answered with.
 type Screen struct {
+	// Params are the params it was requested with.
+	Params Params
 	// Status is the HTTP status.
 	Status int
 	// Response is the screen, when Status is 200.
@@ -124,7 +129,7 @@ func (a *App) Screen(screen string, params Params, opts ...RequestOption) Screen
 	client := a.client
 	body := cc.ScreenRequest{Protocol: &protocol, Screen: screen, Params: params, Client: &client, Islands: a.islands}
 	status, raw := a.post("/screens/"+screen, body, opts)
-	out := Screen{Status: status}
+	out := Screen{Params: params, Status: status}
 	if status == http.StatusOK {
 		decode(a.t, raw, &out.Response)
 	} else {
@@ -146,6 +151,77 @@ func Props[P cc.Props](t testing.TB, s Screen, key string) P {
 		t.Fatalf("cctest: island %q is %s: %+v", key, entry.Status, entry.Error)
 	}
 	raw, err := json.Marshal(entry.Props)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decode(t, raw, &props)
+	return props
+}
+
+// Island is one island resolved by an island request (spec §4.5), or the error the composer
+// answered with.
+type Island struct {
+	// Screen and Params are the screen it's on, and its params.
+	Screen string
+	Params Params
+	// Status is the HTTP status.
+	Status int
+	// Entry is the island, when Status is 200: its props, or its error, and its Next.
+	Entry cc.IslandEntry
+	// Error is the protocol error code otherwise, e.g. "invalid_cursor".
+	Error string
+}
+
+// Island resolves one island of a screen again: the page cursor asks for, or its first page when
+// cursor is "".
+func (a *App) Island(screen string, params Params, key string, version int, cursor string, opts ...RequestOption) Island {
+	a.t.Helper()
+	protocol := cc.ProtocolVersion
+	client := a.client
+	body := cc.IslandRequest{Protocol: &protocol, Screen: screen, Key: key, Version: version, Params: params, Client: &client, Cursor: cursor}
+	status, raw := a.post(fmt.Sprintf("/screens/%s/islands/%s", screen, key), body, opts)
+	out := Island{Screen: screen, Params: params, Status: status}
+	if status == http.StatusOK {
+		var res cc.IslandResponse
+		decode(a.t, raw, &res)
+		out.Entry = res.Island
+	} else {
+		out.Error = errorCode(a.t, raw)
+	}
+	return out
+}
+
+// NextPage fetches the page after a screen's island, as a client scrolling to its end would. It
+// fails the test if the island has no more pages.
+func (a *App) NextPage(s Screen, key string, opts ...RequestOption) Island {
+	a.t.Helper()
+	entry, ok := s.Island(key)
+	if !ok || entry.Next == "" {
+		a.t.Fatalf("cctest: island %q on %q has no next page (it has %v)", key, s.Response.Screen, s.Keys())
+	}
+	return a.Island(s.Response.Screen, s.Params, key, entry.Version, entry.Next, opts...)
+}
+
+// Next fetches the page after one an island request returned. It fails the test if there isn't one.
+func (a *App) Next(i Island, opts ...RequestOption) Island {
+	a.t.Helper()
+	if i.Entry.Next == "" {
+		a.t.Fatalf("cctest: island %q has no next page", i.Entry.Key)
+	}
+	return a.Island(i.Screen, i.Params, i.Entry.Key, i.Entry.Version, i.Entry.Next, opts...)
+}
+
+// IslandProps returns an island request's props as P, failing the test if it didn't resolve.
+func IslandProps[P cc.Props](t testing.TB, i Island) P {
+	t.Helper()
+	var props P
+	switch {
+	case i.Status != http.StatusOK:
+		t.Fatalf("cctest: island request answered %d %s", i.Status, i.Error)
+	case i.Entry.Status != "ok":
+		t.Fatalf("cctest: island %q is %s: %+v", i.Entry.Key, i.Entry.Status, i.Entry.Error)
+	}
+	raw, err := json.Marshal(i.Entry.Props)
 	if err != nil {
 		t.Fatal(err)
 	}

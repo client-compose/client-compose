@@ -1,5 +1,6 @@
 import {
   type ActionResponse,
+  type IslandResponse,
   PROTOCOL_VERSION,
   type ScreenErrorResponse,
   type ScreenResponse,
@@ -9,6 +10,11 @@ import {
 export type ComposeResult =
   | { status: 200; body: ScreenResponse }
   | { status: 400 | 401 | 403 | 404 | 500 | 502; body: ScreenErrorResponse };
+
+/** One island resolved by an island request, or the error the composer answers with (spec §4.5). */
+export type IslandResult =
+  | { status: 200; body: IslandResponse }
+  | { status: 400 | 401 | 403 | 404 | 500; body: ScreenErrorResponse };
 
 /** An action's outcome, or the error the composer answers with. */
 export type PerformResult =

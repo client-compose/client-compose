@@ -7,6 +7,7 @@ import type {
   ActionResponse,
   ClientContext,
   IslandEntry,
+  IslandRequest,
   ScreenRef,
 } from "@client-compose/protocol";
 import type { ReactNode } from "react";
@@ -44,6 +45,12 @@ export interface ClientComposeConfig extends ScreenConfig {
    * composer's 200 response; throw (e.g. `ActionFetchError`) for anything else.
    */
   performAction?: (request: ActionRequest) => Promise<ActionResponse>;
+  /**
+   * Send island requests (islands' next pages, `usePages`) some other way than POSTing them to
+   * `${baseUrl}/screens/{screen}/islands/{key}`, e.g. through your server (`viaProxy`). Resolve
+   * with the island's entry; throw (e.g. `IslandFetchError`) for anything else.
+   */
+  loadIsland?: (request: IslandRequest) => Promise<IslandEntry>;
   /** An action suggested a screen to show next (spec §5.3). Map it to your router. */
   onNavigate?: (ref: ScreenRef) => void;
   /**

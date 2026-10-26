@@ -87,6 +87,12 @@ export class UnauthenticatedError extends Error {}
 /** The user may not see the screen or perform the action: the composer responds 403 `forbidden`. */
 export class ForbiddenError extends Error {}
 
+/**
+ * A paged island can't read the cursor it was given: one it didn't make, or one that's no longer
+ * good. The composer responds 400 `invalid_cursor` (spec §4.5).
+ */
+export class InvalidCursorError extends Error {}
+
 /** A batch loader returned no value for a key. Thrown from a layout, it makes the screen 404. */
 export class LoadNotFoundError extends NotFoundError {
   readonly key: unknown;

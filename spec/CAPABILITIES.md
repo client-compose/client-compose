@@ -58,6 +58,7 @@ them to say what they add.
 | CMP-17 | **Plugins.** Integrations hook into a composer through a small, documented set of extension points (see [The composer as a platform](#the-composer-as-a-platform)), never by forking or wrapping the core. | — |
 | CMP-18 | **Cache adapter.** An optional cache the app supplies; islands opt in with a TTL and a key (see [Adapters](#adapters)). | — |
 | CMP-19 | **Idempotency adapter.** An optional store the app supplies, so retried actions return their first outcome (see [Adapters](#adapters)). | §5.2 |
+| CMP-20 | **Island requests.** Define an island with pages by its generated props type; it resolves the page a cursor asks for, and the cursor of the next. One island of a screen can be resolved again on its own, laid out as its screen would be. | §4.5 |
 
 ## The composer as a platform
 
@@ -187,6 +188,7 @@ own: the composer *is* their backend.
 | CLI-7 | **Cache.** Reuse responses for the composer's `cache.maxAge`, keyed by screen and params; invalidation drops them. | §4 |
 | CLI-8 | **Test kit.** A fake composer answering screens and actions with typed builders, recording requests and effects. | — |
 | CLI-9 | **Conformance.** Passes the client fixtures, rendering and actions. | §8.2 |
+| CLI-10 | **Island requests.** Fetch an island's next page from its entry's `next`, or the island again; through a proxy too. | §4.5 |
 
 ## UI binding
 
@@ -201,6 +203,7 @@ own: the composer *is* their backend.
 | UI-7 | **Meta.** The screen's meta is available to the app (page title, navigation title). |
 | UI-8 | **Cancellation.** Leaving a screen or changing its params cancels its request. |
 | UI-9 | **Testing.** Render islands and screens in tests against the fake composer, in the platform's usual test tools. |
+| UI-10 | **Pages.** An island's pages so far, with loading, end and failed states and a way to load the next, starting again when the island is rendered with new props. |
 
 Some rows are one platform's business: server rendering and React Server Components, and the
 proxy that keeps a session in an httpOnly cookie, are web-only.
@@ -275,6 +278,7 @@ Names in *italics* don't exist yet; the parity work below adds them.
 | CMP-17 plugins | ✅ `cc.Plugin` | ✅ `Plugin` |
 | CMP-18 cache adapter | ✅ `Config.Cache`, `Island.CacheFor` | ✅ `cache`, `island(…, { cache })` |
 | CMP-19 idempotency adapter | ✅ `Config.Idempotency` | ✅ `idempotency` |
+| CMP-20 island requests | ✅ `cc.DefinePaged`, `ComposeIsland` | ✅ `pagedIsland`, `composeIsland` |
 
 ### Clients
 
@@ -298,6 +302,8 @@ Names in *italics* don't exist yet; the parity work below adds them.
 | UI-7 meta | ✅ | ✅ navigation title, `ScreenModel.meta` | ✅ `onMeta`, `Snapshot.meta` |
 | UI-8 cancellation | ✅ | ✅ `.task` | ✅ the composition's scope |
 | UI-9 testing | ✅ | ✅ `FakeComposer` with `ScreenModel` and `ActionModel` | ✅ `FakeComposer` with Robolectric |
+| CLI-10 island requests | ✅ `fetchIsland`, `proxy.loadIsland` | ✗ (ignores `next`) | ✗ (ignores `next`) |
+| UI-10 pages | ✅ `usePages` | ✗ | ✗ |
 
 SwiftUI and Compose can't catch a view that crashes while rendering the way React can, so UI-6
 there means islands whose props don't decode are skipped.
@@ -330,5 +336,6 @@ In order, each as its own pull request:
    Multiplatform comes later.
 7. **Publishing.** Swift through SwiftPM tags, Kotlin on Maven Central.
 
-Not in this round: streaming and single-island refresh (protocol v1 candidates, §7 of the
-protocol), and Kotlin Multiplatform.
+Not in this round: streaming (a protocol v1 candidate, §7 of the protocol), and Kotlin
+Multiplatform. Island requests (§4.5) came later, in Go, TypeScript and React first; Swift and
+Kotlin render paged islands' first pages, and add CLI-10 and UI-10 next.
