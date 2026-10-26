@@ -35,11 +35,11 @@ func composeIslands(t *testing.T, layout func(ctx context.Context), timeout time
 	}}})
 	protocol := ProtocolVersion
 	res := c.Compose(context.Background(), ScreenRequest{Protocol: &protocol, Screen: "s", Client: &ClientContext{}, Islands: caps})
-	body, ok := res.Body.(ScreenResponse)
+	stream, ok := res.Body.(*ScreenStream)
 	if !ok {
 		t.Fatalf("unexpected result %+v", res)
 	}
-	return body.Islands
+	return stream.Collect().Islands
 }
 
 func outcomes(entries []IslandEntry) []any {
@@ -221,7 +221,7 @@ func TestLayoutNotFoundAndMetaFailure(t *testing.T) {
 		})},
 	})
 	res := c.Compose(context.Background(), req)
-	body := res.Body.(ScreenResponse)
+	body := res.Body.(*ScreenStream).Collect()
 	if res.Status != 200 || body.Meta != nil || len(body.Islands) != 1 || metaErr == nil {
 		t.Fatalf("got %+v (meta error %v)", res, metaErr)
 	}

@@ -39,8 +39,8 @@ func TestPanickingIslandIsIsolated(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer res.Body.Close()
-	var body ScreenResponse
-	if err := json.NewDecoder(res.Body).Decode(&body); err != nil {
+	_, body, err := ReadScreen(res.Body)
+	if err != nil {
 		t.Fatal(err)
 	}
 	if res.StatusCode != http.StatusOK || body.Islands[0].Status != "error" || body.Islands[0].Error.Code != "resolve_failed" {

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
-	"sync"
 	"time"
 )
 
@@ -166,8 +165,8 @@ type Config struct {
 	DefaultTimeout time.Duration
 }
 
-// Result is a status code and a JSON-serialisable body (ScreenResponse, ActionResponse or
-// ErrorResponse).
+// Result is a status code and a body: a *ScreenStream for a screen (spec §4.6), or a
+// JSON-serialisable IslandResponse, ActionResponse or ErrorResponse.
 type Result struct {
 	Status int
 	Body   any
@@ -305,10 +304,15 @@ func protocolError(err error) (Result, bool) {
 func (c *Composer) composeScreen(ctx context.Context, req ScreenRequest) Result {
 	screen := c.screens[req.Screen]
 
-	// Shared loads (Load, BatchLoader) live as long as this request; whatever is still running when
-	// the response is ready is cancelled.
+	// Shared loads (Load, BatchLoader) live as long as this request: until its stream ends, or it
+	// fails. Whatever is still running then is cancelled.
 	ctx, endRequest := withRequestScope(ctx)
-	defer endRequest()
+	streaming := false
+	defer func() {
+		if !streaming {
+			endRequest()
+		}
+	}()
 
 	r := Request{Screen: screen.ID, Params: req.Params, Client: *req.Client}
 	if r.Params == nil {
@@ -327,47 +331,105 @@ func (c *Composer) composeScreen(ctx context.Context, req ScreenRequest) Result 
 	metaDone := make(chan *ScreenMeta, 1)
 	go func() { metaDone <- c.meta(ctx, screen, r) }()
 
-	type placed struct {
-		p      Placement
-		island Island
+	toResolve, res, ok := c.negotiate(placements, req.Islands)
+	if !ok {
+		return res
 	}
-	var toResolve []placed
+
+	// Every island resolves at once; each says when it's done.
+	type resolved struct {
+		i     int
+		entry IslandEntry
+	}
+	done := make(chan resolved, len(toResolve))
+	for i, t := range toResolve {
+		go func() {
+			entry, _ := c.resolveEntry(ctx, t.p, t.island, r) // a failure is in its entry
+			done <- resolved{i, entry}
+		}()
+	}
+
+	// The head waits for the required islands (spec §4.6): one failing fails the screen.
+	entries := make([]*IslandEntry, len(toResolve))
+	waitingFor := 0
+	for _, t := range toResolve {
+		if t.p.Required {
+			waitingFor++
+		}
+	}
+	keep := func(d resolved) { entries[d.i] = &d.entry }
+	for waitingFor > 0 {
+		d := <-done
+		keep(d)
+		if toResolve[d.i].p.Required {
+			if d.entry.Status == "error" {
+				return fail(http.StatusBadGateway, "required_island_failed", d.entry.Key)
+			}
+			waitingFor--
+		}
+	}
+	meta := <-metaDone
+	// And takes the other islands that are ready by then.
+	for ready := true; ready; {
+		select {
+		case d := <-done:
+			keep(d)
+		default:
+			ready = false
+		}
+	}
+
+	head := ScreenResponse{Protocol: ProtocolVersion, Screen: screen.ID, Islands: make([]IslandEntry, len(toResolve)), Meta: meta}
+	if screen.CacheMaxAge > 0 {
+		head.Cache = &CacheHint{MaxAge: int(screen.CacheMaxAge.Seconds())}
+	}
+	pending := 0
+	for i, t := range toResolve {
+		if entries[i] != nil {
+			head.Islands[i] = *entries[i]
+			continue
+		}
+		head.Islands[i] = IslandEntry{Key: t.p.Key, Type: t.island.Type, Version: t.island.Version, Status: statusPending}
+		pending++
+	}
+
+	// The rest follow as they're resolved; the request ends with the last.
+	rest := make(chan IslandEntry, pending)
+	streaming = true
+	go func() {
+		defer endRequest()
+		defer close(rest)
+		for range pending {
+			rest <- (<-done).entry
+		}
+	}()
+	return Result{http.StatusOK, &ScreenStream{Head: head, Islands: rest}}
+}
+
+// placed is an island the screen places, at the version it's resolved at.
+type placed struct {
+	p      Placement
+	island Island
+}
+
+// negotiate picks the version of each placement to resolve, the highest the client supports
+// (spec §4.2). Placements it supports none of are left out, or fail the screen if they're required.
+func (c *Composer) negotiate(placements []Placement, supported map[string][]int) ([]placed, Result, bool) {
+	var out []placed
 	for _, p := range placements {
 		if len(p.Versions) == 0 {
 			continue
 		}
-		island, ok := Negotiate(p.Versions, req.Islands[p.Versions[0].Type])
+		island, ok := Negotiate(p.Versions, supported[p.Versions[0].Type])
 		if !ok {
 			if p.Required {
-				return fail(http.StatusBadGateway, "required_island_unsupported", p.Key)
+				return nil, fail(http.StatusBadGateway, "required_island_unsupported", p.Key), false
 			}
 			continue
 		}
-		toResolve = append(toResolve, placed{p, island})
+		out = append(out, placed{p, island})
 	}
-
-	entries := make([]IslandEntry, len(toResolve))
-	var wg sync.WaitGroup
-	for i, t := range toResolve {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			entries[i], _ = c.resolveEntry(ctx, t.p, t.island, r) // a failure is in its entry
-		}()
-	}
-	wg.Wait()
-
-	for i, e := range entries {
-		if e.Status == "error" && toResolve[i].p.Required {
-			return fail(http.StatusBadGateway, "required_island_failed", e.Key)
-		}
-	}
-
-	resp := ScreenResponse{Protocol: ProtocolVersion, Screen: screen.ID, Islands: entries, Meta: <-metaDone}
-	if screen.CacheMaxAge > 0 {
-		resp.Cache = &CacheHint{MaxAge: int(screen.CacheMaxAge.Seconds())}
-	}
-	return Result{http.StatusOK, resp}
+	return out, Result{}, true
 }
 
 // placements checks the screen's requirements, then lays it out: its declared islands that show

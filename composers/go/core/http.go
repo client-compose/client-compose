@@ -125,6 +125,10 @@ func (c *Composer) performHTTP(ctx context.Context, pathAction string, body io.R
 }
 
 func writeResult(w http.ResponseWriter, res Result) {
+	if stream, ok := res.Body.(*ScreenStream); ok {
+		writeStream(w, stream)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(res.Status)
 	_ = json.NewEncoder(w).Encode(res.Body)
