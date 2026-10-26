@@ -3,12 +3,13 @@ import {
   type IslandResponse,
   PROTOCOL_VERSION,
   type ScreenErrorResponse,
-  type ScreenResponse,
 } from "@client-compose/protocol";
 
-/** A composed screen, or the error the composer answers with. */
+import type { ScreenStream } from "./stream.ts";
+
+/** A screen, as it's streamed (spec §4.6), or the error the composer answers with. */
 export type ComposeResult =
-  | { status: 200; body: ScreenResponse }
+  | { status: 200; body: ScreenStream }
   | { status: 400 | 401 | 403 | 404 | 500 | 502; body: ScreenErrorResponse };
 
 /** One island resolved by an island request, or the error the composer answers with (spec §4.5). */

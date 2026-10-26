@@ -4,6 +4,7 @@ import { test } from "node:test";
 import type { ScreenRequest } from "@client-compose/protocol";
 
 import {
+  collect,
   createComposer,
   defineBatchLoader,
   type Island,
@@ -52,9 +53,9 @@ function compose(
 const props = async (result: ReturnType<typeof compose>) => {
   const r = await result;
   assert.equal(r.status, 200);
-  return (
-    r.body as { islands: { status: string; props?: unknown; error?: { code: string } }[] }
-  ).islands.map((i) => (i.status === "ok" ? i.props : i.error!.code));
+  assert.ok(r.status === 200);
+  const screen = await collect(r.body);
+  return screen.islands.map((i) => (i.status === "ok" ? i.props : i.error.code));
 };
 
 test("the layout and resolvers share loads by key", async () => {
@@ -208,7 +209,7 @@ test("NotFoundError (or a batch loader's missing key) in a layout is a 404, and 
     screens: [s],
     use: [{ error: (f) => f.kind === "meta" && metaErrors.push(f.error) }],
   }).compose(request, null);
-  assert.equal(result.status, 200);
-  assert.equal("meta" in result.body, false);
+  assert.ok(result.status === 200);
+  assert.equal("meta" in result.body.head, false);
   assert.equal(metaErrors.length, 1);
 });

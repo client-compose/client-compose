@@ -62,6 +62,7 @@ export {
   type Screen,
   screen,
 } from "./screens.ts";
+export { collect, type ScreenStream } from "./stream.ts";
 
 // The protocol's types, so server code (and generated descriptors, with codegen's
 // `"protocolImport": "@client-compose/composer"`) need only this package.

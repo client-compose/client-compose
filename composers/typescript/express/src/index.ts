@@ -36,7 +36,17 @@ export function composerHandler<Ctx>(
         next();
         return;
       }
-      res.status(result.status).json(result.body);
+      res.status(result.status).type(result.contentType);
+      if (typeof result.body === "string") {
+        res.send(result.body);
+        return;
+      }
+      // A screen's stream: each line is sent as it comes (spec §4.6).
+      res.flushHeaders();
+      for await (const line of result.body) {
+        res.write(line);
+      }
+      res.end();
     } catch (err) {
       next(err);
     }

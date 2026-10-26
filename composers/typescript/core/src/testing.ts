@@ -20,11 +20,13 @@ import {
   type IslandResponse,
   PROTOCOL_VERSION,
   type ScreenErrorResponse,
+  type ScreenHead,
   type ScreenResponse,
 } from "@client-compose/protocol";
 
 import type { Cache, IdempotencyStore } from "./adapters.ts";
-import type { Composer } from "./composer.ts";
+import type { Composer, HandleResult } from "./composer.ts";
+import { isRecord } from "./guards.ts";
 
 export interface TestComposerOptions<Req> {
   /**
@@ -51,8 +53,10 @@ export interface TestScreen {
   params: Record<string, string>;
   /** The HTTP status. */
   status: number;
-  /** The screen, when status is 200. */
+  /** The screen, when status is 200, with every island in place. */
   response?: ScreenResponse;
+  /** Its stream's head (spec §4.6): the screen as first sent, its islands resolved or pending. */
+  head?: ScreenHead;
   /** The protocol error code otherwise, e.g. "not_found". */
   error?: string;
   /** The screen's island keys, in order. */
@@ -148,7 +152,7 @@ export function testComposer<Ctx, Req = Request>(
     if (!res) {
       throw new Error(`testComposer: ${path} isn't a composer route`);
     }
-    return res;
+    return { status: res.status, body: await read(res) };
   }
 
   async function island(
@@ -210,13 +214,16 @@ export function testComposer<Ctx, Req = Request>(
         },
         requestOptions.headers,
       );
-      const response = res.status === 200 ? (res.body as ScreenResponse) : undefined;
+      const stream =
+        res.status === 200 ? (res.body as { head: ScreenHead; screen: ScreenResponse }) : undefined;
+      const response = stream?.screen;
       const entries = response?.islands ?? [];
       return {
         id,
         params,
         status: res.status,
         response,
+        head: stream?.head,
         error: response ? undefined : (res.body as ScreenErrorResponse).error.code,
         keys: () => entries.map((e) => e.key),
         island: (key) => entries.find((e) => e.key === key),
@@ -342,4 +349,35 @@ export function memoryIdempotencyStore(): IdempotencyStore {
       void entries.set(key, { outcome, expires: Date.now() + ttlMs }),
     release: (key) => void entries.delete(key),
   };
+}
+
+/**
+ * A handled request's body: JSON, or for a screen, its stream read to the end (spec §4.6), as its
+ * head and the screen put together.
+ */
+async function read(res: HandleResult): Promise<unknown> {
+  if (typeof res.body === "string") {
+    return JSON.parse(res.body);
+  }
+  let text = "";
+  for await (const chunk of res.body) {
+    text += chunk;
+  }
+  const lines: unknown[] = text
+    .split("\n")
+    .filter((line) => line !== "")
+    .map((line) => JSON.parse(line));
+  const [first, ...rest] = lines;
+  if (!isRecord(first) || first.kind !== "head" || !Array.isArray(first.islands)) {
+    throw new Error(`testComposer: a stream without a head: ${text}`);
+  }
+  const { kind: _kind, ...head } = first;
+  const islands: unknown[] = [...first.islands];
+  for (const line of rest) {
+    if (isRecord(line) && line.kind === "island" && isRecord(line.island)) {
+      const key = line.island.key;
+      islands[islands.findIndex((e) => isRecord(e) && e.key === key)] = line.island;
+    }
+  }
+  return { head, screen: { ...head, islands } };
 }
