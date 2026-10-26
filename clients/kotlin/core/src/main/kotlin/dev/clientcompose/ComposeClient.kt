@@ -69,7 +69,8 @@ public class ComposeClient(
         val request = ScreenRequest(PROTOCOL_VERSION, screen, params, context.toJson(), islands)
         val response = post("screens/${segment(screen)}", ClientComposeJson.encodeToString(ScreenRequest.serializer(), request))
         if (response.status !in 200..299) throw ScreenException(response.status, errorCode(response.body), response.body)
-        val decoded = ClientComposeJson.decodeFromString(ScreenResponse.serializer(), response.body)
+        // The screen streams (spec §4.6); it's read to its end and shown all at once.
+        val decoded = ScreenStream.read(response.body)
         val maxAge = decoded.cache?.maxAge ?: 0
         if (cache && maxAge > 0) {
             mutex.withLock { entries[key] = Entry(screen, params, decoded, System.currentTimeMillis() + maxAge * 1000L) }

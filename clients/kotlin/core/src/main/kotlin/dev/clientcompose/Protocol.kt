@@ -50,7 +50,10 @@ public data class IslandEntry(
     val key: String,
     val type: String,
     val version: Int,
-    /** Kept as a string so future statuses decode (and are then skipped, spec §4.4). */
+    /**
+     * Kept as a string so future statuses decode (and are then skipped, spec §4.4). `pending` is an
+     * island still on its way in a stream's head (spec §4.6).
+     */
     val status: String,
     val props: JsonObject? = null,
     val error: IslandError? = null,

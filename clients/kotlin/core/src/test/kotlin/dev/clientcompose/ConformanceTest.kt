@@ -19,7 +19,8 @@ class ConformanceTest {
         val registered: Map<String, List<Int>>,
         val expectCapabilities: Map<String, List<Int>>,
         val renderErrors: Boolean = false,
-        val response: JsonObject,
+        /** The lines of a screen's stream (spec §4.6). */
+        val stream: List<JsonObject>,
         val expectRendered: List<String>,
         val expectSkipped: List<String>,
     )
@@ -42,7 +43,7 @@ class ConformanceTest {
             }
             assertEquals(c.expectCapabilities, registry.capabilities, c.name)
 
-            val response = ClientComposeJson.decodeFromJsonElement(ScreenResponse.serializer(), c.response)
+            val response = ScreenStream.read(c.stream.joinToString("\n") { it.toString() })
             val skipped = mutableListOf<String>()
             val planned = registry.plan(
                 response,

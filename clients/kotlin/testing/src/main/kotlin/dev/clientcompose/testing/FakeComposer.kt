@@ -106,6 +106,7 @@ public class FakeComposer : Transport {
             } ?: throw Unhandled(path)
             handler(request)
         }
+        response.stream?.let { lines -> return TransportResponse(response.status, lines.joinToString("") { "$it\n" }) }
         return TransportResponse(response.status, response.body.toString())
     }
 
@@ -116,17 +117,25 @@ public class FakeComposer : Transport {
 }
 
 /** A response for [FakeComposer] to send, built from your generated types. */
-public class FakeResponse(public val status: Int, public val body: JsonElement) {
+public class FakeResponse(
+    public val status: Int,
+    public val body: JsonElement,
+    /** A screen's stream (spec §4.6), as its lines, sent in place of [body]. */
+    public val stream: List<JsonElement>? = null,
+) {
     public companion object {
-        /** A screen. */
-        public fun screen(id: String, islands: List<FakeIsland>, title: String? = null, cacheMaxAge: Int? = null): FakeResponse =
-            FakeResponse(200, buildJsonObject {
+        /** A screen, all at once: its stream's head with every island, then its end (spec §4.6). */
+        public fun screen(id: String, islands: List<FakeIsland>, title: String? = null, cacheMaxAge: Int? = null): FakeResponse {
+            val head = buildJsonObject {
+                put("kind", "head")
                 put("protocol", PROTOCOL_VERSION)
                 put("screen", id)
                 put("islands", kotlinx.serialization.json.JsonArray(islands.map { it.json }))
                 title?.let { put("meta", buildJsonObject { put("title", it) }) }
                 cacheMaxAge?.let { put("cache", buildJsonObject { put("maxAge", it) }) }
-            })
+            }
+            return FakeResponse(200, kotlinx.serialization.json.JsonNull, listOf(head, buildJsonObject { put("kind", "end") }))
+        }
 
         /** A failed screen or action request, e.g. `failure(404, "not_found")`. */
         public fun failure(status: Int, code: String): FakeResponse =

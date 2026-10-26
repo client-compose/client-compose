@@ -67,7 +67,8 @@ public final class ComposeClient: Sendable {
         guard (200..<300).contains(response.status) else {
             throw ScreenError(status: response.status, code: ErrorBody.code(in: response.body), body: response.body)
         }
-        let decoded = try JSONDecoder().decode(ScreenResponse.self, from: response.body)
+        // The screen streams (spec §4.6); it's read to its end and shown all at once.
+        let decoded = try ScreenStream.read(response.body)
         await store.remember(decoded, screen: screen, params: params)
         return decoded
     }
