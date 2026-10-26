@@ -7,15 +7,19 @@
 import {
   buildActionRequest,
   checkActionResponse,
+  collectScreen,
   fetchAction,
   newIdempotencyKey,
   plan,
   type PlannedIsland,
+  withIsland,
 } from "@client-compose/client";
 import {
   type ActionDescriptor,
   type ActionResponse,
   type DeclaredError,
+  type IslandEntry,
+  type ScreenHead,
   type ScreenResponse,
 } from "@client-compose/protocol";
 import {
@@ -31,7 +35,7 @@ import {
   useState,
 } from "react";
 
-import { loadScreen } from "./load.ts";
+import { streamScreen } from "./load.ts";
 import { scopeIslands } from "./pages.ts";
 import { ClientComposeContext, isContextValue, useClientCompose } from "./provider.ts";
 
@@ -39,7 +43,10 @@ export interface ScreenState {
   /** `loading` until the first response; `error` only if there's nothing to show. */
   status: "loading" | "ready" | "error";
   islands: PlannedIsland<ReactNode>[];
-  response?: ScreenResponse;
+  /** The screen so far: while it streams in, its islands still on their way are `pending`. */
+  response?: ScreenHead;
+  /** Islands are still on their way (spec §4.6). */
+  streaming: boolean;
   /** The last request's error. With `status: "ready"`, a refresh failed and older islands are shown. */
   error?: unknown;
   /** A request is in flight (initial load or reload). */
@@ -56,13 +63,20 @@ export interface UseScreenOptions {
    * server code) is adopted the same way.
    */
   initialResponse?: ScreenResponse;
+  /**
+   * Show the screen as it streams in (the default, unless the config's `progressive` is false), or
+   * wait for all of it.
+   */
+  progressive?: boolean;
 }
 
 interface FetchState {
   key: string;
-  response?: ScreenResponse;
+  response?: ScreenHead;
   error?: unknown;
   refreshing: boolean;
+  /** Islands are still on their way. */
+  streaming?: boolean;
 }
 
 /** The last response the server passed (`initialResponse`) that the screen took, and its key. */
@@ -86,6 +100,7 @@ export function useScreen(
     key,
     params: screenParams,
     initialResponse: options.initialResponse,
+    progressive: options.progressive,
   });
   const islands = usePlannedIslands(current.response, screenParams);
   useReloadWhenInvalidated(screen, screenParams, reload);
@@ -96,6 +111,7 @@ export function useScreen(
     response: current.response,
     error: current.error,
     refreshing: current.refreshing,
+    streaming: current.streaming ?? false,
     reload,
   };
 }
@@ -105,6 +121,7 @@ interface ScreenResponseOptions {
   key: string;
   params: Record<string, string>;
   initialResponse: ScreenResponse | undefined;
+  progressive: boolean | undefined;
 }
 
 /**
@@ -118,6 +135,7 @@ function useScreenResponse(options: ScreenResponseOptions): {
 } {
   const { screen, key, params, initialResponse } = options;
   const { config, screens } = useClientCompose();
+  const progressive = options.progressive ?? config.progressive ?? true;
   // Set by reload, read once by the effect it re-runs: never in render.
   const forceNext = useRef(false);
   const [reloads, setReloads] = useState(0);
@@ -164,7 +182,10 @@ function useScreenResponse(options: ScreenResponseOptions): {
       prev.key === key ? { ...prev, refreshing: true } : { key, refreshing: true },
     );
     try {
-      const response = await loadScreen(config, screen, params, { signal });
+      const stream = await streamScreen(config, screen, params, { signal });
+      const response = progressive
+        ? await showAsItArrives(stream, (shown) => !signal.aborted && setState(shown))
+        : await collectScreen(stream);
       screens.remember(key, screen, params, response);
       if (!signal.aborted) {
         setState(settled(key, response));
@@ -179,6 +200,25 @@ function useScreenResponse(options: ScreenResponseOptions): {
         }));
       }
     }
+  }
+
+  /**
+   * Shows the head, then each island as it arrives, and resolves with the whole screen. Until a
+   * pending island arrives, one the screen already shows stays as it is (a reload doesn't flash
+   * back to placeholders).
+   */
+  async function showAsItArrives(
+    stream: { head: ScreenHead; islands: AsyncIterable<IslandEntry> },
+    show: (state: (prev: FetchState) => FetchState) => void,
+  ): Promise<ScreenResponse> {
+    let head = stream.head;
+    show((prev) => streamingState(key, head, prev));
+    for await (const entry of stream.islands) {
+      head = withIsland(head, entry);
+      const now = head;
+      show((prev) => streamingState(key, now, prev));
+    }
+    return completeScreen(head);
   }
 
   const reload = useCallback(() => {
@@ -214,6 +254,29 @@ function serverResponseFor(
   return taken.key === key ? taken.response : undefined;
 }
 
+/** The screen while it streams: the head so far, keeping what was shown for islands still pending. */
+function streamingState(key: string, head: ScreenHead, prev: FetchState): FetchState {
+  const before = prev.key === key ? prev.response?.islands : undefined;
+  const islands = head.islands.map((e) => {
+    if (e.status !== "pending") {
+      return e;
+    }
+    const shown = before?.find((b) => b.key === e.key && b.status === "ok" && b.type === e.type);
+    return shown ?? e;
+  });
+  return {
+    key,
+    response: { ...head, islands },
+    refreshing: true,
+    streaming: head.islands.some((e) => e.status === "pending"),
+  };
+}
+
+/** A head with nothing pending, as the screen it is. */
+function completeScreen(head: ScreenHead): ScreenResponse {
+  return { ...head, islands: head.islands.filter((e): e is IslandEntry => e.status !== "pending") };
+}
+
 function settled(key: string, response: ScreenResponse): FetchState {
   return {
     key,
@@ -224,7 +287,7 @@ function settled(key: string, response: ScreenResponse): FetchState {
 
 /** The screen's islands to render, in order, each knowing where it is (for its pages). */
 function usePlannedIslands(
-  response: ScreenResponse | undefined,
+  response: ScreenHead | undefined,
   params: Record<string, string>,
 ): PlannedIsland<ReactNode>[] {
   const { config } = useClientCompose();
@@ -260,7 +323,7 @@ function useReloadWhenInvalidated(
   );
 }
 
-function screenStatus(response: ScreenResponse | undefined, error: unknown): ScreenState["status"] {
+function screenStatus(response: ScreenHead | undefined, error: unknown): ScreenState["status"] {
   if (response) {
     return "ready";
   }
@@ -325,6 +388,8 @@ export interface ComposedScreenProps {
   params?: Record<string, string>;
   /** A response fetched on the server with `loadScreen`, for server rendering and hydration. */
   initialResponse?: ScreenResponse;
+  /** Show it as it streams in, or wait for all of it (see `UseScreenOptions.progressive`). */
+  progressive?: boolean;
   /** Shown until the first response. */
   loading?: ReactNode;
   /** Shown if the first request fails. */
@@ -338,7 +403,10 @@ export interface ComposedScreenProps {
 
 /** Fetch a screen and render its islands in order. */
 export function ComposedScreen(props: ComposedScreenProps): ReactNode {
-  const screen = useScreen(props.screen, props.params, { initialResponse: props.initialResponse });
+  const screen = useScreen(props.screen, props.params, {
+    initialResponse: props.initialResponse,
+    progressive: props.progressive,
+  });
   if (screen.status === "loading") {
     return props.loading ?? null;
   }

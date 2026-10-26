@@ -12,7 +12,6 @@ import {
   type IslandEntry,
   type IslandRequest,
   type IslandResponse,
-  type PendingIsland,
   PROTOCOL_VERSION,
   type ScreenHead,
   type ScreenRequest,
@@ -24,8 +23,26 @@ type ErrorEntry = IslandEntry & { status: "error" };
 
 export type IslandRenderer<R, P = unknown> = (props: P, entry: OkEntry<P>) => R;
 
+/** What a client shows for an island still pending in a stream's head (spec §4.6). */
+export type IslandPlaceholder<R> = () => R;
+
 export class IslandRegistry<R> {
   private renderers = new Map<string, Map<number, IslandRenderer<R>>>();
+  private placeholders = new Map<string, IslandPlaceholder<R>>();
+
+  /**
+   * Register a placeholder for an island version, shown while it's pending in a stream's head
+   * (spec §4.6). Each app draws its own: the protocol says nothing about how one looks.
+   */
+  registerPlaceholder(island: IslandDescriptor<unknown>, placeholder: IslandPlaceholder<R>): this {
+    this.placeholders.set(`${island.type}@${island.version}`, placeholder);
+    return this;
+  }
+
+  /** The placeholder for an island version, if one was registered. */
+  placeholder(type: string, version: number): IslandPlaceholder<R> | undefined {
+    return this.placeholders.get(`${type}@${version}`);
+  }
 
   /** Register a renderer for a generated island descriptor: `register(ProfileHeaderV2, (props) => …)`. */
   register<P>(island: IslandDescriptor<P>, render: IslandRenderer<R, P>): this;
@@ -89,6 +106,8 @@ export function buildRequest(
 export interface PlannedIsland<R> {
   key: string;
   render: () => R;
+  /** It's a placeholder, for an island still pending in a stream's head (spec §4.6). */
+  pending?: boolean;
 }
 
 export type SkipReason = "unknown_island" | "unknown_status";
@@ -96,16 +115,14 @@ export type SkipReason = "unknown_island" | "unknown_status";
 export interface PlanOptions<R> {
   /** Render something for errored islands. Default: omit them (spec §4.3). */
   onError?: (entry: ErrorEntry) => R | undefined;
-  /**
-   * Render something for islands still pending in a stream's head (spec §4.6), such as a
-   * placeholder. Default: omit them until they arrive.
-   */
-  onPending?: (entry: PendingIsland) => R | undefined;
   /** Called for islands the client can't render (spec §4.4). Useful for telemetry. */
   onSkipped?: (entry: IslandEntry, reason: SkipReason) => void;
 }
 
-/** Turn a screen, or a stream's head (spec §4.6), into an ordered list of renderable islands. */
+/**
+ * Turn a screen, or a stream's head (spec §4.6), into an ordered list of renderable islands. An
+ * island still pending is its registered placeholder, or left out until it arrives.
+ */
 export function plan<R>(
   registry: IslandRegistry<R>,
   response: ScreenResponse | ScreenHead,
@@ -114,9 +131,15 @@ export function plan<R>(
   const out: PlannedIsland<R>[] = [];
   for (const entry of response.islands) {
     if (entry.status === "pending") {
-      const placeholder = registry.get(entry.type, entry.version) && options.onPending?.(entry);
-      if (placeholder !== undefined) {
-        out.push({ key: entry.key, render: () => placeholder });
+      const placeholder = registry.get(entry.type, entry.version)
+        ? registry.placeholder(entry.type, entry.version)
+        : undefined;
+      if (placeholder) {
+        out.push({
+          key: entry.key,
+          render: placeholder,
+          pending: true,
+        });
       }
       continue;
     }

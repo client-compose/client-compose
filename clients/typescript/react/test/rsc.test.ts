@@ -66,3 +66,25 @@ test("renders a response passed in instead of fetching", async () => {
   assert.match(html, /<h1>Ada<\/h1>/);
   assert.match(html, /<button>count 1<\/button>/);
 });
+
+test("streams an island pending in the screen's head: its placeholder first, then the island", async () => {
+  execFileSync("pnpm", ["exec", "tsc", "-b", here("../tsconfig.build.json")], { stdio: "inherit" });
+  const payload = await run(process.execPath, [
+    "--conditions",
+    "react-server",
+    "--import",
+    here("rsc/register-loader.mjs"),
+    here("rsc/render-server.mjs"),
+    "streaming",
+  ]);
+  // The placeholder goes out with the rest of the screen; the counter follows once it's arrived.
+  assert.ok(payload.includes("counting…"), "the placeholder is in the payload");
+  assert.ok(
+    payload.indexOf("counting…") < payload.indexOf('"start":1'),
+    "the placeholder comes before the island",
+  );
+  const { html } = await renderRsc("streaming");
+  assert.match(html, /<h1>Ada<\/h1>/);
+  assert.match(html, /<button>count 1<\/button>/);
+  assert.ok(html.indexOf("<h1>Ada</h1>") < html.indexOf("<button>"), "islands keep their order");
+});

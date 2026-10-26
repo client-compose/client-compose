@@ -36,6 +36,44 @@ const response = {
 
 // "preloaded": the page passes a response it already loaded, so the component must not fetch.
 const preloaded = process.argv[2] === "preloaded";
+// "streaming": the counter is pending in the stream's head, and arrives a moment later.
+const streaming = process.argv[2] === "streaming";
+
+/** The composer's stream: the head at once, then (streaming) the counter after 30ms, and the end. */
+function streamed() {
+  const encoder = new TextEncoder();
+  const line = (l) => encoder.encode(`${JSON.stringify(l)}\n`);
+  const counter = response.islands.find((e) => e.key === "counter");
+  const islands = streaming
+    ? response.islands.map((e) =>
+        e.key === "counter"
+          ? {
+              key: e.key,
+              type: e.type,
+              version: e.version,
+              status: "pending",
+            }
+          : e,
+      )
+    : response.islands;
+  return new ReadableStream({
+    async start(controller) {
+      controller.enqueue(
+        line({
+          kind: "head",
+          ...response,
+          islands,
+        }),
+      );
+      if (streaming) {
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        controller.enqueue(line({ kind: "island", island: counter }));
+      }
+      controller.enqueue(line({ kind: "end" }));
+      controller.close();
+    },
+  });
+}
 
 const config = {
   registry,
@@ -45,10 +83,7 @@ const config = {
     ? async () => {
         throw new Error("fetched although a response was passed in");
       }
-    : async () =>
-        new Response(`${JSON.stringify({ kind: "head", ...response })}\n{"kind":"end"}\n`, {
-          headers: { "content-type": "application/jsonl" },
-        }),
+    : async () => new Response(streamed(), { headers: { "content-type": "application/jsonl" } }),
 };
 
 // Client references are "<file url>#<export>"; this test loads modules by URL, so map them as-is.

@@ -4,12 +4,7 @@
 // its next pages from there.
 
 import { buildIslandRequest, fetchIsland, type PlannedIsland } from "@client-compose/client";
-import type {
-  IslandEntry,
-  IslandError,
-  IslandRequest,
-  ScreenResponse,
-} from "@client-compose/protocol";
+import type { IslandEntry, IslandError, IslandRequest, ScreenHead } from "@client-compose/protocol";
 import { createContext, createElement, type ReactNode, useContext, useState } from "react";
 
 import type { ClientComposeConfig } from "./config.ts";
@@ -36,7 +31,7 @@ export function IslandScope(props: IslandScopeProps): ReactNode {
 /** A screen's planned islands, each inside its IslandScope. */
 export function scopeIslands(
   islands: PlannedIsland<ReactNode>[],
-  response: ScreenResponse,
+  response: ScreenHead,
   params: Record<string, string>,
 ): PlannedIsland<ReactNode>[] {
   return islands.map((island) => {

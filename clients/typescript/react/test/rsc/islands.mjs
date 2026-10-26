@@ -18,5 +18,7 @@ function Broken() {
 
 export const registry = new ReactIslandRegistry()
   .registerComponent({ type: "header", version: 1 }, Header)
-  .registerComponent({ type: "counter", version: 1 }, Counter)
+  .registerComponent({ type: "counter", version: 1 }, Counter, {
+    placeholder: () => createElement("p", { "aria-busy": true }, "counting…"),
+  })
   .registerComponent({ type: "broken", version: 1 }, Broken);

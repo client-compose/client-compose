@@ -73,9 +73,7 @@ export interface ScreenHead extends Omit<ScreenResponse, "islands"> {
 
 /** One line of a screen's stream (spec §4.6). */
 export type ScreenStreamLine =
-  | ({ kind: "head" } & ScreenHead)
-  | { kind: "island"; island: IslandEntry }
-  | { kind: "end" };
+  ({ kind: "head" } & ScreenHead) | { kind: "island"; island: IslandEntry } | { kind: "end" };
 
 /**
  * Resolves one island of a screen again: its next page, given the cursor from its entry's `next`,

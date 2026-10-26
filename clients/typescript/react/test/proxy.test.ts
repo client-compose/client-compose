@@ -69,7 +69,10 @@ test("fetch hands the screen request to loadScreen, and answers like the compose
   const found = await transport.fetch("ignored", init);
   assert.equal(found.headers.get("content-type"), "application/jsonl");
   assert.deepEqual(
-    (await found.text()).trim().split("\n").map((line) => JSON.parse(line)),
+    (await found.text())
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line)),
     [{ kind: "head", ...home }, { kind: "end" }],
   );
   const missing = await transport.fetch("ignored", init);
