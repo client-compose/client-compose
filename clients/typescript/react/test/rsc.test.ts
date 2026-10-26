@@ -88,3 +88,20 @@ test("streams an island pending in the screen's head: its placeholder first, the
   assert.match(html, /<button>count 1<\/button>/);
   assert.ok(html.indexOf("<h1>Ada</h1>") < html.indexOf("<button>"), "islands keep their order");
 });
+
+test("streams each island in as soon as it arrives, even below one still on its way", async () => {
+  execFileSync("pnpm", ["exec", "tsc", "-b", here("../tsconfig.build.json")], { stdio: "inherit" });
+  const payload = await run(process.execPath, [
+    "--conditions",
+    "react-server",
+    "--import",
+    here("rsc/register-loader.mjs"),
+    here("rsc/render-server.mjs"),
+    "out-of-order",
+  ]);
+  // The counter, below the header, arrives first, and isn't held back for it.
+  assert.ok(payload.includes('"start":1') && payload.includes("Ada"));
+  assert.ok(payload.indexOf('"start":1') < payload.indexOf("Ada"), "the counter isn't held back");
+  const { html } = await renderRsc("out-of-order");
+  assert.ok(html.indexOf("<h1>Ada</h1>") < html.indexOf("<button>"), "islands keep their order");
+});

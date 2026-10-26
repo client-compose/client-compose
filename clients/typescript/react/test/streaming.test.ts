@@ -86,6 +86,7 @@ test("shows the head at once, placeholders for pending islands, and each as it a
   assert.equal(view.html(), '<h1>Ada</h1><p aria-busy="true">…</p>');
   assert.equal(view.latest()?.streaming, true);
 
+  // Ads, below posts, shows as soon as it arrives: it isn't held back for posts.
   await act(async () => profile.send(island("ads", Ads, { text: "Buy" })));
   await settle();
   assert.equal(view.html(), '<h1>Ada</h1><p aria-busy="true">…</p><aside>Buy</aside>');

@@ -37,16 +37,18 @@ const response = {
 // "preloaded": the page passes a response it already loaded, so the component must not fetch.
 const preloaded = process.argv[2] === "preloaded";
 // "streaming": the counter is pending in the stream's head, and arrives a moment later.
-const streaming = process.argv[2] === "streaming";
+// "out-of-order": the header is pending too, and arrives after the counter, below it.
+const outOfOrder = process.argv[2] === "out-of-order";
+const streaming = process.argv[2] === "streaming" || outOfOrder;
+const late = outOfOrder ? ["counter", "header"] : ["counter"];
 
-/** The composer's stream: the head at once, then (streaming) the counter after 30ms, and the end. */
+/** The composer's stream: the head at once, then each late island 30ms apart, and the end. */
 function streamed() {
   const encoder = new TextEncoder();
   const line = (l) => encoder.encode(`${JSON.stringify(l)}\n`);
-  const counter = response.islands.find((e) => e.key === "counter");
   const islands = streaming
     ? response.islands.map((e) =>
-        e.key === "counter"
+        late.includes(e.key)
           ? {
               key: e.key,
               type: e.type,
@@ -65,9 +67,10 @@ function streamed() {
           islands,
         }),
       );
-      if (streaming) {
+      for (const key of streaming ? late : []) {
         await new Promise((resolve) => setTimeout(resolve, 30));
-        controller.enqueue(line({ kind: "island", island: counter }));
+        const island = response.islands.find((e) => e.key === key);
+        controller.enqueue(line({ kind: "island", island }));
       }
       controller.enqueue(line({ kind: "end" }));
       controller.close();

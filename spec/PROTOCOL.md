@@ -192,6 +192,8 @@ For each island the composer wants to place:
 - A `pending` island (§4.6) MAY be shown as a placeholder of the client's own until its line
   arrives, or the client MAY wait for the whole stream before showing the screen. Placeholders
   are the client's: the protocol says nothing about how a pending island looks.
+- A client that shows a screen as it streams MUST show each island as soon as its line arrives,
+  wherever it is on the screen: never waiting for an island above it.
 - Typed clients (Swift, Kotlin, …) that fail to decode an island's props MUST skip that
   island rather than fail the screen, and SHOULD report it.
 - Props SHOULD be validated client-side in debug builds only.
@@ -284,8 +286,10 @@ line's `kind` says what it is:
 1. **`head`**, first and once: the screen response (§4), whose islands are the screen's, in
    order, each either resolved (`ok` or `error`) or `pending`, with its key, type and version and
    nothing else. A client can lay the whole screen out from it.
-2. **`island`**, once for each pending island, as it's resolved, in any order: its entry (§4.1),
-   as an island request answers it (§4.5). Its key says where it goes.
+2. **`island`**, once for each pending island, as soon as it's resolved: its entry (§4.1), as an
+   island request answers it (§4.5). Lines come in the order islands are resolved, not the order
+   they're placed: a composer MUST NOT hold one back for an island above it. Its key says where it
+   goes.
 3. **`end`**, last: the screen is complete.
 
 What can fail the whole screen is settled before the head, so a screen's status is known before
