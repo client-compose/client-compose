@@ -1,6 +1,6 @@
 {
   "name": "@client-compose/conformance",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Conformance suites and runner for Client Compose composer and client implementations.",
   "keywords": [
     "client-compose",
