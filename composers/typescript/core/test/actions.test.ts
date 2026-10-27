@@ -2,7 +2,14 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { ConformanceV1, type ConformanceV1Input } from "../src/conformance-actions.generated.ts";
-import { type Action, action, createComposer, ForbiddenError, reportErrors } from "../src/index.ts";
+import {
+  type Action,
+  action,
+  createComposer,
+  ForbiddenError,
+  reportErrors,
+  type ScreenStringsDescriptor,
+} from "../src/index.ts";
 
 /** Performs actions in-process, reporting failures as `action vN: message`. */
 function performer<Ctx>(actions: Action<Ctx>[], reported?: string[]) {
@@ -115,4 +122,42 @@ test("actions share request-scoped loads, and the context function's context rea
 test("defining an action version twice throws", () => {
   const a = action(ConformanceV1, () => ({ result: { echo: "", version: 1 } }));
   assert.throws(() => createComposer({ actions: [a, a] }), /conformance v1 is defined twice/);
+});
+
+test("an action reads screen strings in the client's language", async () => {
+  const SearchScreenStrings: ScreenStringsDescriptor<{ creators: string }> = {
+    screen: "search",
+    strings: { creators: [] },
+  };
+  const composer = createComposer({
+    actions: [
+      action(ConformanceV1, (_, ac) => ({
+        result: { echo: ac.strings(SearchScreenStrings).creators, version: 1 },
+      })),
+    ],
+    strings: {
+      catalog: {
+        en: { screens: { search: { creators: "Creators" } } },
+        pl: { screens: { search: { creators: "Twórcy" } } },
+      },
+    },
+  });
+  const res = await composer.perform(
+    {
+      protocol: 0,
+      action: "conformance",
+      version: 1,
+      input: { outcome: "ok", echo: "x" },
+      client: {
+        platform: "test",
+        appVersion: "1",
+        locale: "pl-PL",
+      },
+    },
+    undefined,
+  );
+  assert.deepEqual(res.status === 200 && res.body.status === "ok" && res.body.result, {
+    echo: "Twórcy",
+    version: 1,
+  });
 });

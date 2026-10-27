@@ -175,7 +175,7 @@ export function createComposer<Ctx = undefined, Req = Request>(
   let resolveChain: ResolveFn<Ctx> = (call) => resolveCached(config.cache, call, report);
   let composeChain: ComposeFn<Ctx> = (req, ctx) => composeScreen(screenOf(req.screen), req, ctx);
   const performOnce = (req: ActionRequest, ctx: Ctx) =>
-    performAction(actionOf(req.action, req.version), req, ctx, report);
+    performAction(actionOf(req.action, req.version), req, ctx, report, wordsFor(req.client.locale));
   let performChain: PerformFn<Ctx> = (req, ctx) =>
     performIdempotent(config.idempotency, req, ctx, performOnce, report);
   for (const p of [...plugins].reverse()) {

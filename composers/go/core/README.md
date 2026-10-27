@@ -248,7 +248,8 @@ the manifests.
 
 A screen's own words, such as its meta's title, are its screen strings: declared in a screen strings
 manifest, in the catalog under `screens`, and read in the request's language with the generated
-type: `CreatorScreenStringsFor(r).Title(name)` (or `r.ScreenStrings("creator")`).
+type: `CreatorScreenStringsFor(r).Title(name)` (or `r.ScreenStrings("creator")`). Actions whose
+results carry words read them the same way, from their `Call`: `SearchScreenStringsFor(call)`.
 
 In tests, `app.Strings("pl")` fetches the app strings, and an island's entry has its `Strings`.
 

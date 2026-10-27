@@ -256,11 +256,19 @@ func (t StringsTable) Format(key string, values map[string]string) string {
 // ScreenStrings returns a screen's own strings (spec §4.7) in the request's language: the words
 // the composer uses itself, such as its meta's title. Generated screen strings types read them:
 // CreatorScreenStringsFor(r).Title(name). Without a catalog, every string is empty.
-func (r Request) ScreenStrings(screen string) StringsTable {
-	if r.words == nil {
+func (r Request) ScreenStrings(screen string) StringsTable { return r.words.table(screen) }
+
+// ScreenStringsSource is what generated screen strings types read from: a Request, or an action's
+// Call.
+type ScreenStringsSource interface {
+	ScreenStrings(screen string) StringsTable
+}
+
+func (l *LocaleStrings) table(screen string) StringsTable {
+	if l == nil {
 		return StringsTable{}
 	}
-	return StringsTable{Strings: r.words.Screen(screen), Plurals: r.words.Plurals}
+	return StringsTable{Strings: l.Screen(screen), Plurals: l.Plurals}
 }
 
 // Screen returns a screen's own strings, each from the nearest language that has it, or nil if no

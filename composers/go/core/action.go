@@ -24,7 +24,13 @@ type Call struct {
 	// IdempotencyKey is the client's key for this user intent, if it sent one (spec §5.2). Honouring
 	// it (returning the first outcome again instead of repeating the change) is up to the action.
 	IdempotencyKey string
+	// words are the catalog's in the client's language, for ScreenStrings.
+	words *LocaleStrings
 }
+
+// ScreenStrings returns screen strings (spec §4.7) in the client's language, for words an action's
+// result carries. Generated screen strings types read them: SearchScreenStringsFor(call).Creators().
+func (c Call) ScreenStrings(screen string) StringsTable { return c.words.table(screen) }
 
 // ScreenRef refers to screens: those with this id whose params include all of Params (spec §5.3).
 type ScreenRef struct {
@@ -179,10 +185,7 @@ func (c *Composer) performAction(ctx context.Context, req ActionRequest) Result 
 	if err := validateJSON(action.schema, req.Input); err != nil {
 		return fail(http.StatusBadRequest, "invalid_input", err.Error())
 	}
-	call := Call{IdempotencyKey: req.IdempotencyKey}
-	if req.Client != nil {
-		call.Client = *req.Client
-	}
+	call := Call{IdempotencyKey: req.IdempotencyKey, Client: client, words: c.words(client.Locale)}
 
 	result, effects, err := runAction(ctx, action, call, req.Input)
 	respond := func(status string) ActionResponse {
