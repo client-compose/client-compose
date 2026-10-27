@@ -1,6 +1,6 @@
 {
   "name": "@client-compose/express",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Express adapter for the Client Compose composer.",
   "keywords": [
     "client-compose",
