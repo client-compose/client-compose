@@ -93,7 +93,8 @@ export function AppStringsProvider(props: AppStringsProviderProps): ReactNode {
     }
     let stale = false;
     const show = (change: (prev: Loaded) => Loaded) => !stale && setLoaded(change);
-    void (async () => {
+    /** Shows the kept strings, if there are any, then fetches them again and keeps those. */
+    async function keptThenFresh() {
       const kept = await Promise.resolve(cache?.read(locale)).catch(() => undefined);
       if (kept) {
         show((prev) =>
@@ -108,7 +109,8 @@ export function AppStringsProvider(props: AppStringsProviderProps): ReactNode {
         // Strings already shown stay; without them, the app can't say anything.
         show((prev) => (prev.locale === locale && prev.response ? prev : { locale, error }));
       }
-    })();
+    }
+    void keptThenFresh();
     return () => {
       stale = true;
     };
