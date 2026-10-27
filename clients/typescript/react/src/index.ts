@@ -55,5 +55,6 @@ export type {
   ScreenMeta,
   ScreenRef,
   ScreenResponse,
+  ScreenStringsDescriptor,
   StringsResponse,
 } from "@client-compose/protocol";
