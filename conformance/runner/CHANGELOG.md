@@ -1,5 +1,21 @@
 # @client-compose/conformance
 
+## 0.10.0
+
+### Minor Changes
+
+- [#43](https://github.com/client-compose/client-compose/pull/43) [`70ff47c`](https://github.com/client-compose/client-compose/commit/70ff47c0a7b511db17586f34819a2ab472350792) Thanks [@LewisYearsley](https://github.com/LewisYearsley)! - Screen strings (spec §4.7): a screen's own words, such as its meta's title, which its composer uses
+  itself. Declared by screen id in a screen strings manifest (`screenStrings` in the codegen config),
+  kept in the catalog under `screens`, and never sent to clients as such.
+  
+  - Protocol: `ScreenStringsDescriptor`. `formatString`, `pluralCategory` and `buildStrings` move
+    here from the client, which still exports them.
+  - Composer: `lc.strings(CreatorScreenStrings)` in layouts, conditions, resolvers and meta. Meta
+    fields that are empty are left out, as the Go composer does.
+  - Codegen: `XScreenStrings` types and descriptors for TypeScript, and for Go
+    `XScreenStringsFor(r)` with a method per string; the catalog check covers `screens`.
+  - Conformance: a case for a screen's meta from its own strings.
+
 ## 0.9.0
 
 ### Minor Changes

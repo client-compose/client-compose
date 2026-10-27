@@ -1,5 +1,13 @@
 # @client-compose/react
 
+## 0.11.1
+
+### Patch Changes
+
+- Updated dependencies [[`70ff47c`](https://github.com/client-compose/client-compose/commit/70ff47c0a7b511db17586f34819a2ab472350792)]:
+  - @client-compose/protocol@0.7.0
+  - @client-compose/client@0.10.0
+
 ## 0.11.0
 
 ### Minor Changes
