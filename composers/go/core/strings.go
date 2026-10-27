@@ -8,6 +8,8 @@ import (
 	"io/fs"
 	"net/http"
 	"path"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -47,11 +49,12 @@ type Strings map[string]Template
 // syntax, for whole numbers.
 type PluralRules map[string]string
 
-// CatalogFile is one language's words: its app strings, and each island version's, by
-// "type@version".
+// CatalogFile is one language's words: its app strings, each island version's (by
+// "type@version"), and each screen's own (by screen id).
 type CatalogFile struct {
 	App     Strings            `json:"app,omitempty"`
 	Islands map[string]Strings `json:"islands,omitempty"`
+	Screens map[string]Strings `json:"screens,omitempty"`
 }
 
 // Catalog is the words in every language, by language tag ("en", "pl", "pt-BR").
@@ -233,4 +236,141 @@ func (c *Composer) AppStrings(req StringsRequest) Result {
 		return fail(http.StatusNotFound, "no_strings", "this composer has no strings catalog")
 	}
 	return Result{http.StatusOK, StringsResponse{Protocol: ProtocolVersion, Locale: words.Locale, Plurals: words.Plurals, Strings: words.App()}}
+}
+
+// StringsTable is a set of strings in one language, with its plural rules, as generated screen
+// strings types read it.
+type StringsTable struct {
+	Strings Strings
+	Plurals PluralRules
+}
+
+// Text returns a string with no params. A missing string is empty.
+func (t StringsTable) Text(key string) string { return FormatString(t.Strings[key], nil, t.Plurals) }
+
+// Format returns a string with its params filled in.
+func (t StringsTable) Format(key string, values map[string]string) string {
+	return FormatString(t.Strings[key], values, t.Plurals)
+}
+
+// ScreenStrings returns a screen's own strings (spec §4.7) in the request's language: the words
+// the composer uses itself, such as its meta's title. Generated screen strings types read them:
+// CreatorScreenStringsFor(r).Title(name). Without a catalog, every string is empty.
+func (r Request) ScreenStrings(screen string) StringsTable {
+	if r.words == nil {
+		return StringsTable{}
+	}
+	return StringsTable{Strings: r.words.Screen(screen), Plurals: r.words.Plurals}
+}
+
+// Screen returns a screen's own strings, each from the nearest language that has it, or nil if no
+// language has any.
+func (l LocaleStrings) Screen(id string) Strings {
+	return l.merge(func(f CatalogFile) Strings { return f.Screens[id] })
+}
+
+// FormatString fills in a template's {name} slots from values. A counted string's variant is
+// chosen by values["count"]: the exact number, then its plural category, then "#*".
+func FormatString(t Template, values map[string]string, plurals PluralRules) string {
+	text := t.Text
+	if t.Variants != nil {
+		text = t.Variants["#*"]
+		if n, err := strconv.ParseInt(values["count"], 10, 64); err == nil {
+			if v, ok := t.Variants[fmt.Sprintf("#%d", n)]; ok {
+				text = v
+			} else if v, ok := t.Variants["#"+PluralCategory(plurals, n)]; ok {
+				text = v
+			}
+		}
+	}
+	return slot.ReplaceAllStringFunc(text, func(s string) string {
+		if v, ok := values[s[1:len(s)-1]]; ok {
+			return v
+		}
+		return s
+	})
+}
+
+var slot = regexp.MustCompile(`\{[A-Za-z0-9]+\}`)
+
+// pluralOrder is the categories in the order CLDR lists them: a count is in the first whose
+// condition holds.
+var pluralOrder = []string{"zero", "one", "two", "few", "many"}
+
+// PluralCategory returns a count's plural category in a language: the first whose condition
+// holds, or "other".
+func PluralCategory(rules PluralRules, count int64) string {
+	for _, category := range pluralOrder {
+		if condition, ok := rules[category]; ok && holds(condition, count) {
+			return category
+		}
+	}
+	return "other"
+}
+
+// holds reports whether a CLDR condition, an "or" of "and"s of relations like "i % 10 = 2..4",
+// holds for a whole number: n and i are the number, and v, w, f, t, c and e are zero.
+func holds(condition string, count int64) bool {
+	for _, all := range strings.Split(condition, " or ") {
+		ok := true
+		for _, relation := range strings.Split(all, " and ") {
+			if !relates(relation, count) {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			return true
+		}
+	}
+	return false
+}
+
+func relates(relation string, count int64) bool {
+	op := "="
+	if strings.Contains(relation, "!=") {
+		op = "!="
+	}
+	left, right, found := strings.Cut(relation, op)
+	if !found {
+		return false
+	}
+	operand, mod, hasMod := strings.Cut(left, "%")
+	operand = strings.TrimSpace(operand)
+	if len(operand) != 1 || strings.IndexByte("nivwftce", operand[0]) < 0 {
+		return false
+	}
+	var value int64
+	if operand == "n" || operand == "i" {
+		value = count
+		if value < 0 {
+			value = -value
+		}
+	}
+	if hasMod {
+		m, err := strconv.ParseInt(strings.TrimSpace(mod), 10, 64)
+		if err != nil || m == 0 {
+			return false
+		}
+		value %= m
+	}
+	in := false
+	for _, r := range strings.Split(right, ",") {
+		from, to, isRange := strings.Cut(strings.TrimSpace(r), "..")
+		lo, err := strconv.ParseInt(from, 10, 64)
+		if err != nil {
+			continue
+		}
+		hi := lo
+		if isRange {
+			if hi, err = strconv.ParseInt(to, 10, 64); err != nil {
+				continue
+			}
+		}
+		if value >= lo && value <= hi {
+			in = true
+			break
+		}
+	}
+	return in == (op == "=")
 }

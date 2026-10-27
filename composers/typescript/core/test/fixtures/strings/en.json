@@ -1,6 +1,24 @@
 {
-  "app": { "loading": "Loading", "retry": "Try again" },
+  "app": {
+    "loading": "Loading",
+    "retry": "Try again"
+  },
   "islands": {
-    "list@1": { "heading": "Numbers", "count": { "#1": "One number", "#*": "{count} numbers" } }
+    "list@1": {
+      "heading": "Numbers",
+      "count": {
+        "#1": "One number",
+        "#*": "{count} numbers"
+      }
+    }
+  },
+  "screens": {
+    "numbers": {
+      "title": "Numbers about {name}",
+      "description": {
+        "#1": "One number",
+        "#*": "{count} numbers"
+      }
+    }
   }
 }

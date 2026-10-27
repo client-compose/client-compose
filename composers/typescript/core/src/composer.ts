@@ -7,7 +7,9 @@ import {
   type IslandRequest,
   PROTOCOL_VERSION,
   type ScreenErrorResponse,
+  type ScreenMeta,
   type ScreenRequest,
+  type ScreenStringsDescriptor,
   type StringsRequest,
 } from "@client-compose/protocol";
 
@@ -31,7 +33,7 @@ import {
   type Screen,
 } from "./screens.ts";
 import { inOrderResolved, isScreenStream, streamLines } from "./stream.ts";
-import { type LocaleStrings, type StringsConfig, stringsFor } from "./strings.ts";
+import { type LocaleStrings, screenStrings, type StringsConfig, stringsFor } from "./strings.ts";
 
 export interface ComposerConfig<Ctx, Req = Request> {
   screens?: Screen<Ctx>[];
@@ -227,6 +229,7 @@ export function createComposer<Ctx = undefined, Req = Request>(
     scope: RequestScope,
   ): Promise<IslandResult> {
     const load = scope.load.bind(scope);
+    const language = wordsFor(req.client.locale);
     const fields = {
       screen: screen.id,
       params: req.params ?? {},
@@ -234,6 +237,7 @@ export function createComposer<Ctx = undefined, Req = Request>(
       ctx,
       load,
       cursor: req.cursor,
+      strings: <S>(d: ScreenStringsDescriptor<S>) => screenStrings(language, d),
     };
     const lc: LayoutContext<Ctx> = attachScope(fields, scope);
     let placements: Placement<Ctx>[];
@@ -256,7 +260,7 @@ export function createComposer<Ctx = undefined, Req = Request>(
       return found.res;
     }
     // A page's strings are the ones the client has from the screen (spec §4.5).
-    const words = req.cursor === undefined ? wordsFor(req.client.locale) : undefined;
+    const words = req.cursor === undefined ? language : undefined;
     const { entry, cause } = await resolveEntry(
       screen,
       found.placement,
@@ -324,6 +328,7 @@ export function createComposer<Ctx = undefined, Req = Request>(
   ): Promise<ComposeResult> {
     const params = req.params ?? {};
     const load = scope.load.bind(scope);
+    const words = wordsFor(req.client.locale);
     const lc: LayoutContext<Ctx> = attachScope(
       {
         screen: screen.id,
@@ -331,6 +336,7 @@ export function createComposer<Ctx = undefined, Req = Request>(
         client: req.client,
         ctx,
         load,
+        strings: <S>(d: ScreenStringsDescriptor<S>) => screenStrings(words, d),
       },
       scope,
     );
@@ -378,7 +384,6 @@ export function createComposer<Ctx = undefined, Req = Request>(
     const placed = negotiated.filter(
       (n): n is { p: Placement<Ctx>; island: Island<Ctx, unknown> } => n.island !== undefined,
     );
-    const words = wordsFor(req.client.locale);
     const done: (IslandEntry | undefined)[] = placed.map(() => undefined);
     const resolving = placed.map(({ p, island }, i) =>
       resolveEntry(screen, p, island, lc, scope, words).then(({ entry }) => {
@@ -394,7 +399,7 @@ export function createComposer<Ctx = undefined, Req = Request>(
     if (failedRequired) {
       return fail(502, "required_island_failed", failedRequired.key);
     }
-    const screenMeta = await meta;
+    const screenMeta = said(await meta);
 
     // It takes the other islands that are ready by then; the rest follow.
     const islands = placed.map(({ p, island }, i) => {
@@ -415,8 +420,7 @@ export function createComposer<Ctx = undefined, Req = Request>(
           protocol: PROTOCOL_VERSION,
           screen: screen.id,
           islands,
-          ...(screenMeta &&
-            Object.values(screenMeta).some((v) => v !== undefined) && { meta: screenMeta }),
+          ...(screenMeta && { meta: screenMeta }),
           ...(screen.cache && { cache: { maxAge: screen.cache.maxAge } }),
           ...(words && { locale: words.locale, plurals: words.plurals }),
         },
@@ -703,6 +707,12 @@ export function createComposer<Ctx = undefined, Req = Request>(
     appStrings,
     islands,
   };
+}
+
+/** Meta with only what it says: no empty or undefined fields, and none at all if that's all. */
+function said(meta: ScreenMeta | undefined): ScreenMeta | undefined {
+  const fields = Object.entries(meta ?? {}).filter(([, v]) => v !== undefined && v !== "");
+  return fields.length > 0 ? Object.fromEntries(fields) : undefined;
 }
 
 /** A result as `handle` answers it: a screen's stream as JSON lines, anything else as JSON. */

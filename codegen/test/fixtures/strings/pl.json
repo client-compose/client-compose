@@ -14,5 +14,10 @@
         "#*": "{count} elementów"
       }
     }
+  },
+  "screens": {
+    "profile": {
+      "title": "{name} w Example"
+    }
   }
 }

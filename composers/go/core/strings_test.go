@@ -3,6 +3,7 @@ package clientcompose_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -163,5 +164,97 @@ func TestPluralsAreSentWhenEmpty(t *testing.T) {
 	}))
 	if screen := app.Screen("one", nil); screen.Head.Plurals == nil || len(*screen.Head.Plurals) != 0 {
 		t.Fatalf("plurals: %v", screen.Head.Plurals)
+	}
+}
+
+func TestPluralCategoriesAgreeWithCLDR(t *testing.T) {
+	var rules struct {
+		Rules map[string]cc.PluralRules `json:"rules"`
+	}
+	var cases struct {
+		Cases map[string]map[string][]int64 `json:"cases"`
+	}
+	readJSON(t, "../../../spec/plurals.json", &rules)
+	readJSON(t, "../../../conformance/client/plural-cases.json", &cases)
+	if len(cases.Cases) < 200 {
+		t.Fatalf("only %d languages", len(cases.Cases))
+	}
+	for language, categories := range cases.Cases {
+		for category, counts := range categories {
+			for _, n := range counts {
+				if got := cc.PluralCategory(rules.Rules[language], n); got != category {
+					t.Errorf("%s %d: %s, want %s", language, n, got, category)
+				}
+			}
+		}
+	}
+}
+
+func TestTemplatesAreFilledInAsTheFixturesSay(t *testing.T) {
+	var rules struct {
+		Rules map[string]cc.PluralRules `json:"rules"`
+	}
+	var cases struct {
+		Cases []struct {
+			Name     string         `json:"name"`
+			Language string         `json:"language"`
+			Template cc.Template    `json:"template"`
+			Values   map[string]any `json:"values"`
+			Expect   string         `json:"expect"`
+		} `json:"cases"`
+	}
+	readJSON(t, "../../../spec/plurals.json", &rules)
+	readJSON(t, "../../../conformance/client/string-cases.json", &cases)
+	for _, c := range cases.Cases {
+		values := map[string]string{}
+		for k, v := range c.Values {
+			values[k] = fmt.Sprint(v)
+		}
+		if got := cc.FormatString(c.Template, values, rules.Rules[c.Language]); got != c.Expect {
+			t.Errorf("%s: %q, want %q", c.Name, got, c.Expect)
+		}
+	}
+}
+
+func TestAScreenReadsItsOwnStrings(t *testing.T) {
+	composer := cc.New(cc.Config{
+		Screens: []cc.Screen{{
+			ID:      "numbers",
+			Islands: []cc.Placement{cc.Static("header", headerV1{})},
+			Meta: func(_ context.Context, r cc.Request) (cc.ScreenMeta, error) {
+				words := r.ScreenStrings("numbers")
+				return cc.ScreenMeta{
+					Title:       words.Format("title", map[string]string{"name": "Ada"}),
+					Description: words.Format("description", map[string]string{"count": "3"}),
+				}, nil
+			},
+		}},
+		Strings: &cc.StringsConfig{Catalog: catalog(t)},
+	})
+	polish := cctest.New(t, composer, cctest.Client(cc.ClientContext{Platform: "test", AppVersion: "1", Locale: "pl"}))
+	// Polish has the title; its description falls back to English's.
+	if meta := polish.Screen("numbers", nil).Head.Meta; meta == nil || meta.Title != "Liczby o Ada" || meta.Description != "3 numbers" {
+		t.Fatalf("meta: %+v", meta)
+	}
+	without := cctest.New(t, cc.New(cc.Config{Screens: []cc.Screen{{
+		ID:      "numbers",
+		Islands: []cc.Placement{cc.Static("header", headerV1{})},
+		Meta: func(_ context.Context, r cc.Request) (cc.ScreenMeta, error) {
+			return cc.ScreenMeta{Title: r.ScreenStrings("numbers").Text("title")}, nil
+		},
+	}}}))
+	if meta := without.Screen("numbers", nil).Head.Meta; meta != nil {
+		t.Fatalf("without a catalog the title is empty: %+v", meta)
+	}
+}
+
+func readJSON(t *testing.T, path string, into any) {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(raw, into); err != nil {
+		t.Fatal(err)
 	}
 }

@@ -2,6 +2,7 @@
   "manifests": "islands",
   "actions": "actions",
   "appStrings": "app-strings.json",
+  "screenStrings": "screen-strings.json",
   "catalog": "strings",
   "targets": {
     "go": {

@@ -96,6 +96,7 @@ export {
   screenRefMatches,
   type ScreenRequest,
   type ScreenResponse,
+  type ScreenStringsDescriptor,
   type StringParams,
   type Strings,
   type StringsRequest,

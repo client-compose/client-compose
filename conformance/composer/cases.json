@@ -1,5 +1,5 @@
 {
-  "$comment": "Composer conformance cases (spec §8.1). The runner POSTs to {base}/screens/{path ?? request.screen} with a request built from `placements` and `capabilities`, merged with any `request` overrides; `rawBody` replaces the body entirely. Expected bodies are subset matches, except arrays, which must match in length and order. Strings cases (spec §4.7) run against a composer whose catalog is conformance/composer/strings/.",
+  "$comment": "Composer conformance cases (spec §8.1). The runner POSTs to {base}/screens/{path ?? request.screen} with a request built from `placements` and `capabilities`, merged with any `request` overrides; `rawBody` replaces the body entirely. Expected bodies are subset matches, except arrays, which must match in length and order. Strings cases (spec §4.7) run against a composer whose catalog is conformance/composer/strings/. With `metaFromStrings`, the screen's meta is its own strings `title` and `description`, with {name} the param's value.",
   "cases": [
     {
       "name": "picks highest mutually supported version",
@@ -1225,6 +1225,44 @@
               "strings": "$absent"
             }
           ]
+        }
+      }
+    },
+    {
+      "name": "a screen's own strings are in the language nearest the client's, string by string",
+      "placements": [
+        {
+          "key": "header",
+          "type": "profile-header",
+          "versions": [
+            2
+          ],
+          "outcome": "ok"
+        }
+      ],
+      "capabilities": {
+        "profile-header": [
+          2
+        ]
+      },
+      "request": {
+        "params": {
+          "placements": "[{\"key\": \"header\", \"type\": \"profile-header\", \"versions\": [2], \"outcome\": \"ok\"}]",
+          "metaFromStrings": "Ada"
+        },
+        "client": {
+          "platform": "conformance",
+          "appVersion": "0.0.0",
+          "locale": "pl-PL"
+        }
+      },
+      "expect": {
+        "status": 200,
+        "body": {
+          "meta": {
+            "title": "Cześć Ada",
+            "description": "About Ada"
+          }
         }
       }
     }

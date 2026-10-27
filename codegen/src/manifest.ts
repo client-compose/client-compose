@@ -66,6 +66,18 @@ export interface AppStrings {
   strings: StringDef[];
 }
 
+/** A screen's own strings (spec §4.7): the words its composer uses itself, e.g. for its meta. */
+export interface ScreenStringsDef {
+  screen: string;
+  strings: StringDef[];
+}
+
+/** The screen strings manifest: each screen's own strings, by screen id. */
+export interface ScreenStrings {
+  source: string;
+  screens: ScreenStringsDef[];
+}
+
 export interface ActionErrorDef {
   /** snake_case, e.g. "name_taken". */
   code: string;
@@ -198,6 +210,36 @@ export function parseAppStrings(raw: unknown, source: string): AppStrings {
     source,
     description: str(raw.description),
     strings: parseStrings(raw.strings, (msg) => at(`strings${msg}`)),
+  };
+}
+
+/** The screen strings manifest (spec §4.7): `{ "screens": { "<screen>": { <strings> } } }`. */
+export function loadScreenStrings(file: string): ScreenStrings {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(readFileSync(file, "utf8"));
+  } catch (err) {
+    const why = err instanceof Error ? err.message : String(err);
+    throw new ManifestError(`${file}: invalid JSON (${why})`);
+  }
+  return parseScreenStrings(raw, file);
+}
+
+const SCREEN_ID = /^[a-z][a-z0-9-]*$/;
+
+export function parseScreenStrings(raw: unknown, source: string): ScreenStrings {
+  const at = (msg: string) => new ManifestError(`${source}: ${msg}`);
+  if (!isSchema(raw) || !isSchema(raw.screens)) {
+    throw at(`a screen strings manifest is an object with "screens": strings by screen id`);
+  }
+  return {
+    source,
+    screens: Object.entries(raw.screens).map(([screen, strings]) => {
+      if (!SCREEN_ID.test(screen)) {
+        throw at(`screens.${screen}: a screen id is lowercase letters, digits and hyphens`);
+      }
+      return { screen, strings: parseStrings(strings, (msg) => at(`screens.${screen}${msg}`)) };
+    }),
   };
 }
 

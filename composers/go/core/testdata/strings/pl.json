@@ -1,9 +1,20 @@
 {
-  "app": { "loading": "Ładowanie" },
+  "app": {
+    "loading": "Ładowanie"
+  },
   "islands": {
     "list@1": {
       "heading": "Liczby",
-      "count": { "#1": "Jedna liczba", "#few": "{count} liczby", "#*": "{count} liczb" }
+      "count": {
+        "#1": "Jedna liczba",
+        "#few": "{count} liczby",
+        "#*": "{count} liczb"
+      }
+    }
+  },
+  "screens": {
+    "numbers": {
+      "title": "Liczby o {name}"
     }
   }
 }

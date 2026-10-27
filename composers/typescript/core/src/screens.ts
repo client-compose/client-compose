@@ -1,6 +1,11 @@
 // Declaring screens: islands by their generated descriptors, placed on screens as data.
 
-import type { ClientContext, IslandDescriptor, ScreenMeta } from "@client-compose/protocol";
+import type {
+  ClientContext,
+  IslandDescriptor,
+  ScreenMeta,
+  ScreenStringsDescriptor,
+} from "@client-compose/protocol";
 
 import type { IslandCache } from "./adapters.ts";
 import type { LoadContext } from "./loading.ts";
@@ -27,6 +32,12 @@ export interface LayoutContext<Ctx> extends LoadContext {
    *     const user = await rc.load(`user:${id}`, (signal) => users.get(id, { signal }));
    */
   load: <T>(key: string, fn: (signal: AbortSignal) => Promise<T> | T) => Promise<T>;
+  /**
+   * A screen's own strings (spec §4.7), in the client's language, typed by their generated
+   * descriptor: `lc.strings(CreatorScreenStrings).title({ creator: name })`. Empty without a
+   * catalog.
+   */
+  strings: <S>(descriptor: ScreenStringsDescriptor<S>) => S;
 }
 
 /** What a resolver receives: the layout context, plus a signal aborted when this island times out. */

@@ -1,6 +1,8 @@
 // The test-only `__conformance` screen and `conformance` action (spec §8.1). Never register these
 // in production.
 
+import type { ScreenStringsDescriptor } from "@client-compose/protocol";
+
 import { type Action, action } from "./actions.ts";
 import {
   ConformanceV1,
@@ -15,6 +17,12 @@ import {
   UnauthenticatedError,
 } from "./loading.ts";
 import { type Island, type Screen, screen } from "./screens.ts";
+
+/** The `__conformance` screen's own strings, as codegen would generate them. */
+const ConformanceScreenStrings: ScreenStringsDescriptor<{
+  title: (values: { name: string }) => string;
+  description: (values: { name: string }) => string;
+}> = { screen: "__conformance", strings: { title: ["name"], description: ["name"] } };
 
 interface MockPlacement {
   key: string;
@@ -50,7 +58,14 @@ function mockPage(cursor: string | undefined, pages: number): number {
 export function conformanceScreen<Ctx = unknown>(): Screen<Ctx> {
   // Its islands come from the request, so it has a layout rather than declared islands.
   return screen<Ctx>("__conformance", {
-    meta: ({ params }) => (params.meta ? JSON.parse(params.meta) : {}),
+    meta: ({ params, strings }) => {
+      if (params.metaFromStrings) {
+        const words = strings(ConformanceScreenStrings);
+        const values = { name: params.metaFromStrings };
+        return { title: words.title(values), description: words.description(values) };
+      }
+      return params.meta ? JSON.parse(params.meta) : {};
+    },
     layout: ({ params }) => {
       if (params.notFound === "true") {
         throw new NotFoundError("no such thing");

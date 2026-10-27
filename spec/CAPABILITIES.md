@@ -59,7 +59,7 @@ them to say what they add.
 | CMP-18 | **Cache adapter.** An optional cache the app supplies; islands opt in with a TTL and a key (see [Adapters](#adapters)). | — |
 | CMP-19 | **Idempotency adapter.** An optional store the app supplies, so retried actions return their first outcome (see [Adapters](#adapters)). | §5.2 |
 | CMP-20 | **Island requests.** Define an island with pages by its generated props type; it resolves the page a cursor asks for, and the cursor of the next. One island of a screen can be resolved again on its own, laid out as its screen would be. | §4.5 |
-| CMP-22 | **Strings.** Load a catalog, one file per language. Each island's entry carries its strings in the language nearest the client's, string by string falling back to the default; the head says which language, with its plural rules. App strings are answered at `/strings` with no session. | §4.7 |
+| CMP-22 | **Strings.** Load a catalog, one file per language. Each island's entry carries its strings in the language nearest the client's, string by string falling back to the default; the head says which language, with its plural rules. App strings are answered at `/strings` with no session. A screen's own strings (its meta's words) are read in the request's language. | §4.7 |
 | CMP-21 | **Streams.** Screens are answered as streams: the head once what can fail the screen is settled (requirements, layout and conditions, required islands, meta), then each other island as it's resolved, then the end. | §4.6 |
 
 ## The composer as a platform
@@ -287,7 +287,7 @@ Names in *italics* don't exist yet; the parity work below adds them.
 | CMP-19 idempotency adapter | ✅ `Config.Idempotency` | ✅ `idempotency` |
 | CMP-20 island requests | ✅ `cc.DefinePaged`, `ComposeIsland` | ✅ `pagedIsland`, `composeIsland` |
 | CMP-21 streams | ✅ `cc.ScreenStream`, `cc.ReadScreen` | ✅ `ScreenStream`, `collect`, every adapter |
-| CMP-22 strings | ✅ `cc.LoadCatalog`, `Config.Strings` | ✅ `loadCatalog`, `strings` |
+| CMP-22 strings | ✅ `cc.LoadCatalog`, `Config.Strings`, `r.ScreenStrings` | ✅ `loadCatalog`, `strings`, `lc.strings` |
 
 ### Clients
 

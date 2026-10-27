@@ -378,6 +378,12 @@ if it has no catalog.
 Clients SHOULD fetch app strings at launch and keep them, refreshing them in the background on
 later launches and when the language changes.
 
+**Screen strings.** Some words are the composer's own: a screen's meta (§4), such as its title,
+says things like "Recipes by {creator}" in the client's language, but no island shows them. A
+composer declares each screen's own strings in a screen strings manifest
+(`schema/screen-strings-manifest.schema.json`), by screen id, in the same format, and its code reads
+them in the language it answers in. They are never sent to clients as such.
+
 **Templates.** A string's value is a **template**: text in which `{name}` is replaced by the value
 of the param `name`. A counted string's value MAY instead be its **variants**, an object of
 templates keyed by:
@@ -403,7 +409,8 @@ conformance checks they agree with CLDR (`conformance/client/plural-cases.json`)
 ```json
 {
   "app": { "loading": "Ładowanie" },
-  "islands": { "recipe-list@1": { "heading": "Najnowsze przepisy" } }
+  "islands": { "recipe-list@1": { "heading": "Najnowsze przepisy" } },
+  "screens": { "creator": { "title": "Przepisy od {creator}" } }
 }
 ```
 

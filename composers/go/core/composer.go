@@ -19,6 +19,8 @@ type Request struct {
 	// Cursor is the page an island request asks for (spec §4.5): an island's own Next, from an
 	// earlier page. It's empty for a screen, and for an island's first page.
 	Cursor string
+	// words are the catalog's in the request's language, for ScreenStrings.
+	words *LocaleStrings
 }
 
 // Island is one resolvable version of an island type. Build one with Define (or NewIsland).
@@ -319,7 +321,8 @@ func (c *Composer) composeScreen(ctx context.Context, req ScreenRequest) Result 
 		}
 	}()
 
-	r := Request{Screen: screen.ID, Params: req.Params, Client: *req.Client}
+	words := c.words(req.Client.Locale)
+	r := Request{Screen: screen.ID, Params: req.Params, Client: *req.Client, words: words}
 	if r.Params == nil {
 		r.Params = map[string]string{}
 	}
@@ -340,7 +343,6 @@ func (c *Composer) composeScreen(ctx context.Context, req ScreenRequest) Result 
 	if !ok {
 		return res
 	}
-	words := c.words(req.Client.Locale)
 
 	// Every island resolves at once; each says when it's done.
 	type resolved struct {
