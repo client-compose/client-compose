@@ -7,6 +7,7 @@ import {
   type ClientContext,
   type DeclaredError,
   PROTOCOL_VERSION,
+  type ScreenStringsDescriptor,
 } from "@client-compose/protocol";
 
 import { isRecord } from "./guards.ts";
@@ -20,6 +21,7 @@ import {
 } from "./loading.ts";
 import type { Failure, Requirement } from "./plugins.ts";
 import { fail, type PerformResult } from "./results.ts";
+import { type LocaleStrings, screenStrings } from "./strings.ts";
 import { validate } from "./validate.ts";
 
 export interface ActionContext<Ctx> extends LoadContext {
@@ -35,6 +37,11 @@ export interface ActionContext<Ctx> extends LoadContext {
   signal: AbortSignal;
   /** Request-scoped load, as in resolvers: runs `fn` once per key for this request. */
   load: <T>(key: string, fn: (signal: AbortSignal) => Promise<T> | T) => Promise<T>;
+  /**
+   * Screen strings (spec §4.7) in the client's language, typed by their generated descriptor, for
+   * words an action's result carries: `ac.strings(SearchScreenStrings).creators`.
+   */
+  strings: <S>(descriptor: ScreenStringsDescriptor<S>) => S;
 }
 
 /** What an action returns: a result (and optionally its effects), or one of its declared errors. */
@@ -100,6 +107,7 @@ export async function performAction<Ctx>(
   req: ActionRequest,
   ctx: Ctx,
   report: (failure: Failure) => void,
+  words?: LocaleStrings,
 ): Promise<PerformResult> {
   const { descriptor } = handler;
   const reportFailure = (error: unknown) =>
@@ -135,6 +143,7 @@ export async function performAction<Ctx>(
       idempotencyKey: req.idempotencyKey,
       signal: request.signal,
       load: scope.load.bind(scope),
+      strings: <S>(d: ScreenStringsDescriptor<S>) => screenStrings(words, d),
     },
     scope,
   );

@@ -12,8 +12,8 @@ import (
 // ProfileScreenStrings are the profile screen's own strings, in the request's language (spec §4.7).
 type ProfileScreenStrings struct{ table cc.StringsTable }
 
-// ProfileScreenStringsFor reads them from a layout's, resolver's or meta's request.
-func ProfileScreenStringsFor(r cc.Request) ProfileScreenStrings {
+// ProfileScreenStringsFor reads them from a layout's, resolver's or meta's request, or an action's call.
+func ProfileScreenStringsFor(r cc.ScreenStringsSource) ProfileScreenStrings {
 	return ProfileScreenStrings{r.ScreenStrings("profile")}
 }
 

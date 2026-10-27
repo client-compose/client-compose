@@ -381,8 +381,9 @@ later launches and when the language changes.
 **Screen strings.** Some words are the composer's own: a screen's meta (§4), such as its title,
 says things like "Recipes by {creator}" in the client's language, but no island shows them. A
 composer declares each screen's own strings in a screen strings manifest
-(`schema/screen-strings-manifest.schema.json`), by screen id, in the same format, and its code reads
-them in the language it answers in. They are never sent to clients as such.
+(`schema/screen-strings-manifest.schema.json`), by screen id (or a name a few screens share), in the same format, and its code reads them in the
+language it answers in, for a screen or an action whose result carries words. They are never sent
+to clients as such.
 
 **Templates.** A string's value is a **template**: text in which `{name}` is replaced by the value
 of the param `name`. A counted string's value MAY instead be its **variants**, an object of

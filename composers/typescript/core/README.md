@@ -222,6 +222,8 @@ manifest, in the catalog under `screens`, and read with the generated descriptor
 meta: (lc) => ({ title: lc.strings(CreatorScreenStrings).title({ creator: name }) }),
 ```
 
+Actions whose results carry words read them the same way: `ac.strings(SearchScreenStrings)`.
+
 In tests, `app.strings({ locale: "pl" })` fetches the app strings, and an island's entry has its
 `strings`.
 

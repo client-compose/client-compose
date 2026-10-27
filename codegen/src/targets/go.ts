@@ -212,8 +212,8 @@ export function generateGo(
       `// ${name} are the ${s.screen} screen's own strings, in the request's language (spec §4.7).`,
       `type ${name} struct{ table cc.StringsTable }`,
       "",
-      `// ${name}For reads them from a layout's, resolver's or meta's request.`,
-      `func ${name}For(r cc.Request) ${name} { return ${name}{r.ScreenStrings(${JSON.stringify(s.screen)})} }`,
+      `// ${name}For reads them from a layout's, resolver's or meta's request, or an action's call.`,
+      `func ${name}For(r cc.ScreenStringsSource) ${name} { return ${name}{r.ScreenStrings(${JSON.stringify(s.screen)})} }`,
     );
     for (const d of s.strings) {
       out.push("");
