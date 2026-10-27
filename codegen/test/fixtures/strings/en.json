@@ -1,0 +1,21 @@
+{
+  "app": {
+    "loading": "Loading",
+    "retry": "Try again",
+    "uploaded": {
+      "#1": "{count} of {total} photo uploaded",
+      "#*": "{count} of {total} photos uploaded"
+    }
+  },
+  "islands": {
+    "kitchen-sink@1": {
+      "heading": "Everything",
+      "greeting": "Hi {name}",
+      "itemCount": {
+        "#0": "No items",
+        "#1": "{count} item",
+        "#*": "{count} items"
+      }
+    }
+  }
+}

@@ -5,7 +5,15 @@
 import { readFileSync } from "node:fs";
 import { relative } from "node:path";
 
-import { checkCompat, type CompatIssue, generate, ManifestError, stale, write } from "./index.ts";
+import {
+  checkCompat,
+  checkStrings,
+  type CompatIssue,
+  generate,
+  ManifestError,
+  stale,
+  write,
+} from "./index.ts";
 
 // Standalone binaries have the version compiled in (see scripts/build-codegen-binaries.sh).
 declare const __CLIENT_COMPOSE_CODEGEN_VERSION__: string | undefined;
@@ -19,6 +27,11 @@ const USAGE = `Usage:
       Report island and action manifest changes that break apps without a version bump, compared
       with a git ref (e.g. origin/main) or a directory of island manifests. Exits 1 on breaking
       changes.
+
+  client-compose-codegen strings <config.json>...
+      Check each config's strings catalog (spec §4.7) against its manifests: every declared string
+      in the default language, no undeclared ones, valid variants, and no {slot} that isn't a param.
+      Exits 1 on errors; a string another language lacks (it falls back) is a warning.
 
   client-compose-codegen --version | --help`;
 
@@ -141,6 +154,36 @@ function runCompat(args: string[]): boolean {
   return ok;
 }
 
+function runStrings(configs: string[]): boolean {
+  if (configs.length === 0 || configs.some((c) => c.startsWith("-"))) {
+    fail("Expected one or more config files.");
+  }
+  let ok = true;
+  for (const config of configs) {
+    try {
+      const issues = checkStrings(config);
+      for (const issue of issues) {
+        const where = issue.path ? ` · ${issue.path}` : "";
+        console.log(
+          `${issue.severity === "error" ? "✖" : "⚠"} ${relative(process.cwd(), issue.file)}${where}: ${issue.message}`,
+        );
+      }
+      if (issues.some((i) => i.severity === "error")) {
+        ok = false;
+      } else {
+        console.log(`✔ ${config}: strings catalog matches the manifests`);
+      }
+    } catch (err) {
+      if (!(err instanceof ManifestError)) {
+        throw err;
+      }
+      console.error(`✖ ${err.message}`);
+      ok = false;
+    }
+  }
+  return ok;
+}
+
 const nextVersion = (island: string) =>
   island.replace(/ v(\d+)$/, (_, v: string) => ` v${Number(v) + 1}`);
 
@@ -151,6 +194,8 @@ if (args.includes("--help") || args.includes("-h")) {
   console.log(version());
 } else if (args[0] === "compat") {
   process.exitCode = runCompat(args.slice(1)) ? 0 : 1;
+} else if (args[0] === "strings") {
+  process.exitCode = runStrings(args.slice(1)) ? 0 : 1;
 } else {
   process.exitCode = runGenerate(args) ? 0 : 1;
 }
