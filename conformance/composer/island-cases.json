@@ -488,6 +488,84 @@
           }
         }
       }
+    },
+    {
+      "name": "a page has no strings: the client has them from the screen",
+      "placements": [
+        {
+          "key": "feed",
+          "type": "post-list",
+          "versions": [
+            1,
+            2
+          ],
+          "outcome": "ok",
+          "pages": 3
+        }
+      ],
+      "key": "feed",
+      "version": 1,
+      "cursor": "page:2",
+      "request": {
+        "client": {
+          "platform": "conformance",
+          "appVersion": "0.0.0",
+          "locale": "pl"
+        }
+      },
+      "expect": {
+        "status": 200,
+        "body": {
+          "locale": "$absent",
+          "plurals": "$absent",
+          "island": {
+            "status": "ok",
+            "strings": "$absent",
+            "next": "page:3"
+          }
+        }
+      }
+    },
+    {
+      "name": "without a cursor, the island has its strings, and the response its language",
+      "placements": [
+        {
+          "key": "feed",
+          "type": "post-list",
+          "versions": [
+            1,
+            2
+          ],
+          "outcome": "ok",
+          "pages": 3
+        }
+      ],
+      "key": "feed",
+      "version": 1,
+      "request": {
+        "client": {
+          "platform": "conformance",
+          "appVersion": "0.0.0",
+          "locale": "pl"
+        }
+      },
+      "expect": {
+        "status": 200,
+        "body": {
+          "locale": "pl",
+          "plurals": {
+            "one": "i = 1 and v = 0",
+            "few": "v = 0 and i % 10 = 2..4 and i % 100 != 12..14",
+            "many": "v = 0 and i != 1 and i % 10 = 0..1 or v = 0 and i % 10 = 5..9 or v = 0 and i % 100 = 12..14"
+          },
+          "island": {
+            "status": "ok",
+            "strings": {
+              "empty": "Brak post\u00f3w"
+            }
+          }
+        }
+      }
     }
   ]
 }

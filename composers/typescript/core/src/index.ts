@@ -45,7 +45,7 @@ export {
   type RequirementRequest,
   type ResolveFn,
 } from "./plugins.ts";
-export type { ComposeResult, IslandResult, PerformResult } from "./results.ts";
+export type { ComposeResult, IslandResult, PerformResult, StringsResult } from "./results.ts";
 export {
   type Island,
   island,
@@ -63,6 +63,14 @@ export {
   screen,
 } from "./screens.ts";
 export { collect, type ScreenStream } from "./stream.ts";
+export {
+  type Catalog,
+  type CatalogFile,
+  loadCatalog,
+  type LocaleStrings,
+  type StringsConfig,
+  stringsFor,
+} from "./strings.ts";
 
 // The protocol's types, so server code (and generated descriptors, with codegen's
 // `"protocolImport": "@client-compose/composer"`) need only this package.
@@ -71,6 +79,7 @@ export {
   type ActionEffects,
   type ActionRequest,
   type ActionResponse,
+  type AppStringsDescriptor,
   type Capabilities,
   type ClientContext,
   type DeclaredError,
@@ -79,6 +88,7 @@ export {
   type IslandError,
   type IslandRequest,
   type IslandResponse,
+  type PluralRules,
   PROTOCOL_VERSION,
   type ScreenErrorResponse,
   type ScreenMeta,
@@ -86,4 +96,9 @@ export {
   screenRefMatches,
   type ScreenRequest,
   type ScreenResponse,
+  type StringParams,
+  type Strings,
+  type StringsRequest,
+  type StringsResponse,
+  type StringTemplate,
 } from "@client-compose/protocol";

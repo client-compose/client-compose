@@ -62,9 +62,18 @@ func (c *Composer) ComposeIsland(ctx context.Context, req IslandRequest) Result 
 		return fail(http.StatusBadRequest, "invalid_cursor", req.Key+" has no pages")
 	}
 
-	entry, err := c.resolveEntry(ctx, *placement, *island, r)
+	// A page's strings are the ones the client has from the screen (spec §4.5).
+	var words *LocaleStrings
+	if req.Cursor == "" {
+		words = c.words(req.Client.Locale)
+	}
+	entry, err := c.resolveEntry(ctx, *placement, *island, r, words)
 	if errors.Is(err, ErrInvalidCursor) {
 		return fail(http.StatusBadRequest, "invalid_cursor", "")
 	}
-	return Result{http.StatusOK, IslandResponse{Protocol: ProtocolVersion, Screen: screen.ID, Island: entry}}
+	res := IslandResponse{Protocol: ProtocolVersion, Screen: screen.ID, Island: entry}
+	if words != nil {
+		res.Locale, res.Plurals = words.Locale, &words.Plurals
+	}
+	return Result{http.StatusOK, res}
 }

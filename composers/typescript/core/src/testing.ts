@@ -22,6 +22,7 @@ import {
   type ScreenErrorResponse,
   type ScreenHead,
   type ScreenResponse,
+  type StringsResponse,
 } from "@client-compose/protocol";
 
 import type { Cache, IdempotencyStore } from "./adapters.ts";
@@ -95,6 +96,16 @@ export interface TestOutcome<R, E extends DeclaredError> {
   failure?: string;
 }
 
+/** The app strings (spec §4.7), or the error the composer answered with. */
+export interface TestStrings {
+  /** The HTTP status. */
+  status: number;
+  /** The strings, the language they're in and its plural rules, when status is 200. */
+  response?: StringsResponse;
+  /** The protocol error code otherwise, e.g. "no_strings". */
+  error?: string;
+}
+
 export interface TestComposer {
   screen(
     id: string,
@@ -118,6 +129,8 @@ export interface TestComposer {
     input: I,
     options?: RequestOptions & { idempotencyKey?: string },
   ): Promise<TestOutcome<R, E>>;
+  /** The app strings, in the client's language, or `locale` instead. */
+  strings(options?: { locale?: string }): Promise<TestStrings>;
 }
 
 const base = "https://composer.test";
@@ -271,6 +284,20 @@ export function testComposer<Ctx, Req = Request>(
         ...requestOptions,
         cursor: entry.next,
       });
+    },
+
+    async strings(requestOptions = {}) {
+      const res = await post("/strings", {
+        protocol: PROTOCOL_VERSION,
+        client: {
+          ...client,
+          ...(requestOptions.locale !== undefined && { locale: requestOptions.locale }),
+        },
+      });
+      if (res.status !== 200) {
+        return { status: res.status, error: (res.body as ScreenErrorResponse).error.code };
+      }
+      return { status: 200, response: res.body as StringsResponse };
     },
 
     async perform(descriptor, input, requestOptions = {}) {

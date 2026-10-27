@@ -5,6 +5,7 @@ Language-neutral test suites every implementation must pass (spec §8).
 | Suite                | Who runs it   | How                                                                 |
 | -------------------- | ------------- | ------------------------------------------------------------------- |
 | `composer/cases.json` | Composers     | Over HTTP against a test-only conformance server: `run-against.sh <port> <command…>` |
+| `composer/strings-cases.json` | Composers | The same, for app strings (spec §4.7). The server's composer loads the catalog in `composer/strings/`, default language `en`; island strings are checked by the screen and island cases |
 | `composer/action-cases.json` | Composers | The same, for actions. The test-only `conformance` action is described by the manifests in `composer/actions/`; generate its types with codegen (`composer/client-compose.codegen.json`) |
 | `client/cases.json`   | Clients       | Loaded by each client's own unit tests: rendering                   |
 | `client/action-cases.json` | Clients  | The same, for actions and effects: requests, outcomes, screen references, screen errors |
@@ -19,7 +20,7 @@ npx @client-compose/conformance composer http://localhost:4100
 In this repo (Node 24+, runs from source):
 
 ```sh
-conformance/run-against.sh 4100 go run ./composers/go/core/cmd/conformance-server -addr :4100
+conformance/run-against.sh 4100 go run ./composers/go/core/cmd/conformance-server -addr :4100 -strings conformance/composer/strings
 # or against something already running:
 node conformance/runner/cli.ts composer http://localhost:4100
 ```

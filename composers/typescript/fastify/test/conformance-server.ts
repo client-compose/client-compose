@@ -1,5 +1,11 @@
 // The conformance screen and action, served from Fastify under a prefix.
-import { conformanceActions, conformanceScreen, createComposer } from "@client-compose/composer";
+import {
+  conformanceActions,
+  conformanceScreen,
+  createComposer,
+  loadCatalog,
+} from "@client-compose/composer";
+import { conformanceCatalogDir } from "@client-compose/conformance";
 import Fastify, { type FastifyRequest } from "fastify";
 
 import { composerPlugin } from "../src/index.ts";
@@ -8,6 +14,7 @@ export async function conformanceServer() {
   const composer = createComposer<undefined, FastifyRequest>({
     screens: [conformanceScreen()],
     actions: conformanceActions(),
+    strings: { catalog: loadCatalog(conformanceCatalogDir()) },
   });
   const app = Fastify();
   await app.register(composerPlugin(composer), { prefix: "/compose" });

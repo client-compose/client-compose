@@ -129,6 +129,10 @@ export interface IslandResponse<P = Record<string, unknown>> {
   protocol: typeof PROTOCOL_VERSION;
   screen: string;
   island: IslandEntry<P>;
+  /** The language its strings are in, when it has them (spec §4.7). */
+  locale?: string;
+  /** That language's plural rules. */
+  plurals?: PluralRules;
 }
 
 export interface ScreenErrorResponse {

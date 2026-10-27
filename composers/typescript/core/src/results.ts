@@ -3,6 +3,7 @@ import {
   type IslandResponse,
   PROTOCOL_VERSION,
   type ScreenErrorResponse,
+  type StringsResponse,
 } from "@client-compose/protocol";
 
 import type { ScreenStream } from "./stream.ts";
@@ -21,6 +22,10 @@ export type IslandResult =
 export type PerformResult =
   | { status: 200; body: ActionResponse }
   | { status: 400 | 401 | 403 | 404 | 500; body: ScreenErrorResponse };
+
+/** The app strings, or the error the composer answers with (spec §4.7). */
+export type StringsResult =
+  { status: 200; body: StringsResponse } | { status: 400 | 404; body: ScreenErrorResponse };
 
 /** A protocol error response. */
 export function fail<S extends 400 | 401 | 403 | 404 | 500 | 502>(

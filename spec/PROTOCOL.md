@@ -293,7 +293,7 @@ Clients that don't page or refresh islands ignore `next` (§4.3: unknown fields 
 
 An island request with a cursor answers a page: its entry has no `strings`, because the client
 already has them from the screen. Without a cursor, the island is answered as on a screen, with
-its strings.
+its strings, and the response carries `locale` and `plurals` as a screen's head does.
 
 ### 4.6 Streams
 
@@ -369,6 +369,11 @@ and the composer answers `200` (`schema/strings-response.schema.json`):
   "strings": { "loading": "Ładowanie", "recipes": { "#1": "{count} przepis", "#few": "{count} przepisy", "#*": "{count} przepisów" } }
 }
 ```
+
+The strings request needs no session: the composer answers it before, and without, any `context`,
+because a client needs its words before it can show anything, even a sign-in screen. It answers
+`400` with `bad_request` or `unsupported_protocol` for a bad request, and `404` with `no_strings`
+if it has no catalog.
 
 Clients SHOULD fetch app strings at launch and keep them, refreshing them in the background on
 later launches and when the language changes.

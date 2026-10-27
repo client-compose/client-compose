@@ -1,0 +1,9 @@
+{
+  "app": {
+    "loading": "Ładowanie"
+  },
+  "islands": {
+    "profile-header@2": { "follow": "Obserwuj" },
+    "post-list@1": { "empty": "Brak postów" }
+  }
+}

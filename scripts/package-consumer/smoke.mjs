@@ -18,11 +18,16 @@ import {
   conformanceScreen,
   createComposer,
   island,
+  loadCatalog,
   place,
   screen,
 } from "@client-compose/composer";
 import { testComposer } from "@client-compose/composer/testing";
-import { clientCases, runComposerConformance } from "@client-compose/conformance";
+import {
+  clientCases,
+  conformanceCatalogDir,
+  runComposerConformance,
+} from "@client-compose/conformance";
 import { createRequestListener } from "@client-compose/node-http";
 import { PROTOCOL_VERSION } from "@client-compose/protocol";
 import {
@@ -67,6 +72,7 @@ const composer = createComposer({
     ...conformanceActions(),
     action(Greet, ({ name }) => ({ result: { text: `Hi ${name}` } })),
   ],
+  strings: { catalog: loadCatalog(conformanceCatalogDir()) },
 });
 const server = createServer(createRequestListener(composer)).listen(0, "127.0.0.1");
 await once(server, "listening");
@@ -77,7 +83,9 @@ assert.deepEqual(
   [],
   "composer conformance",
 );
-console.log(`composer conformance (screens and actions): ${results.length}/${results.length}`);
+console.log(
+  `composer conformance (screens, actions and strings): ${results.length}/${results.length}`,
+);
 
 // The same composer through its fetch-standard handler, in-process.
 const inProcess = await runComposerConformance("https://composer.test", (input, init) =>

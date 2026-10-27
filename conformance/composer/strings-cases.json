@@ -1,0 +1,110 @@
+{
+  "$comment": "App strings cases (spec §4.7). The runner POSTs to {base}/{path ?? \"strings\"} with a strings request, merged with any `request` overrides; `rawBody` replaces the body entirely. The composer's catalog is conformance/composer/strings/. Expected bodies are subset matches, as for the screen cases.",
+  "cases": [
+    {
+      "name": "answers the app strings in the language nearest the client's",
+      "request": {
+        "client": {
+          "platform": "conformance",
+          "appVersion": "0.0.0",
+          "locale": "pl-PL"
+        }
+      },
+      "expect": {
+        "status": 200,
+        "body": {
+          "protocol": 0,
+          "locale": "pl",
+          "plurals": {
+            "one": "i = 1 and v = 0",
+            "few": "v = 0 and i % 10 = 2..4 and i % 100 != 12..14",
+            "many": "v = 0 and i != 1 and i % 10 = 0..1 or v = 0 and i % 10 = 5..9 or v = 0 and i % 100 = 12..14"
+          },
+          "strings": {
+            "loading": "Ładowanie",
+            "items": {
+              "#1": "One item",
+              "#*": "{count} items"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "a language the catalog doesn't have is answered in the default",
+      "request": {
+        "client": {
+          "platform": "conformance",
+          "appVersion": "0.0.0",
+          "locale": "xx"
+        }
+      },
+      "expect": {
+        "status": 200,
+        "body": {
+          "locale": "en",
+          "plurals": {
+            "one": "i = 1 and v = 0",
+            "two": "$absent",
+            "few": "$absent",
+            "many": "$absent",
+            "zero": "$absent"
+          },
+          "strings": {
+            "loading": "Loading"
+          }
+        }
+      }
+    },
+    {
+      "name": "without a locale, answers in the default",
+      "expect": {
+        "status": 200,
+        "body": {
+          "locale": "en",
+          "strings": {
+            "loading": "Loading"
+          }
+        }
+      }
+    },
+    {
+      "name": "rejects a body that isn't JSON",
+      "rawBody": "nope",
+      "expect": {
+        "status": 400,
+        "body": {
+          "error": {
+            "code": "bad_request"
+          }
+        }
+      }
+    },
+    {
+      "name": "rejects a body that isn't a strings request",
+      "rawBody": "{}",
+      "expect": {
+        "status": 400,
+        "body": {
+          "error": {
+            "code": "bad_request"
+          }
+        }
+      }
+    },
+    {
+      "name": "rejects another protocol",
+      "request": {
+        "protocol": 99
+      },
+      "expect": {
+        "status": 400,
+        "body": {
+          "error": {
+            "code": "unsupported_protocol"
+          }
+        }
+      }
+    }
+  ]
+}

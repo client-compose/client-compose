@@ -10,8 +10,8 @@ import (
 
 const maxBodyBytes = 1 << 20
 
-// ServeHTTP serves POST /screens/{screen}, POST /screens/{screen}/islands/{key} and
-// POST /actions/{action}. Mount the composer at your
+// ServeHTTP serves POST /screens/{screen}, POST /screens/{screen}/islands/{key},
+// POST /actions/{action} and POST /strings. Mount the composer at your
 // root, or under a prefix with http.StripPrefix. Other routers take an http.Handler too: chi's
 // Mount, gin.WrapH, echo.WrapHandler.
 func (c *Composer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -40,6 +40,20 @@ func (c *Composer) routes() *http.ServeMux {
 			res = c.performHTTP(ctx, r.PathValue("action"), r.Body)
 		}
 		writeResult(w, res)
+	})
+	// Strings are the same for everyone, signed in or not: an app needs them before anything, so
+	// the context hooks don't run.
+	mux.HandleFunc("POST /strings", func(w http.ResponseWriter, r *http.Request) {
+		var req StringsRequest
+		if err := json.NewDecoder(io.LimitReader(r.Body, maxBodyBytes)).Decode(&req); err != nil {
+			writeResult(w, fail(http.StatusBadRequest, "bad_request", "body is not valid JSON"))
+			return
+		}
+		if req.Protocol == nil || req.Client == nil {
+			writeResult(w, fail(http.StatusBadRequest, "bad_request", "body is not a strings request"))
+			return
+		}
+		writeResult(w, c.AppStrings(req))
 	})
 	return mux
 }

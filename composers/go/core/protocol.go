@@ -57,6 +57,8 @@ type IslandEntry struct {
 	Error   *IslandError `json:"error,omitempty"`
 	// Next is set when the island has more pages: an opaque cursor for its next one (spec §4.5).
 	Next string `json:"next,omitempty"`
+	// Strings are the island's strings, in the screen's language (spec §4.7).
+	Strings Strings `json:"strings,omitempty"`
 }
 
 // CacheHint tells clients how long the screen may be cached.
@@ -79,6 +81,11 @@ type ScreenResponse struct {
 	Islands  []IslandEntry `json:"islands"`
 	Meta     *ScreenMeta   `json:"meta,omitempty"`
 	Cache    *CacheHint    `json:"cache,omitempty"`
+	// Locale is the language the composer answered in, when it has strings (spec §4.7).
+	Locale string `json:"locale,omitempty"`
+	// Plurals are that language's plural rules, for the islands' counted strings. A pointer, so a
+	// language with none ({}) is still sent.
+	Plurals *PluralRules `json:"plurals,omitempty"`
 }
 
 // IslandRequest is the body a client POSTs to /screens/{screen}/islands/{key}: one island of the
@@ -98,6 +105,9 @@ type IslandResponse struct {
 	Protocol int         `json:"protocol"`
 	Screen   string      `json:"screen"`
 	Island   IslandEntry `json:"island"`
+	// Locale and Plurals are as on a screen, when the island has its strings (spec §4.7).
+	Locale  string       `json:"locale,omitempty"`
+	Plurals *PluralRules `json:"plurals,omitempty"`
 }
 
 // ErrorResponse is the body of a non-2xx response.

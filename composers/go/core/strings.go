@@ -1,0 +1,236 @@
+package clientcompose
+
+import (
+	"bytes"
+	_ "embed"
+	"encoding/json"
+	"fmt"
+	"io/fs"
+	"net/http"
+	"path"
+	"strings"
+	"sync"
+)
+
+// The composer's words (spec §4.7): a catalog of one file per language, from which each island
+// gets its strings, and the app its app strings, in the client's language.
+
+// Template is a string's words: Text, with {name} for each param, or for a counted string,
+// Variants by count ("#1", "#few", "#*").
+type Template struct {
+	Text     string
+	Variants map[string]string
+}
+
+// MarshalJSON writes a template as its text, or its variants.
+func (t Template) MarshalJSON() ([]byte, error) {
+	if t.Variants != nil {
+		return json.Marshal(t.Variants)
+	}
+	return json.Marshal(t.Text)
+}
+
+// UnmarshalJSON reads a template's text, or its variants.
+func (t *Template) UnmarshalJSON(data []byte) error {
+	if bytes.HasPrefix(bytes.TrimSpace(data), []byte(`"`)) {
+		t.Variants = nil
+		return json.Unmarshal(data, &t.Text)
+	}
+	t.Text = ""
+	return json.Unmarshal(data, &t.Variants)
+}
+
+// Strings are templates by key, as an island entry or a strings response carries them.
+type Strings map[string]Template
+
+// PluralRules are a language's plural rules: category ("one", "few"…) -> condition, in CLDR's
+// syntax, for whole numbers.
+type PluralRules map[string]string
+
+// CatalogFile is one language's words: its app strings, and each island version's, by
+// "type@version".
+type CatalogFile struct {
+	App     Strings            `json:"app,omitempty"`
+	Islands map[string]Strings `json:"islands,omitempty"`
+}
+
+// Catalog is the words in every language, by language tag ("en", "pl", "pt-BR").
+type Catalog map[string]CatalogFile
+
+// LoadCatalog reads a catalog from a directory of <locale>.json files:
+//
+//	catalog, err := cc.LoadCatalog(os.DirFS("strings"))
+//
+// or, built into the binary, from an embed.FS with fs.Sub.
+func LoadCatalog(fsys fs.FS) (Catalog, error) {
+	files, err := fs.Glob(fsys, "*.json")
+	if err != nil {
+		return nil, err
+	}
+	catalog := Catalog{}
+	for _, name := range files {
+		raw, err := fs.ReadFile(fsys, name)
+		if err != nil {
+			return nil, err
+		}
+		var file CatalogFile
+		if err := json.Unmarshal(raw, &file); err != nil {
+			return nil, fmt.Errorf("clientcompose: catalog file %s: %w", name, err)
+		}
+		catalog[strings.TrimSuffix(path.Base(name), ".json")] = file
+	}
+	return catalog, nil
+}
+
+// StringsConfig is where a composer's words come from.
+type StringsConfig struct {
+	Catalog Catalog
+	// DefaultLocale has every string, and is used when the client's language isn't in the
+	// catalog. Default "en".
+	DefaultLocale string
+}
+
+// LocaleStrings are the catalog's words in one language, as the composer answers a request with.
+type LocaleStrings struct {
+	// Locale is the language answered in: the client's, the nearest the catalog has, or the
+	// default.
+	Locale  string
+	Plurals PluralRules
+	// files are the languages to look in, nearest first.
+	files []CatalogFile
+}
+
+// For returns the catalog's words in the language nearest the client's locale: "pl-PL", then "pl",
+// then the default.
+func (s StringsConfig) For(locale string) LocaleStrings {
+	fallback := s.DefaultLocale
+	if fallback == "" {
+		fallback = "en"
+	}
+	out := LocaleStrings{Locale: fallback}
+	seen := map[string]bool{}
+	for _, tag := range append(tagAndParents(locale), fallback) {
+		file, ok := s.Catalog[tag]
+		if !ok || seen[tag] {
+			continue
+		}
+		if len(out.files) == 0 {
+			out.Locale = tag
+		}
+		seen[tag] = true
+		out.files = append(out.files, file)
+	}
+	out.Plurals = rulesFor(out.Locale)
+	return out
+}
+
+// Island returns an island version's strings, each from the nearest language that has it, or nil
+// if no language has any.
+func (l LocaleStrings) Island(typ string, version int) Strings {
+	id := fmt.Sprintf("%s@%d", typ, version)
+	return l.merge(func(f CatalogFile) Strings { return f.Islands[id] })
+}
+
+// App returns the app strings, each from the nearest language that has it.
+func (l LocaleStrings) App() Strings {
+	if s := l.merge(func(f CatalogFile) Strings { return f.App }); s != nil {
+		return s
+	}
+	return Strings{}
+}
+
+func (l LocaleStrings) merge(pick func(CatalogFile) Strings) Strings {
+	var out Strings
+	// Furthest first, so the nearest language's words win.
+	for i := len(l.files) - 1; i >= 0; i-- {
+		found := pick(l.files[i])
+		if found == nil {
+			continue
+		}
+		if out == nil {
+			out = Strings{}
+		}
+		for k, v := range found {
+			out[k] = v
+		}
+	}
+	return out
+}
+
+// tagAndParents returns a language tag, then each shorter one: "zh-Hant-TW", "zh-Hant", "zh".
+func tagAndParents(locale string) []string {
+	var parts []string
+	for _, p := range strings.Split(strings.ReplaceAll(locale, "_", "-"), "-") {
+		if p != "" {
+			parts = append(parts, p)
+		}
+	}
+	out := make([]string, len(parts))
+	for i := range parts {
+		out[i] = strings.Join(parts[:len(parts)-i], "-")
+	}
+	return out
+}
+
+// plurals.json is CLDR's cardinal plural rules, generated by scripts/plurals.ts.
+//
+//go:embed plurals.json
+var pluralsJSON []byte
+
+var pluralRules = sync.OnceValue(func() map[string]PluralRules {
+	var rules map[string]PluralRules
+	if err := json.Unmarshal(pluralsJSON, &rules); err != nil {
+		panic("clientcompose: plurals.json: " + err.Error())
+	}
+	return rules
+})
+
+// rulesFor returns a language's plural rules: its own ("pt-PT"), or its nearest parent's ("pt").
+func rulesFor(locale string) PluralRules {
+	for _, tag := range tagAndParents(locale) {
+		if rules, ok := pluralRules()[tag]; ok {
+			return rules
+		}
+	}
+	return PluralRules{}
+}
+
+// StringsRequest is the body a client POSTs to /strings: the app strings, in its language.
+type StringsRequest struct {
+	Protocol *int           `json:"protocol"`
+	Client   *ClientContext `json:"client"`
+}
+
+// StringsResponse is the app strings, the language they're in, and its plural rules.
+type StringsResponse struct {
+	Protocol int         `json:"protocol"`
+	Locale   string      `json:"locale"`
+	Plurals  PluralRules `json:"plurals"`
+	Strings  Strings     `json:"strings"`
+}
+
+// words returns the catalog's words in the language nearest locale, or nil without a catalog.
+func (c *Composer) words(locale string) *LocaleStrings {
+	if c.strings == nil {
+		return nil
+	}
+	words := c.strings.For(locale)
+	return &words
+}
+
+// AppStrings answers a strings request in-process (spec §4.7). It needs no context: an app
+// fetches its words before anything else, signed in or not.
+func (c *Composer) AppStrings(req StringsRequest) Result {
+	if req.Protocol == nil || *req.Protocol != ProtocolVersion {
+		return fail(http.StatusBadRequest, "unsupported_protocol", fmt.Sprintf("composer speaks protocol %d", ProtocolVersion))
+	}
+	locale := ""
+	if req.Client != nil {
+		locale = req.Client.Locale
+	}
+	words := c.words(locale)
+	if words == nil {
+		return fail(http.StatusNotFound, "no_strings", "this composer has no strings catalog")
+	}
+	return Result{http.StatusOK, StringsResponse{Protocol: ProtocolVersion, Locale: words.Locale, Plurals: words.Plurals, Strings: words.App()}}
+}

@@ -11,6 +11,8 @@
 //
 //	followed := cctest.Perform(app, FollowUserV1Input{UserID: "u1"})
 //	if followed.Status != "ok" || followed.Result.Followers != 8 { … }
+//
+//	words := app.Strings("pl") // the app strings (spec §4.7)
 package cctest
 
 import (
@@ -234,6 +236,34 @@ func IslandProps[P cc.Props](t testing.TB, i Island) P {
 	}
 	decode(t, raw, &props)
 	return props
+}
+
+// AppStrings are the app strings (spec §4.7), or the error the composer answered with.
+type AppStrings struct {
+	// Status is the HTTP status.
+	Status int
+	// Response is the strings, the language they're in and its plural rules, when Status is 200.
+	Response cc.StringsResponse
+	// Error is the protocol error code otherwise, e.g. "no_strings".
+	Error string
+}
+
+// Strings fetches the app strings in locale, or in the client's language when locale is "".
+func (a *App) Strings(locale string) AppStrings {
+	a.t.Helper()
+	protocol := cc.ProtocolVersion
+	client := a.client
+	if locale != "" {
+		client.Locale = locale
+	}
+	status, raw := a.post("/strings", cc.StringsRequest{Protocol: &protocol, Client: &client}, nil)
+	out := AppStrings{Status: status}
+	if status == http.StatusOK {
+		decode(a.t, raw, &out.Response)
+	} else {
+		out.Error = errorCode(a.t, raw)
+	}
+	return out
 }
 
 // Outcome is what performing an action came to.

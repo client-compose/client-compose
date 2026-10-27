@@ -17,6 +17,13 @@
     },
     "island": {
       "$ref": "screen-response.json#/$defs/island"
+    },
+    "locale": {
+      "type": "string",
+      "description": "The language its strings are in, when it has them (spec §4.7)."
+    },
+    "plurals": {
+      "$ref": "strings-response.json#/properties/plurals"
     }
   }
 }

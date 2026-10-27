@@ -3,7 +3,13 @@
 
 import { createServer, type IncomingMessage } from "node:http";
 
-import { conformanceActions, conformanceScreen, createComposer } from "@client-compose/composer";
+import {
+  conformanceActions,
+  conformanceScreen,
+  createComposer,
+  loadCatalog,
+} from "@client-compose/composer";
+import { conformanceCatalogDir } from "@client-compose/conformance";
 
 import { createRequestListener } from "./src/index.ts";
 
@@ -11,6 +17,7 @@ export function conformanceServer() {
   const composer = createComposer<undefined, IncomingMessage>({
     screens: [conformanceScreen()],
     actions: conformanceActions(),
+    strings: { catalog: loadCatalog(conformanceCatalogDir()) },
   });
   return createServer(createRequestListener(composer));
 }

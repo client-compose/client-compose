@@ -3,7 +3,8 @@
 #
 #   conformance/run-against.sh <port> <command to start the server...>
 #
-# e.g. conformance/run-against.sh 4100 go run ./composers/go/core/cmd/conformance-server -addr :4100
+# e.g. conformance/run-against.sh 4100 go run ./composers/go/core/cmd/conformance-server -addr :4100 \
+#        -strings conformance/composer/strings
 set -euo pipefail
 
 port="$1"

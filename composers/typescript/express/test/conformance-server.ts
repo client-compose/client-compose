@@ -2,7 +2,13 @@
 // express.json() in front.
 import type { AddressInfo } from "node:net";
 
-import { conformanceActions, conformanceScreen, createComposer } from "@client-compose/composer";
+import {
+  conformanceActions,
+  conformanceScreen,
+  createComposer,
+  loadCatalog,
+} from "@client-compose/composer";
+import { conformanceCatalogDir } from "@client-compose/conformance";
 import express from "express";
 
 import { composerHandler } from "../src/index.ts";
@@ -11,6 +17,7 @@ export async function conformanceServer(options: { json: boolean }) {
   const composer = createComposer<undefined, express.Request>({
     screens: [conformanceScreen()],
     actions: conformanceActions(),
+    strings: { catalog: loadCatalog(conformanceCatalogDir()) },
   });
   const app = express();
   if (options.json) {
