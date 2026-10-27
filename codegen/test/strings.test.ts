@@ -11,6 +11,7 @@ import {
   compareIslands,
   parseAppStrings,
   parseManifest,
+  parseScreenStrings,
 } from "../src/index.ts";
 
 const island = (strings: unknown) =>
@@ -109,5 +110,54 @@ test("the catalog has every string in its default language, and nothing that isn
     "error en islands.card@9",
     "warning pl app.loading",
     "warning pl app.retry",
+  ]);
+});
+
+test("screen strings are declared by screen id, in the same format", () => {
+  const parsed = parseScreenStrings(
+    { screens: { creator: { title: { params: ["creator"] } }, "new-recipe": { title: {} } } },
+    "screen-strings.json",
+  );
+  assert.deepEqual(
+    parsed.screens.map((s) => [s.screen, s.strings.map((d) => [d.key, d.params])]),
+    [
+      ["creator", [["title", ["creator"]]]],
+      ["new-recipe", [["title", []]]],
+    ],
+  );
+  assert.throws(() => parseScreenStrings({}, "s.json"), /"screens"/);
+  assert.throws(() => parseScreenStrings({ screens: { Bad: {} } }, "s.json"), /screen id/);
+  assert.throws(
+    () =>
+      parseScreenStrings(
+        { screens: { creator: { title: { params: ["x"], counted: true } } } },
+        "s.json",
+      ),
+    /count/,
+  );
+});
+
+test("the catalog's screens are checked like its islands", () => {
+  const dir = mkdtempSync(join(tmpdir(), "screens-"));
+  writeFileSync(
+    join(dir, "en.json"),
+    JSON.stringify({
+      screens: { creator: { title: "{creator} on Flavor", extra: "x" }, other: {} },
+    }),
+  );
+  writeFileSync(join(dir, "pl.json"), JSON.stringify({ screens: {} }));
+  const screens = parseScreenStrings(
+    { screens: { creator: { title: { params: ["creator"] }, subtitle: {} } } },
+    "s.json",
+  ).screens;
+  const issues = checkCatalog(dir, "en", [], undefined, screens).map(
+    (i) => `${i.severity} ${i.file.endsWith("pl.json") ? "pl" : "en"} ${i.path}`,
+  );
+  assert.deepEqual(issues.sort(), [
+    "error en screens.creator.extra",
+    "error en screens.creator.subtitle",
+    "error en screens.other",
+    "warning pl screens.creator.subtitle",
+    "warning pl screens.creator.title",
   ]);
 });

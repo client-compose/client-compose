@@ -5,6 +5,7 @@ import {
   type EnumDef,
   type Island,
   type ObjectDef,
+  type ScreenStringsDef,
   type TypeRef,
   words,
 } from "../manifest.ts";
@@ -27,13 +28,36 @@ const goName = (s: string) =>
 
 const typeIdent = (path: string[]) => path.map(goName).join("");
 
+/** A param as a Go parameter: lower camel case, clear of Go's keywords. */
+const goParam = (p: string) => {
+  const name = goName(p).replace(/^[A-Z]+(?=[A-Z][a-z]|$)|^[A-Z]/, (m) => m.toLowerCase());
+  return GO_KEYWORDS.has(name) ? `${name}_` : name;
+};
+
+const GO_KEYWORDS = new Set(
+  "break case chan const continue default defer else fallthrough for func go goto if import interface map package range return select struct switch type var".split(
+    " ",
+  ),
+);
+
 export function generateGo(
   islands: Island[],
   header: string,
   opts: GoOptions,
   actions: Action[] = [],
+  screens: ScreenStringsDef[] = [],
 ): string {
   const out: string[] = [header.replace(/^/gm, "// "), "", `package ${opts.package}`];
+  if (screens.length > 0) {
+    const counted = screens.some((s) => s.strings.some((d) => d.params.includes("count")));
+    out.push(
+      "",
+      "import (",
+      ...(counted ? [`\t"strconv"`, ""] : []),
+      `\tcc "github.com/client-compose/client-compose/composers/go/core"`,
+      ")",
+    );
+  }
 
   const doc = (indent: string, text?: string) => {
     if (text) {
@@ -181,6 +205,38 @@ export function generateGo(
     }
   };
 
+  for (const s of screens) {
+    const name = `${goName(s.screen)}ScreenStrings`;
+    out.push(
+      "",
+      `// ${name} are the ${s.screen} screen's own strings, in the request's language (spec §4.7).`,
+      `type ${name} struct{ table cc.StringsTable }`,
+      "",
+      `// ${name}For reads them from a layout's, resolver's or meta's request.`,
+      `func ${name}For(r cc.Request) ${name} { return ${name}{r.ScreenStrings(${JSON.stringify(s.screen)})} }`,
+    );
+    for (const d of s.strings) {
+      out.push("");
+      doc("", d.description);
+      const method = goName(d.key);
+      if (d.params.length === 0) {
+        out.push(
+          `func (s ${name}) ${method}() string { return s.table.Text(${JSON.stringify(d.key)}) }`,
+        );
+        continue;
+      }
+      const args = d.params.map((p) => `${goParam(p)} ${p === "count" ? "int" : "string"}`);
+      const values = d.params.map(
+        (p) =>
+          `${JSON.stringify(p)}: ${p === "count" ? `strconv.Itoa(${goParam(p)})` : goParam(p)}`,
+      );
+      out.push(
+        `func (s ${name}) ${method}(${args.join(", ")}) string {`,
+        `\treturn s.table.Format(${JSON.stringify(d.key)}, map[string]string{${values.join(", ")}})`,
+        "}",
+      );
+    }
+  }
   for (const island of islands) {
     emitObject(island.props, island);
   }

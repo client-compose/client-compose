@@ -17,5 +17,15 @@
         "#*": "{count} items"
       }
     }
+  },
+  "screens": {
+    "profile": {
+      "title": "{name} on Example",
+      "description": {
+        "#1": "{name}'s one post",
+        "#*": "{name}'s {count} posts"
+      },
+      "fallbackTitle": "Profile"
+    }
   }
 }

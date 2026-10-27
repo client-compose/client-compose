@@ -19,6 +19,7 @@ import {
   loadActionManifests,
   loadAppStrings,
   loadManifests,
+  loadScreenStrings,
   ManifestError,
   type ObjectDef,
 } from "./manifest.ts";
@@ -40,10 +41,12 @@ export {
   loadActionManifests,
   loadAppStrings,
   loadManifests,
+  loadScreenStrings,
   ManifestError,
   parseActionManifest,
   parseAppStrings,
   parseManifest,
+  parseScreenStrings,
 } from "./manifest.ts";
 export { generateGo, generateKotlin, generateSwift, generateTypeScript };
 export { type CatalogIssue, catalogLocales, checkCatalog } from "./catalog.ts";
@@ -61,6 +64,11 @@ export interface CodegenConfig {
   actions?: string;
   /** The app strings manifest (spec §4.7): the strings shown outside any island. */
   appStrings?: string;
+  /**
+   * The screen strings manifest (spec §4.7): each screen's own strings, which its composer uses
+   * itself (e.g. for its meta). Generated for the Go and TypeScript targets.
+   */
+  screenStrings?: string;
   /** Directory of the strings catalog, one JSON file per language, checked by `codegen strings`. */
   catalog?: string;
   /** The catalog's default language, which must have every string. Default "en". */
@@ -91,6 +99,7 @@ function manifestsDirOf(configPath: string): {
   manifestsDir?: string;
   actionsDir?: string;
   appStringsFile?: string;
+  screenStringsFile?: string;
   catalogDir?: string;
 } {
   // The config file is the user's: each target checks the options it reads.
@@ -101,9 +110,12 @@ function manifestsDirOf(configPath: string): {
   if (
     config.manifests === undefined &&
     config.actions === undefined &&
-    config.appStrings === undefined
+    config.appStrings === undefined &&
+    config.screenStrings === undefined
   ) {
-    throw new ManifestError(`${configPath}: set "manifests" (islands), "actions" or "appStrings"`);
+    throw new ManifestError(
+      `${configPath}: set "manifests" (islands), "actions", "appStrings" or "screenStrings"`,
+    );
   }
   return {
     config,
@@ -111,19 +123,22 @@ function manifestsDirOf(configPath: string): {
     manifestsDir: dir(config.manifests),
     actionsDir: dir(config.actions),
     appStringsFile: dir(config.appStrings),
+    screenStringsFile: dir(config.screenStrings),
     catalogDir: dir(config.catalog),
   };
 }
 
 /** Checks the config's strings catalog against its manifests (spec §4.7). */
 export function checkStrings(configPath: string): CatalogIssue[] {
-  const { config, manifestsDir, appStringsFile, catalogDir } = manifestsDirOf(configPath);
+  const { config, manifestsDir, appStringsFile, screenStringsFile, catalogDir } =
+    manifestsDirOf(configPath);
   if (catalogDir === undefined) {
     throw new ManifestError(`${configPath}: set "catalog", the strings catalog's directory`);
   }
   const islands = manifestsDir ? loadManifests(manifestsDir) : [];
   const app = appStringsFile ? loadAppStrings(appStringsFile) : undefined;
-  return checkCatalog(catalogDir, config.defaultLocale ?? "en", islands, app);
+  const screens = screenStringsFile ? loadScreenStrings(screenStringsFile).screens : [];
+  return checkCatalog(catalogDir, config.defaultLocale ?? "en", islands, app, screens);
 }
 
 /**
@@ -161,10 +176,12 @@ export function checkCompat(
 }
 
 export function generate(configPath: string): GeneratedFile[] {
-  const { config, base, manifestsDir, actionsDir, appStringsFile } = manifestsDirOf(configPath);
+  const { config, base, manifestsDir, actionsDir, appStringsFile, screenStringsFile } =
+    manifestsDirOf(configPath);
   const islands = manifestsDir ? loadManifests(manifestsDir) : [];
   const actions = actionsDir ? loadActionManifests(actionsDir) : [];
   const app: AppStrings | undefined = appStringsFile ? loadAppStrings(appStringsFile) : undefined;
+  const screens = screenStringsFile ? loadScreenStrings(screenStringsFile).screens : [];
   checkFlatNames(islands, actions);
 
   // Must not depend on the working directory, so `--check` agrees wherever codegen ran.
@@ -174,6 +191,7 @@ export function generate(configPath: string): GeneratedFile[] {
       manifestsDir && `Manifests: ${relative(base, manifestsDir) || "."}`,
       actionsDir && `actions: ${relative(base, actionsDir) || "."}`,
       appStringsFile && `app strings: ${relative(base, appStringsFile)}`,
+      screenStringsFile && `screen strings: ${relative(base, screenStringsFile)}`,
       `config: ${basename(configPath)}`,
     ]
       .filter(Boolean)
@@ -185,7 +203,7 @@ export function generate(configPath: string): GeneratedFile[] {
   for (const t of list(go)) {
     files.push({
       path: resolve(base, t.out),
-      contents: generateGo(islands, header, required(t, "package", "go"), actions),
+      contents: generateGo(islands, header, required(t, "package", "go"), actions, screens),
     });
   }
   for (const t of list(swift)) {
@@ -203,7 +221,7 @@ export function generate(configPath: string): GeneratedFile[] {
   for (const t of list(typescript)) {
     files.push({
       path: resolve(base, t.out),
-      contents: generateTypeScript(islands, header, t, actions, app),
+      contents: generateTypeScript(islands, header, t, actions, app, screens),
     });
   }
   if (files.length === 0) {

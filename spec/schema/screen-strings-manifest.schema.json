@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://client-compose.dev/schema/v0/screen-strings-manifest.json",
+  "title": "Screen strings manifest",
+  "description": "Each screen's own strings (spec §4.7): the words its composer uses itself, such as its meta's title.",
+  "type": "object",
+  "required": [
+    "screens"
+  ],
+  "properties": {
+    "screens": {
+      "type": "object",
+      "description": "Strings by screen id, each in the app strings manifest's format.",
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9-]*$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "description": "The strings shown, by key (spec §2, §4.7): the values each takes, never its words.",
+        "propertyNames": {
+          "pattern": "^[a-z][A-Za-z0-9]*$"
+        },
+        "additionalProperties": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "description": {
+              "type": "string"
+            },
+            "params": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z][A-Za-z0-9]*$"
+              },
+              "uniqueItems": true
+            },
+            "counted": {
+              "type": "boolean",
+              "description": "Has variants by number; params must include count."
+            }
+          }
+        }
+      }
+    }
+  }
+}

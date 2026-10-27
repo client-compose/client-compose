@@ -47,6 +47,11 @@ func ConformanceScreen() Screen {
 		ID: "__conformance",
 		Meta: func(_ context.Context, r Request) (ScreenMeta, error) {
 			var meta ScreenMeta
+			if name := r.Params["metaFromStrings"]; name != "" {
+				words := r.ScreenStrings("__conformance")
+				values := map[string]string{"name": name}
+				return ScreenMeta{Title: words.Format("title", values), Description: words.Format("description", values)}, nil
+			}
 			if r.Params["meta"] != "" {
 				err := json.Unmarshal([]byte(r.Params["meta"]), &meta)
 				return meta, err

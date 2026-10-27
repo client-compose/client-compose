@@ -5,7 +5,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import type { AppStrings, Island, StringDef } from "./manifest.ts";
+import type { AppStrings, Island, ScreenStringsDef, StringDef } from "./manifest.ts";
 
 export interface CatalogIssue {
   severity: "error" | "warning";
@@ -35,6 +35,7 @@ export function checkCatalog(
   defaultLocale: string,
   islands: Island[],
   app: AppStrings | undefined,
+  screens: ScreenStringsDef[] = [],
 ): CatalogIssue[] {
   const issues: CatalogIssue[] = [];
   const locales = catalogLocales(dir);
@@ -79,6 +80,16 @@ export function checkCatalog(
       if (strings.length > 0) {
         checkGroup(islandsByVersion[id], strings, `islands.${id}`, missing, report);
       }
+    }
+    const screensById = isRecord(catalog.screens) ? catalog.screens : {};
+    const declaredScreens = new Map(screens.map((s) => [s.screen, s.strings]));
+    for (const id of Object.keys(screensById)) {
+      if (!declaredScreens.has(id)) {
+        report("error", `screens.${id}`, "no screen strings declared for this screen");
+      }
+    }
+    for (const [id, strings] of declaredScreens) {
+      checkGroup(screensById[id], strings, `screens.${id}`, missing, report);
     }
   }
   return issues;

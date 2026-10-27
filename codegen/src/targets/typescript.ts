@@ -1,11 +1,13 @@
-import type {
-  Action,
-  AppStrings,
-  EnumDef,
-  Island,
-  ObjectDef,
-  StringDef,
-  TypeRef,
+import {
+  type Action,
+  type AppStrings,
+  type EnumDef,
+  type Island,
+  type ObjectDef,
+  pascal,
+  type ScreenStringsDef,
+  type StringDef,
+  type TypeRef,
 } from "../manifest.ts";
 
 export interface TypeScriptOptions {
@@ -23,9 +25,11 @@ export function generateTypeScript(
   opts: TypeScriptOptions = {},
   actions: Action[] = [],
   app?: AppStrings,
+  screens: ScreenStringsDef[] = [],
 ): string {
   const imports = [
     ...(app ? ["AppStringsDescriptor"] : []),
+    ...(screens.length ? ["ScreenStringsDescriptor"] : []),
     ...(islands.length || (!actions.length && !app) ? ["IslandDescriptor"] : []),
     ...(actions.length ? ["ActionDescriptor"] : []),
   ];
@@ -190,6 +194,17 @@ export function generateTypeScript(
     );
     out.push(
       `export const AppStrings: AppStringsDescriptor<AppStrings> = { strings: ${paramsOf(app.strings)} };`,
+    );
+  }
+  for (const s of screens) {
+    const name = `${pascal(s.screen)}ScreenStrings`;
+    emitStrings(
+      name,
+      s.strings,
+      `The ${s.screen} screen's own strings: read them with \`lc.strings(${name})\`.`,
+    );
+    out.push(
+      `export const ${name}: ScreenStringsDescriptor<${name}> = { screen: ${JSON.stringify(s.screen)}, strings: ${paramsOf(s.strings)} };`,
     );
   }
   for (const island of islands) {

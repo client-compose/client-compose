@@ -215,6 +215,13 @@ strings. `POST /strings` answers the app strings, without running `context`, sin
 its words before anyone signs in. `client-compose-codegen strings` checks the catalog against the
 manifests.
 
+A screen's own words, such as its meta's title, are its screen strings: declared in a screen strings
+manifest, in the catalog under `screens`, and read with the generated descriptor:
+
+```ts
+meta: (lc) => ({ title: lc.strings(CreatorScreenStrings).title({ creator: name }) }),
+```
+
 In tests, `app.strings({ locale: "pl" })` fetches the app strings, and an island's entry has its
 `strings`.
 

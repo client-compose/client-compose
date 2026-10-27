@@ -3,7 +3,16 @@
     "loading": "Ładowanie"
   },
   "islands": {
-    "profile-header@2": { "follow": "Obserwuj" },
-    "post-list@1": { "empty": "Brak postów" }
+    "profile-header@2": {
+      "follow": "Obserwuj"
+    },
+    "post-list@1": {
+      "empty": "Brak postów"
+    }
+  },
+  "screens": {
+    "__conformance": {
+      "title": "Cześć {name}"
+    }
   }
 }

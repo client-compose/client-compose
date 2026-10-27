@@ -1,0 +1,9 @@
+{
+  "screens": {
+    "profile": {
+      "title": { "params": ["name"], "description": "The page title." },
+      "description": { "params": ["count", "name"], "counted": true },
+      "fallbackTitle": {}
+    }
+  }
+}

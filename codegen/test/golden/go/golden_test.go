@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	cc "github.com/client-compose/client-compose/composers/go/core"
+	"github.com/client-compose/client-compose/composers/go/core/cctest"
 )
 
 func TestKitchenSinkRoundTrips(t *testing.T) {
@@ -87,5 +88,31 @@ func TestDefineActionWithGeneratedTypes(t *testing.T) {
 	res := perform(`{"protocol":0,"action":"ping","version":1,"client":{"platform":"web","appVersion":"1"},"input":{}}`)
 	if out, _ := json.Marshal(res.Body); !strings.Contains(string(out), `"result":{}`) {
 		t.Errorf("ping: %s", out)
+	}
+}
+
+func TestScreenStringsReadTheRequestsLanguage(t *testing.T) {
+	en := map[string]cc.Template{
+		"title":         {Text: "{name} on Example"},
+		"description":   {Variants: map[string]string{"#1": "{name}'s one post", "#*": "{name}'s {count} posts"}},
+		"fallbackTitle": {Text: "Profile"},
+	}
+	var got []string
+	composer := cc.New(cc.Config{
+		Screens: []cc.Screen{{
+			ID:      "profile",
+			Islands: []cc.Placement{cc.Static("divider", DividerV1{})},
+			Meta: func(_ context.Context, r cc.Request) (cc.ScreenMeta, error) {
+				s := ProfileScreenStringsFor(r)
+				got = []string{s.Title("Ada"), s.Description(1, "Ada"), s.Description(3, "Ada"), s.FallbackTitle()}
+				return cc.ScreenMeta{}, nil
+			},
+		}},
+		Strings: &cc.StringsConfig{Catalog: cc.Catalog{"en": {Screens: map[string]cc.Strings{"profile": en}}}},
+	})
+	cctest.New(t, composer).Screen("profile", nil)
+	want := []string{"Ada on Example", "Ada's one post", "Ada's 3 posts", "Profile"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("got %q", got)
 	}
 }

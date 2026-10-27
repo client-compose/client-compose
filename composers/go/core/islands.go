@@ -26,7 +26,8 @@ func (c *Composer) ComposeIsland(ctx context.Context, req IslandRequest) Result 
 	ctx, endRequest := withRequestScope(ctx)
 	defer endRequest()
 
-	r := Request{Screen: screen.ID, Params: req.Params, Client: *req.Client, Cursor: req.Cursor}
+	language := c.words(req.Client.Locale)
+	r := Request{Screen: screen.ID, Params: req.Params, Client: *req.Client, Cursor: req.Cursor, words: language}
 	if r.Params == nil {
 		r.Params = map[string]string{}
 	}
@@ -65,7 +66,7 @@ func (c *Composer) ComposeIsland(ctx context.Context, req IslandRequest) Result 
 	// A page's strings are the ones the client has from the screen (spec §4.5).
 	var words *LocaleStrings
 	if req.Cursor == "" {
-		words = c.words(req.Client.Locale)
+		words = language
 	}
 	entry, err := c.resolveEntry(ctx, *placement, *island, r, words)
 	if errors.Is(err, ErrInvalidCursor) {

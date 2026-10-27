@@ -4,15 +4,24 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import type { PluralRules, Strings } from "@client-compose/protocol";
+import {
+  buildStrings,
+  type PluralRules,
+  type ScreenStringsDescriptor,
+  type Strings,
+} from "@client-compose/protocol";
 
 import { isRecord } from "./guards.ts";
 import { pluralRules } from "./plurals.generated.ts";
 
-/** One language's words: its app strings, and each island version's, by `type@version`. */
+/**
+ * One language's words: its app strings, each island version's (by `type@version`), and each
+ * screen's own (by screen id).
+ */
 export interface CatalogFile {
   app?: Strings;
   islands?: Record<string, Strings>;
+  screens?: Record<string, Strings>;
 }
 
 /** The words in every language, by language tag (`en`, `pl`, `pt-BR`). */
@@ -33,6 +42,8 @@ export interface LocaleStrings {
   island(type: string, version: number): Strings | undefined;
   /** The app strings, each from the nearest language that has it. */
   app(): Strings;
+  /** A screen's own strings, each from the nearest language that has it. */
+  screen(id: string): Strings | undefined;
 }
 
 /** A catalog from a directory of `<locale>.json` files. */
@@ -45,14 +56,18 @@ export function loadCatalog(dir: string): Catalog {
     }
     catalog[file.slice(0, -".json".length)] = {
       app: strings(parsed.app),
-      islands: isRecord(parsed.islands)
-        ? Object.fromEntries(
-            Object.entries(parsed.islands).map(([id, words]) => [id, strings(words) ?? {}]),
-          )
-        : undefined,
+      islands: byId(parsed.islands),
+      screens: byId(parsed.screens),
     };
   }
   return catalog;
+}
+
+function byId(value: unknown): Record<string, Strings> | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  return Object.fromEntries(Object.entries(value).map(([id, words]) => [id, strings(words) ?? {}]));
 }
 
 function strings(value: unknown): Strings | undefined {
@@ -91,7 +106,16 @@ export function stringsFor(config: StringsConfig, locale: string | undefined): L
     plurals: rulesFor(answered),
     island: (type, version) => merge((file) => file.islands?.[`${type}@${version}`]),
     app: () => merge((file) => file.app) ?? {},
+    screen: (id) => merge((file) => file.screens?.[id]),
   };
+}
+
+/** A screen's own strings, typed by their descriptor, from the words in the request's language. */
+export function screenStrings<S>(
+  words: LocaleStrings | undefined,
+  descriptor: ScreenStringsDescriptor<S>,
+): S {
+  return buildStrings<S>(descriptor.strings, words?.screen(descriptor.screen), words?.plurals);
 }
 
 /** The languages to look in, nearest first: `pl-PL`, then `pl`, then the default. */

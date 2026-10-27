@@ -56,6 +56,7 @@ downloaded through a browser needs `xattr -d com.apple.quarantine <file>` before
 config may also have only `actions`.
 
 For strings (spec §4.7), add `"appStrings": "app-strings.json"` (the app strings manifest),
+`"screenStrings": "screen-strings.json"` (each screen's own strings, for Go and TypeScript composers),
 `"catalog": "strings"` (the directory of `<locale>.json` files the composer serves) and, if it isn't
 `en`, `"defaultLocale"`. See [Strings](#strings).
 
@@ -121,6 +122,12 @@ The words are a catalog, one file per language, e.g. `strings/pl.json`:
   }
 }
 ```
+
+A screen's own strings are words its composer uses itself, such as its meta's title. The screen
+strings manifest declares them by screen id, `{ "screens": { "creator": { "title": { "params":
+["creator"] } } } }`, and the catalog has them under `screens`. Go gets
+`CreatorScreenStringsFor(r).Title(name)`; TypeScript, `lc.strings(CreatorScreenStrings).title({
+creator })`.
 
 A counted string's variants are keyed `#<number>`, `#<category>` (CLDR's `zero`, `one`, `two`,
 `few`, `many`, `other`) or `#*`, chosen in that order. `strings` checks the catalog against the

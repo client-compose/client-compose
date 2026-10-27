@@ -1,11 +1,27 @@
 {
   "app": {
     "loading": "Loading",
-    "items": { "#1": "One item", "#*": "{count} items" }
+    "items": {
+      "#1": "One item",
+      "#*": "{count} items"
+    }
   },
   "islands": {
-    "profile-header@1": { "follow": "Follow (v1)" },
-    "profile-header@2": { "follow": "Follow", "share": "Share" },
-    "post-list@1": { "empty": "No posts" }
+    "profile-header@1": {
+      "follow": "Follow (v1)"
+    },
+    "profile-header@2": {
+      "follow": "Follow",
+      "share": "Share"
+    },
+    "post-list@1": {
+      "empty": "No posts"
+    }
+  },
+  "screens": {
+    "__conformance": {
+      "title": "Hello {name}",
+      "description": "About {name}"
+    }
   }
 }

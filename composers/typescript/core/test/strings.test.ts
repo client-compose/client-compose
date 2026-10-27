@@ -11,6 +11,7 @@ import {
   pagedIsland,
   place,
   screen,
+  type ScreenStringsDescriptor,
   stringsFor,
   UnauthenticatedError,
 } from "../src/index.ts";
@@ -168,4 +169,44 @@ test("a strings request that isn't one answers 400", async () => {
   );
   assert.equal(old?.status, 400);
   assert.match(String(old?.body), /unsupported_protocol/);
+});
+
+test("a screen reads its own strings, typed by their descriptor", async () => {
+  // As codegen generates it.
+  const NumbersScreenStrings: ScreenStringsDescriptor<{
+    title: (values: { name: string | number }) => string;
+    description: (values: { count: number }) => string;
+  }> = { screen: "numbers", strings: { title: ["name"], description: ["count"] } };
+  const withMeta = (strings?: { catalog: typeof catalog }) =>
+    testComposer(
+      createComposer({
+        screens: [
+          screen("numbers", {
+            islands: [
+              place(
+                "header",
+                island(HeaderV1, () => ({ name: "" })),
+              ),
+            ],
+            meta: (lc) => {
+              const t = lc.strings(NumbersScreenStrings);
+              return { title: t.title({ name: "Ada" }), description: t.description({ count: 3 }) };
+            },
+          }),
+        ],
+        strings,
+      }),
+      {
+        client: {
+          platform: "test",
+          appVersion: "1",
+          locale: "pl",
+        },
+      },
+    );
+  // Polish has the title; its description falls back to English's.
+  const polish = await withMeta({ catalog }).screen("numbers");
+  assert.deepEqual(polish.head?.meta, { title: "Liczby o Ada", description: "3 numbers" });
+  const without = await withMeta().screen("numbers");
+  assert.equal(without.head?.meta, undefined);
 });

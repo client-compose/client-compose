@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://client-compose.dev/schema/v0/strings-catalog.json",
   "title": "Strings catalog",
-  "description": "One language's words (spec §4.7): app strings, and each island version's.",
+  "description": "One language's words (spec §4.7): app strings, each island version's, and each screen's own.",
   "type": "object",
   "properties": {
     "app": {
@@ -16,6 +16,16 @@
       "propertyNames": {
         "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*@[1-9][0-9]*$"
       },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": {
+          "$ref": "#/$defs/template"
+        }
+      }
+    },
+    "screens": {
+      "type": "object",
+      "description": "Each screen's own strings, by screen id: words its composer uses itself, e.g. for its meta. Never sent to clients as such.",
       "additionalProperties": {
         "type": "object",
         "additionalProperties": {
