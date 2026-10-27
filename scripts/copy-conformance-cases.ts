@@ -13,6 +13,9 @@ copyFileSync(
   new URL("conformance/client/action-cases.json", root),
   new URL("clientActions.json", out),
 );
+copyFileSync(new URL("conformance/client/plural-cases.json", root), new URL("plurals.json", out));
+copyFileSync(new URL("conformance/client/string-cases.json", root), new URL("strings.json", out));
+copyFileSync(new URL("spec/plurals.json", root), new URL("pluralRules.json", out));
 for (const file of readdirSync(new URL("conformance/composer/actions/", root))) {
   copyFileSync(
     new URL(`conformance/composer/actions/${file}`, root),

@@ -1,0 +1,118 @@
+{
+  "$comment": "Client string fixtures (spec §4.7). For each case, a client filling in `template` with `values`, using the plural rules of `language` from spec/plurals.json, must produce `expect`.",
+  "cases": [
+    {
+      "name": "text without params is itself",
+      "language": "en",
+      "template": "Latest recipes",
+      "values": {},
+      "expect": "Latest recipes"
+    },
+    {
+      "name": "params fill their slots",
+      "language": "en",
+      "template": "{count} of {total} uploaded",
+      "values": {
+        "count": 2,
+        "total": 3
+      },
+      "expect": "2 of 3 uploaded"
+    },
+    {
+      "name": "a slot without a value is left as it is",
+      "language": "en",
+      "template": "Hi {name}",
+      "values": {},
+      "expect": "Hi {name}"
+    },
+    {
+      "name": "an exact number comes first",
+      "language": "pl",
+      "template": {
+        "#0": "No recipes",
+        "#1": "{count} przepis",
+        "#few": "{count} przepisy",
+        "#*": "{count} przepisów"
+      },
+      "values": {
+        "count": 0
+      },
+      "expect": "No recipes"
+    },
+    {
+      "name": "then the language's category: few",
+      "language": "pl",
+      "template": {
+        "#0": "No recipes",
+        "#1": "{count} przepis",
+        "#few": "{count} przepisy",
+        "#*": "{count} przepisów"
+      },
+      "values": {
+        "count": 23
+      },
+      "expect": "23 przepisy"
+    },
+    {
+      "name": "a category without a variant falls to #*",
+      "language": "pl",
+      "template": {
+        "#0": "No recipes",
+        "#1": "{count} przepis",
+        "#few": "{count} przepisy",
+        "#*": "{count} przepisów"
+      },
+      "values": {
+        "count": 5
+      },
+      "expect": "5 przepisów"
+    },
+    {
+      "name": "one, in English, by its exact number",
+      "language": "en",
+      "template": {
+        "#1": "{count} recipe",
+        "#*": "{count} recipes"
+      },
+      "values": {
+        "count": 1
+      },
+      "expect": "1 recipe"
+    },
+    {
+      "name": "anything else, #*",
+      "language": "en",
+      "template": {
+        "#1": "{count} recipe",
+        "#*": "{count} recipes"
+      },
+      "values": {
+        "count": 7
+      },
+      "expect": "7 recipes"
+    },
+    {
+      "name": "a category variant (one) in a language whose 'one' isn't only 1",
+      "language": "ru",
+      "template": {
+        "#one": "{count} рецепт",
+        "#few": "{count} рецепта",
+        "#*": "{count} рецептов"
+      },
+      "values": {
+        "count": 21
+      },
+      "expect": "21 рецепт"
+    },
+    {
+      "name": "without a count, variants fall to #*",
+      "language": "en",
+      "template": {
+        "#1": "{count} recipe",
+        "#*": "{count} recipes"
+      },
+      "values": {},
+      "expect": "{count} recipes"
+    }
+  ]
+}

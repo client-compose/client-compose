@@ -121,6 +121,9 @@ const SUITES = {
   actions: "composer/action-cases.json",
   client: "client/cases.json",
   clientActions: "client/action-cases.json",
+  plurals: "client/plural-cases.json",
+  strings: "client/string-cases.json",
+  pluralRules: "../spec/plurals.json",
 } as const;
 
 /**
@@ -143,6 +146,25 @@ export const islandCases = (): IslandCase[] => load("islands");
 export const actionCases = (): ActionCase[] => load("actions");
 export const clientCases = (): ClientCase[] => load("client");
 export const clientActionCases = (): ClientActionCases => read("clientActions");
+
+/** CLDR's plural rules for whole numbers (spec §4.7): language -> category -> condition. */
+export const pluralRules = (): Record<string, Record<string, string>> =>
+  read<{ rules: Record<string, Record<string, string>> }>("pluralRules").rules;
+
+/** Language -> category -> counts a client's plural rule evaluation must put in it. */
+export const pluralCases = (): Record<string, Record<string, number[]>> => load("plurals");
+
+/** Templates filled in by a client (spec §4.7). */
+export interface StringCase {
+  name: string;
+  /** Whose plural rules (spec/plurals.json) pick the variant. */
+  language: string;
+  template: string | Record<string, string>;
+  values: Record<string, string | number>;
+  expect: string;
+}
+
+export const stringCases = (): StringCase[] => load("strings");
 
 /**
  * Sends one screen case to the composer at `baseUrl`. Pass `fetchImpl` to run against a

@@ -44,6 +44,13 @@
           "format": "uri"
         }
       }
+    },
+    "locale": {
+      "type": "string",
+      "description": "The language the composer answered in (spec §4.7)."
+    },
+    "plurals": {
+      "$ref": "strings-response.json#/properties/plurals"
     }
   },
   "$defs": {
@@ -85,7 +92,14 @@
             "next": {
               "type": "string",
               "minLength": 1,
-              "description": "The island has more pages: an opaque cursor for its next one (spec \u00a74.5)."
+              "description": "The island has more pages: an opaque cursor for its next one (spec §4.5)."
+            },
+            "strings": {
+              "type": "object",
+              "description": "The island's strings, in the screen's language (spec §4.7).",
+              "additionalProperties": {
+                "$ref": "strings-catalog.json#/$defs/template"
+              }
             }
           },
           "required": [

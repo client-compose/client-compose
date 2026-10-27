@@ -18,6 +18,15 @@ import {
   type ScreenResponse,
 } from "@client-compose/protocol";
 
+export {
+  buildStrings,
+  fetchStrings,
+  formatString,
+  pluralCategory,
+  StringsFetchError,
+  type StringValues,
+} from "./strings.ts";
+
 type OkEntry<P = unknown> = IslandEntry<P> & { status: "ok" };
 type ErrorEntry = IslandEntry & { status: "error" };
 

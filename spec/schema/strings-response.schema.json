@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://client-compose.dev/schema/v0/strings-response.json",
+  "title": "Strings response",
+  "type": "object",
+  "required": [
+    "protocol",
+    "locale",
+    "plurals",
+    "strings"
+  ],
+  "properties": {
+    "protocol": {
+      "const": 0
+    },
+    "locale": {
+      "type": "string"
+    },
+    "plurals": {
+      "type": "object",
+      "description": "The language's plural rules: category -> condition, CLDR syntax, whole numbers (spec §4.7).",
+      "propertyNames": {
+        "enum": [
+          "zero",
+          "one",
+          "two",
+          "few",
+          "many"
+        ]
+      },
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "strings": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "strings-catalog.json#/$defs/template"
+      }
+    }
+  }
+}

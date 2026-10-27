@@ -3,14 +3,54 @@
   "$id": "https://client-compose.dev/schema/v0/island-manifest.json",
   "title": "Island manifest",
   "type": "object",
-  "required": ["type", "version", "props"],
+  "required": [
+    "type",
+    "version",
+    "props"
+  ],
   "properties": {
-    "type": { "type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$" },
-    "version": { "type": "integer", "minimum": 1 },
-    "description": { "type": "string" },
+    "type": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "description": {
+      "type": "string"
+    },
     "props": {
       "description": "JSON Schema (2020-12) describing the island's props object.",
       "type": "object"
+    },
+    "strings": {
+      "type": "object",
+      "description": "The strings shown, by key (spec §2, §4.7): the values each takes, never its words.",
+      "propertyNames": {
+        "pattern": "^[a-z][A-Za-z0-9]*$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "params": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][A-Za-z0-9]*$"
+            },
+            "uniqueItems": true
+          },
+          "counted": {
+            "type": "boolean",
+            "description": "Has variants by number; params must include count."
+          }
+        }
+      }
     }
   }
 }

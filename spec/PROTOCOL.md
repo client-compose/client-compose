@@ -67,6 +67,26 @@ Rules:
   `codegen compat` command checks this.
 - A client MAY support several versions of one island at once.
 
+An island's manifest MAY declare the **strings** it shows (§4.7): each string's key and the values
+it takes, never its words. The words are the composer's, in every language it supports.
+
+```json
+"strings": {
+  "heading": {},
+  "charactersLeft": { "params": ["count"] },
+  "recipes": { "params": ["count"], "counted": true }
+}
+```
+
+| Field     | Meaning                                                                 |
+| --------- | ----------------------------------------------------------------------- |
+| key       | camelCase, unique in the manifest.                                      |
+| `params`  | Optional. The values the client fills in (camelCase names), e.g. a count typed so far. |
+| `counted` | Optional. The string has variants by number (§4.7); `params` MUST include `count`. |
+
+Strings are part of the version: adding one is fine; removing one, or changing its params or
+whether it's counted, is a new version (`codegen compat` checks this).
+
 ---
 
 ## 3. Request
@@ -158,6 +178,7 @@ All three are optional strings. Clients use what applies to them and ignore the 
 | `props`   | Present iff `status` is `ok`. MUST validate against the manifest.         |
 | `error`   | Present iff `status` is `error`. `{ code, retryable?, message? }`.        |
 | `next`    | Optional, only with `status: "ok"`. The island has more pages: an opaque cursor for its next one (§4.5). |
+| `strings` | Optional, only with `status: "ok"`. The island's strings (§4.7), in the screen's language: key → template. |
 
 ### 4.2 Version negotiation (composer side)
 
@@ -270,6 +291,10 @@ Other failures are as for screens (§8.1): `bad_request`, `unsupported_protocol`
 
 Clients that don't page or refresh islands ignore `next` (§4.3: unknown fields are ignored).
 
+An island request with a cursor answers a page: its entry has no `strings`, because the client
+already has them from the screen. Without a cursor, the island is answered as on a screen, with
+its strings.
+
 ### 4.6 Streams
 
 A composer answers a screen with `200`, `Content-Type: application/jsonl`, and a stream of JSON
@@ -312,6 +337,73 @@ with code `incomplete`, `retryable: true`, as if the composer had sent it. Clien
 lines with a `kind` they don't recognise, and an `island` line for a key that isn't pending.
 
 Island requests (§4.5) and actions (§5) aren't streams: each answers with one JSON body.
+
+### 4.7 Strings
+
+Every word a client shows comes from the composer, so copy is fixed, and languages are added,
+without releasing apps. A client holds no copy of its own, except the few words it needs when it
+can't reach the composer at all (e.g. "Couldn't connect", in a few languages).
+
+**Island strings.** An island entry carries the strings its manifest declares (§2) as `strings`,
+in the language the composer answered in: the client's `locale`, the nearest it has (`pl-PL`, then
+`pl`), or its default. An island's strings depend only on its type, version and language, so
+clients MAY cache them by those. Anything that depends on the request (a recipe's title, "Nothing
+matches “pasta”") is data, in props.
+
+**App strings.** Words that belong to no island (a placeholder's "Loading", "Something went
+wrong", a field's validation message, navigation) are app strings, declared in an app strings
+manifest (`schema/app-strings-manifest.schema.json`), in the same format as an island's. A client
+fetches them with `POST {base}/strings` (`schema/strings-request.schema.json`):
+
+```json
+{ "protocol": 0, "client": { "platform": "ios", "appVersion": "4.2.0", "locale": "pl-PL" } }
+```
+
+and the composer answers `200` (`schema/strings-response.schema.json`):
+
+```json
+{
+  "protocol": 0,
+  "locale": "pl",
+  "plurals": { "one": "i = 1 and v = 0", "few": "v = 0 and i % 10 = 2..4 and i % 100 != 12..14", "many": "…" },
+  "strings": { "loading": "Ładowanie", "recipes": { "#1": "{count} przepis", "#few": "{count} przepisy", "#*": "{count} przepisów" } }
+}
+```
+
+Clients SHOULD fetch app strings at launch and keep them, refreshing them in the background on
+later launches and when the language changes.
+
+**Templates.** A string's value is a **template**: text in which `{name}` is replaced by the value
+of the param `name`. A counted string's value MAY instead be its **variants**, an object of
+templates keyed by:
+
+| Key        | Chosen when                                                                 |
+| ---------- | --------------------------------------------------------------------------- |
+| `#<n>`     | the count is exactly `n`, e.g. `#0`, `#1`                                   |
+| `#<category>` | the count is in that plural category of the language (`zero`, `one`, `two`, `few`, `many`, `other`) |
+| `#*`       | anything else. Every variants object MUST have it.                          |
+
+A client picks the exact number first, then the category, then `#*`, and fills in the template.
+
+**Plural rules.** A screen's head (and every screen response) and every strings response carry
+`locale`, the language the composer answered in, and `plurals`, that language's plural rules:
+category → condition, in CLDR's plural rule syntax, for whole numbers (`spec/plurals.json`, from
+CLDR). A count is in the first category whose condition holds, or in `other`. Clients evaluate
+them themselves, with operands `n` and `i` the count and `v`, `w`, `f`, `t`, `c` and `e` zero;
+conformance checks they agree with CLDR (`conformance/client/plural-cases.json`).
+
+**The catalog.** A composer's words are its catalog: one JSON file per language
+(`schema/strings-catalog.schema.json`), e.g. `strings/pl.json`:
+
+```json
+{
+  "app": { "loading": "Ładowanie" },
+  "islands": { "recipe-list@1": { "heading": "Najnowsze przepisy" } }
+}
+```
+
+A string a language doesn't have comes from the default language's file, which MUST have every
+declared string (`codegen strings` checks a catalog against the manifests).
 
 ---
 
@@ -475,6 +567,8 @@ screen with the same id whose params include every param in the reference. So
 
 ## 7. Open questions (v1 candidates)
 
+- **Strings cached by clients across responses**: a request saying which islands' strings the
+  client already has, so they aren't sent again.
 - **Islands that turn out not to be shown**: a placement's condition settled after a stream's head
   (§4.6), so a screen whose conditions need slow data can send its head sooner. The island would
   start pending, and its line could say it isn't shown.

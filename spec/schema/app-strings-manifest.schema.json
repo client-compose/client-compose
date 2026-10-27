@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://client-compose.dev/schema/v0/app-strings-manifest.json",
+  "title": "App strings manifest",
+  "description": "The strings a client shows outside any island (spec §4.7).",
+  "type": "object",
+  "required": [
+    "strings"
+  ],
+  "properties": {
+    "description": {
+      "type": "string"
+    },
+    "strings": {
+      "type": "object",
+      "description": "The strings shown, by key (spec §2, §4.7): the values each takes, never its words.",
+      "propertyNames": {
+        "pattern": "^[a-z][A-Za-z0-9]*$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "params": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][A-Za-z0-9]*$"
+            },
+            "uniqueItems": true
+          },
+          "counted": {
+            "type": "boolean",
+            "description": "Has variants by number; params must include count."
+          }
+        }
+      }
+    }
+  }
+}

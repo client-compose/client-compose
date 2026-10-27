@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://client-compose.dev/schema/v0/strings-catalog.json",
+  "title": "Strings catalog",
+  "description": "One language's words (spec §4.7): app strings, and each island version's.",
+  "type": "object",
+  "properties": {
+    "app": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/template"
+      }
+    },
+    "islands": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*@[1-9][0-9]*$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": {
+          "$ref": "#/$defs/template"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "template": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object",
+          "required": [
+            "#*"
+          ],
+          "propertyNames": {
+            "pattern": "^#([0-9]+|zero|one|two|few|many|other|\\*)$"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      ]
+    }
+  }
+}
