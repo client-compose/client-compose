@@ -33,7 +33,7 @@ public interface IslandDescriptor<P> {
  * e.g. `@Composable () -> Unit` for Jetpack Compose or a `View` factory.
  */
 public class IslandRegistry<R>(private val json: Json = ClientComposeJson) {
-    private val renderers = mutableMapOf<String, MutableMap<Int, (JsonObject, IslandEntry) -> R>>()
+    private val renderers = mutableMapOf<String, MutableMap<Int, (JsonObject, IslandEntry, Map<String, String>) -> R>>()
 
     public fun <P> register(
         type: String,
@@ -41,7 +41,7 @@ public class IslandRegistry<R>(private val json: Json = ClientComposeJson) {
         serializer: KSerializer<P>,
         render: (props: P, entry: IslandEntry) -> R,
     ): IslandRegistry<R> {
-        renderers.getOrPut(type) { mutableMapOf() }[version] = { props, entry ->
+        renderers.getOrPut(type) { mutableMapOf() }[version] = { props, entry, _ ->
             render(json.decodeFromJsonElement(serializer, props), entry)
         }
         return this
@@ -68,6 +68,23 @@ public class IslandRegistry<R>(private val json: Json = ClientComposeJson) {
         island: IslandDescriptor<P>,
         render: (props: P, entry: IslandEntry) -> R,
     ): IslandRegistry<R> = register(island.type, island.version, island.propsSerializer, render)
+
+    /**
+     * Register a renderer for a generated props type whose island declares strings: it receives
+     * them as `t`, in the screen's language (spec §4.7).
+     *
+     *     registry.register(RecipeListV1) { props, t, _ -> { RecipeList(props, t) } }
+     */
+    public fun <P, S> register(
+        island: IslandDescriptorWithStrings<P, S>,
+        render: (props: P, t: S, entry: IslandEntry) -> R,
+    ): IslandRegistry<R> {
+        renderers.getOrPut(island.type) { mutableMapOf() }[island.version] = { props, entry, plurals ->
+            val t = island.strings(StringsTable(entry.strings ?: emptyMap(), plurals))
+            render(json.decodeFromJsonElement(island.propsSerializer, props), t, entry)
+        }
+        return this
+    }
 
     /** What this client can render, sent with every request (spec §3). */
     public val capabilities: Map<String, List<Int>>
@@ -103,7 +120,7 @@ public class IslandRegistry<R>(private val json: Json = ClientComposeJson) {
                         continue
                     }
                     try {
-                        add(PlannedIsland(entry.key, render(entry.props ?: JsonObject(emptyMap()), entry)))
+                        add(PlannedIsland(entry.key, render(entry.props ?: JsonObject(emptyMap()), entry, response.plurals ?: emptyMap())))
                     } catch (e: IllegalArgumentException) {
                         // kotlinx.serialization's SerializationException extends IllegalArgumentException.
                         onSkipped?.invoke(entry, SkipReason.InvalidProps(e))

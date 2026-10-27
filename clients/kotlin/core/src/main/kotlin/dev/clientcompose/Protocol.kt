@@ -4,6 +4,7 @@ package dev.clientcompose
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -57,6 +58,8 @@ public data class IslandEntry(
     val status: String,
     val props: JsonObject? = null,
     val error: IslandError? = null,
+    /** The island's strings, in the screen's language (spec §4.7). */
+    val strings: Map<String, JsonElement>? = null,
 )
 
 @Serializable
@@ -78,6 +81,10 @@ public data class ScreenResponse(
     val islands: List<IslandEntry>,
     val meta: ScreenMeta? = null,
     val cache: CacheHint? = null,
+    /** The language the composer answered in, when it has strings (spec §4.7). */
+    val locale: String? = null,
+    /** That language's plural rules, for the islands' counted strings. */
+    val plurals: Map<String, String>? = null,
 )
 
 /** JSON configuration that ignores unknown fields, as the spec requires. */
