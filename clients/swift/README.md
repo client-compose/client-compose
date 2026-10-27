@@ -97,6 +97,27 @@ case .error(.locked): showLocked()
 }
 ```
 
+## Strings
+
+Every word comes from the composer (spec §4.7). Register an island whose manifest declares strings,
+and its renderer gets them as `t`, in the screen's language:
+
+```swift
+registry.register(RecipeListV1.self) { props, t, _ in
+    AnyView(Text("\(t.heading): \(t.recipeCount(count: props.total))"))
+}
+```
+
+Fetch the app strings when the app starts, and keep them for the next launch:
+
+```swift
+let response = try await client.strings()
+let t = response.app(AppStrings.self) // t.retry
+```
+
+`StringsResponse` is `Codable`, so it can be written to disk as it is. In tests,
+`FakeComposer().strings { client in .strings("en", ["retry": .text("Try again")]) }`.
+
 ## UIKit
 
 Use an `IslandRegistry<UIView>` (or a view controller factory), fetch with

@@ -139,6 +139,11 @@ it.
 input, result and the errors callers should handle, so every platform gets generated types. An
 action's response says which screens it changed, and screens on display reload by themselves.
 
+**Copy ships from the server.** Every word an app shows comes from the composer, in the user's
+language, so copy changes and new languages go live without an app release. Islands get typed
+strings, counted ones pick their words by CLDR's plural rules on every platform, and a catalog check
+keeps every language complete.
+
 **Requests share their data.** When three islands need the same user, `load` fetches it once per
 request, and batch loaders combine lookups across islands into one call.
 

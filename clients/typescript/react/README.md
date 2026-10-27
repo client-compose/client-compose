@@ -203,6 +203,48 @@ export default async function Page({ params }: { params: Promise<{ userId: strin
   server. Errors thrown inside a Server Component island are re-thrown in the browser and caught
   there; to report those, put a `<ClientComposeProvider>` with `onRenderError` above the page.
 
+## Strings
+
+Every word an app shows comes from the composer (spec §4.7), so copy changes, and new languages
+ship, without a release. An island whose manifest declares strings gets them as `t`:
+
+```tsx
+function RecipeList(props: RecipeListV1 & { t: RecipeListV1Strings }) {
+  return <h2>{props.t.heading}: {props.t.recipeCount({ count: props.total })}</h2>;
+}
+registry.registerComponent(RecipeListV1, RecipeList);
+```
+
+`t` is made of functions, which can't be sent from a Server Component to a Client Component, so a
+Client Component island rendered by `@client-compose/react/server` gets its `t` built in the
+browser instead. Nothing changes in the island.
+
+The app strings (words outside any island) come from `<AppStringsProvider>`, inside the provider:
+
+```tsx
+<ClientComposeProvider config={config}>
+  <AppStringsProvider
+    cache={stringsCache} // e.g. over AsyncStorage or localStorage
+    loading={<Splash />}
+    failed={(retry) => <CouldNotConnect onRetry={retry} />}
+  >
+    <App />
+  </AppStringsProvider>
+</ClientComposeProvider>
+
+function RetryButton() {
+  const t = useAppStrings(AppStrings);
+  return <button>{t.retry}</button>;
+}
+```
+
+It fetches them in `config.client.locale`. With a `cache`, the app starts with the strings it kept
+last time and fetches them again in the background; without one, every launch waits for them.
+`failed` is shown only when there are no strings at all and the composer can't be reached: the
+one screen whose words the app has to hold itself. Pass `initial` with strings already fetched
+(e.g. by a Server Component with `fetchStrings` from `@client-compose/react/server`), and
+`viaProxy({ loadStrings })` to fetch them through your server.
+
 ## Islands with pages
 
 A paged island (spec §4.5) gets its first page as props, and `next` in its entry while there are
