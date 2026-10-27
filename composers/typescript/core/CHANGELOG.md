@@ -1,5 +1,13 @@
 # @client-compose/composer
 
+## 0.12.0
+
+### Minor Changes
+
+- [#47](https://github.com/client-compose/client-compose/pull/47) [`fb57f76`](https://github.com/client-compose/client-compose/commit/fb57f7604155f07b8257888fbf8832d79805f9d8) Thanks [@LewisYearsley](https://github.com/LewisYearsley)! - Actions read screen strings (spec §4.7), for words their results carry: `ac.strings(descriptor)` in
+  TypeScript, and in Go `call.ScreenStrings(screen)`, or the generated `XScreenStringsFor(call)`, which
+  now takes a Request or a Call (`cc.ScreenStringsSource`).
+
 ## 0.11.0
 
 ### Minor Changes
