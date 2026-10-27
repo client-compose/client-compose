@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 export interface ComposerCase {
   name: string;
@@ -62,6 +63,17 @@ export interface ActionCase {
   expect: { status: number; body?: unknown };
 }
 
+/** A strings request (spec §4.7), to a composer with the conformance catalog. */
+export interface StringsCase {
+  name: string;
+  /** Overrides for the request body (protocol, client...). */
+  request?: Record<string, unknown>;
+  /** The path under the base URL. Default: "strings". */
+  path?: string;
+  rawBody?: string;
+  expect: { status: number; body?: unknown };
+}
+
 export interface ClientCase {
   name: string;
   typedOnly?: boolean;
@@ -119,8 +131,12 @@ const SUITES = {
   composer: "composer/cases.json",
   islands: "composer/island-cases.json",
   actions: "composer/action-cases.json",
+  appStrings: "composer/strings-cases.json",
   client: "client/cases.json",
   clientActions: "client/action-cases.json",
+  plurals: "client/plural-cases.json",
+  strings: "client/string-cases.json",
+  pluralRules: "../spec/plurals.json",
 } as const;
 
 /**
@@ -141,8 +157,38 @@ const load = <T>(suite: keyof typeof SUITES): T => read<{ cases: T }>(suite).cas
 export const composerCases = (): ComposerCase[] => load("composer");
 export const islandCases = (): IslandCase[] => load("islands");
 export const actionCases = (): ActionCase[] => load("actions");
+export const stringsCases = (): StringsCase[] => load("appStrings");
+
+/**
+ * The directory of the catalog a conformance server's composer loads (spec §4.7): one
+ * `<locale>.json` per language, default "en".
+ */
+export function conformanceCatalogDir(): string {
+  const bundled = new URL("./cases/strings/", import.meta.url);
+  const inRepo = new URL("../../composer/strings/", import.meta.url);
+  return fileURLToPath(existsSync(bundled) ? bundled : inRepo);
+}
 export const clientCases = (): ClientCase[] => load("client");
 export const clientActionCases = (): ClientActionCases => read("clientActions");
+
+/** CLDR's plural rules for whole numbers (spec §4.7): language -> category -> condition. */
+export const pluralRules = (): Record<string, Record<string, string>> =>
+  read<{ rules: Record<string, Record<string, string>> }>("pluralRules").rules;
+
+/** Language -> category -> counts a client's plural rule evaluation must put in it. */
+export const pluralCases = (): Record<string, Record<string, number[]>> => load("plurals");
+
+/** Templates filled in by a client (spec §4.7). */
+export interface StringCase {
+  name: string;
+  /** Whose plural rules (spec/plurals.json) pick the variant. */
+  language: string;
+  template: string | Record<string, string>;
+  values: Record<string, string | number>;
+  expect: string;
+}
+
+export const stringCases = (): StringCase[] => load("strings");
 
 /**
  * Sends one screen case to the composer at `baseUrl`. Pass `fetchImpl` to run against a
@@ -374,6 +420,25 @@ export async function runActionCase(
   );
 }
 
+/** Sends one strings case. `fetchImpl` as for runComposerCase. */
+export async function runStringsCase(
+  baseUrl: string,
+  c: StringsCase,
+  fetchImpl: typeof fetch = fetch,
+): Promise<CaseResult> {
+  const request = {
+    protocol: 0,
+    client: { platform: "conformance", appVersion: "0.0.0" },
+    ...c.request,
+  };
+  return post(
+    fetchImpl,
+    `${baseUrl.replace(/\/$/, "")}/${c.path ?? "strings"}`,
+    c.rawBody ?? JSON.stringify(request),
+    c,
+  );
+}
+
 type JsonCase = { name: string; expect: { status: number; body?: unknown } };
 
 async function post(
@@ -413,8 +478,8 @@ function checkResponse(c: JsonCase, status: number, text: string): CaseResult {
 }
 
 /**
- * Runs the screen cases, the island cases, then the action cases (spec §8.1). `fetchImpl` as for
- * runComposerCase.
+ * Runs the screen cases, the island cases, the action cases, then the strings cases (spec §8.1).
+ * `fetchImpl` as for runComposerCase.
  */
 export async function runComposerConformance(
   baseUrl: string,
@@ -429,6 +494,9 @@ export async function runComposerConformance(
   }
   for (const c of actionCases()) {
     results.push(await runActionCase(baseUrl, { ...c, name: `action: ${c.name}` }, fetchImpl));
+  }
+  for (const c of stringsCases()) {
+    results.push(await runStringsCase(baseUrl, { ...c, name: `strings: ${c.name}` }, fetchImpl));
   }
   return results;
 }

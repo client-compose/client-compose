@@ -8,6 +8,7 @@ import {
   PROTOCOL_VERSION,
   type ScreenErrorResponse,
   type ScreenRequest,
+  type StringsRequest,
 } from "@client-compose/protocol";
 
 import { type Action, isActionRequestShape, performAction, protocolError } from "./actions.ts";
@@ -15,7 +16,13 @@ import { type Cache, type Idempotency, performIdempotent, resolveCached } from "
 import { isRecord } from "./guards.ts";
 import { attachScope, InvalidCursorError, RequestScope } from "./loading.ts";
 import type { ComposeFn, Failure, PerformFn, Plugin, ResolveFn } from "./plugins.ts";
-import { type ComposeResult, fail, type IslandResult, type PerformResult } from "./results.ts";
+import {
+  type ComposeResult,
+  fail,
+  type IslandResult,
+  type PerformResult,
+  type StringsResult,
+} from "./results.ts";
 import {
   type Island,
   type LayoutContext,
@@ -24,6 +31,7 @@ import {
   type Screen,
 } from "./screens.ts";
 import { inOrderResolved, isScreenStream, streamLines } from "./stream.ts";
+import { type LocaleStrings, type StringsConfig, stringsFor } from "./strings.ts";
 
 export interface ComposerConfig<Ctx, Req = Request> {
   screens?: Screen<Ctx>[];
@@ -49,6 +57,11 @@ export interface ComposerConfig<Ctx, Req = Request> {
   idempotency?: Idempotency<Ctx>;
   /** Each island's timeout unless its placement sets one. Default 2000. */
   defaultTimeoutMs?: number;
+  /**
+   * The words islands and the app show, in each language (spec §4.7): `loadCatalog("strings")`.
+   * Without it, entries carry no strings, and POST /strings answers 404.
+   */
+  strings?: StringsConfig;
 }
 
 /**
@@ -64,16 +77,16 @@ export interface HandleResult {
 export interface Composer<Ctx, Req = Request> {
   /**
    * Fetch-standard handler (Bun, Deno, Cloudflare Workers, Hono, Next.js route handlers). Answers
-   * POST requests whose path ends in /screens/{screen}, /screens/{screen}/islands/{key} or
-   * /actions/{action}, so it works under any prefix.
+   * POST requests whose path ends in /screens/{screen}, /screens/{screen}/islands/{key},
+   * /actions/{action} or /strings, so it works under any prefix.
    *
    *     export default { fetch: composer.fetch };
    */
   fetch: [Req] extends [Request] ? (request: Request) => Promise<Response> : never;
   /**
    * For adapters: answer a POST to a path ending in /screens/{screen},
-   * /screens/{screen}/islands/{key} or /actions/{action}, given its raw body and your server's
-   * request (for `context`). Returns undefined for any other path.
+   * /screens/{screen}/islands/{key}, /actions/{action} or /strings, given its raw body and your
+   * server's request (for `context`). Returns undefined for any other path.
    */
   handle(path: string, body: string, request: Req): Promise<HandleResult | undefined>;
   /**
@@ -88,6 +101,8 @@ export interface Composer<Ctx, Req = Request> {
   composeIsland(req: IslandRequest, ctx: Ctx): Promise<IslandResult>;
   /** Perform an action in-process, with a context you provide. */
   perform(req: ActionRequest, ctx: Ctx): Promise<PerformResult>;
+  /** The app strings in the client's language (spec §4.7). */
+  appStrings(req: StringsRequest): StringsResult;
   /** The islands placed by screens with declared `islands`, as a client would declare them. */
   islands(): Capabilities;
 }
@@ -240,7 +255,16 @@ export function createComposer<Ctx = undefined, Req = Request>(
     if ("res" in found) {
       return found.res;
     }
-    const { entry, cause } = await resolveEntry(screen, found.placement, found.island, lc, scope);
+    // A page's strings are the ones the client has from the screen (spec §4.5).
+    const words = req.cursor === undefined ? wordsFor(req.client.locale) : undefined;
+    const { entry, cause } = await resolveEntry(
+      screen,
+      found.placement,
+      found.island,
+      lc,
+      scope,
+      words,
+    );
     if (cause instanceof InvalidCursorError) {
       return fail(400, "invalid_cursor");
     }
@@ -250,6 +274,7 @@ export function createComposer<Ctx = undefined, Req = Request>(
         protocol: PROTOCOL_VERSION,
         screen: screen.id,
         island: entry,
+        ...(words && { locale: words.locale, plurals: words.plurals }),
       },
     };
   }
@@ -353,9 +378,10 @@ export function createComposer<Ctx = undefined, Req = Request>(
     const placed = negotiated.filter(
       (n): n is { p: Placement<Ctx>; island: Island<Ctx, unknown> } => n.island !== undefined,
     );
+    const words = wordsFor(req.client.locale);
     const done: (IslandEntry | undefined)[] = placed.map(() => undefined);
     const resolving = placed.map(({ p, island }, i) =>
-      resolveEntry(screen, p, island, lc, scope).then(({ entry }) => {
+      resolveEntry(screen, p, island, lc, scope, words).then(({ entry }) => {
         done[i] = entry;
         return entry;
       }),
@@ -392,6 +418,7 @@ export function createComposer<Ctx = undefined, Req = Request>(
           ...(screenMeta &&
             Object.values(screenMeta).some((v) => v !== undefined) && { meta: screenMeta }),
           ...(screen.cache && { cache: { maxAge: screen.cache.maxAge } }),
+          ...(words && { locale: words.locale, plurals: words.plurals }),
         },
         islands: inOrderResolved(pending),
       },
@@ -428,6 +455,7 @@ export function createComposer<Ctx = undefined, Req = Request>(
     island: Island<Ctx, unknown>,
     lc: LayoutContext<Ctx>,
     scope: RequestScope,
+    words: LocaleStrings | undefined,
   ): Promise<{ entry: IslandEntry; required?: boolean; cause?: unknown }> {
     const base = {
       key: p.key,
@@ -447,12 +475,14 @@ export function createComposer<Ctx = undefined, Req = Request>(
       const page = island.paged && isRecord(resolved) ? resolved : undefined;
       const props = page ? page.props : resolved;
       const next = typeof page?.next === "string" && page.next !== "" ? page.next : undefined;
+      const strings = words?.island(island.type, island.version);
       // Props are objects: the manifest's props schema says so (spec §2).
       const entry: IslandEntry = {
         ...base,
         status: "ok",
         props: isRecord(props) ? props : {},
         ...(next !== undefined && { next }),
+        ...(strings && { strings }),
       };
       return { entry };
     } catch (error) {
@@ -477,10 +507,34 @@ export function createComposer<Ctx = undefined, Req = Request>(
     }
   }
 
+  /** The catalog's words in the language nearest `locale`, if the composer has a catalog. */
+  function wordsFor(locale: string | undefined): LocaleStrings | undefined {
+    return config.strings ? stringsFor(config.strings, locale) : undefined;
+  }
+
+  function appStrings(req: StringsRequest): StringsResult {
+    if (req.protocol !== PROTOCOL_VERSION) {
+      return unsupportedProtocol();
+    }
+    const words = wordsFor(req.client.locale);
+    if (!words) {
+      return fail(404, "no_strings", "This composer has no strings catalog");
+    }
+    return {
+      status: 200,
+      body: {
+        protocol: PROTOCOL_VERSION,
+        locale: words.locale,
+        plurals: words.plurals,
+        strings: words.app(),
+      },
+    };
+  }
+
   /** Runs `context` and the plugins' context hooks, or returns the response to send instead. */
   async function contextFor(
     request: Req,
-    kind: Route["kind"],
+    kind: Exclude<Route["kind"], "strings">,
   ): Promise<{ ctx: Ctx } | { res: { status: number; body: unknown } }> {
     try {
       // Without a context function, Ctx is undefined (createComposer's default): TypeScript can't
@@ -513,11 +567,19 @@ export function createComposer<Ctx = undefined, Req = Request>(
     if (!route) {
       return undefined;
     }
+    const parsed = parseJson(body);
+    // Strings are the same for everyone, signed in or not: an app needs them before anything.
+    if (route.kind === "strings") {
+      return answer(
+        parsed.ok
+          ? handleStrings(parsed.value)
+          : fail(400, "bad_request", "Body is not valid JSON"),
+      );
+    }
     const context = await contextFor(request, route.kind);
     if ("res" in context) {
       return answer(context.res);
     }
-    const parsed = parseJson(body);
     if (!parsed.ok) {
       return answer(fail(400, "bad_request", "Body is not valid JSON"));
     }
@@ -586,6 +648,14 @@ export function createComposer<Ctx = undefined, Req = Request>(
     return perform(body, ctx);
   }
 
+  /** A strings request (spec §4.7). */
+  function handleStrings(body: unknown): StringsResult {
+    if (!isStringsRequestShape(body)) {
+      return fail(400, "bad_request", "Body is not a strings request");
+    }
+    return appStrings(body);
+  }
+
   async function fetchHandler(request: Request): Promise<Response> {
     const path = new URL(request.url).pathname;
     if (!matchRoute(path)) {
@@ -630,6 +700,7 @@ export function createComposer<Ctx = undefined, Req = Request>(
     compose,
     composeIsland,
     perform,
+    appStrings,
     islands,
   };
 }
@@ -669,8 +740,9 @@ function encoded(lines: AsyncIterable<string>): ReadableStream<Uint8Array> {
   });
 }
 
-/** A composer route: a screen, one island of a screen (with its key), or an action. */
+/** A composer route: a screen, one island of a screen (with its key), an action, or the strings. */
 export type Route =
+  | { kind: "strings" }
   | {
       kind: "screens" | "actions";
       /** The screen or action. */
@@ -686,8 +758,12 @@ export type Route =
 
 const islandPath = /\/screens\/([^/]+)\/islands\/([^/]+)\/?$/;
 const screenOrActionPath = /\/(screens|actions)\/([^/]+)\/?$/;
+const stringsPath = /\/strings\/?$/;
 
-/** The route a path ends in: /screens/{screen}, /screens/{screen}/islands/{key} or /actions/{action}. */
+/**
+ * The route a path ends in: /screens/{screen}, /screens/{screen}/islands/{key}, /actions/{action}
+ * or /strings.
+ */
 export function matchRoute(path: string): Route | undefined {
   const clean = path.split("?")[0];
   try {
@@ -701,7 +777,7 @@ export function matchRoute(path: string): Route | undefined {
     }
     const match = screenOrActionPath.exec(clean);
     if (!match) {
-      return undefined;
+      return stringsPath.test(clean) ? { kind: "strings" } : undefined;
     }
     const kind = match[1] === "screens" ? "screens" : "actions";
     return { kind, name: decodeURIComponent(match[2]) };
@@ -771,6 +847,10 @@ function isIslandRequestShape(v: unknown): v is IslandRequest {
     return false;
   }
   return isRecord(v.client);
+}
+
+function isStringsRequestShape(v: unknown): v is StringsRequest {
+  return isRecord(v) && typeof v.protocol === "number" && isRecord(v.client);
 }
 
 class TimeoutError extends Error {}

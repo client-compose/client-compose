@@ -12,11 +12,14 @@ import { dirname, relative, sep } from "node:path";
 
 import {
   type Action,
+  type AppStrings,
   type Island,
   ManifestError,
   type ObjectDef,
   parseActionManifest,
+  parseAppStrings,
   parseManifest,
+  type StringDef,
   type TypeRef,
 } from "./manifest.ts";
 
@@ -54,7 +57,56 @@ export function compareIslands(base: Island[], head: Island[]): CompatIssue[] {
         message,
       });
     compareObject(old.props, current.props, "props", report);
+    compareStrings(old.strings, current.strings, "strings", report);
   }
+  return issues;
+}
+
+/**
+ * Released apps render the strings their island version declared, with the params they were built
+ * with. A string may be added, but removing one, or changing its params or whether it's counted,
+ * breaks them (spec §2).
+ */
+function compareStrings(
+  base: StringDef[],
+  head: StringDef[],
+  path: string,
+  report: (path: string, message: string) => void,
+) {
+  const headByKey = new Map(head.map((d) => [d.key, d]));
+  for (const old of base) {
+    const current = headByKey.get(old.key);
+    const at = `${path}.${old.key}`;
+    if (!current) {
+      report(at, "string removed: released apps still show it");
+      continue;
+    }
+    if (old.params.join() !== current.params.join()) {
+      report(
+        at,
+        `params changed from [${old.params.join(", ")}] to [${current.params.join(", ")}]`,
+      );
+    }
+    if (old.counted !== current.counted) {
+      report(at, current.counted ? "became counted" : "is no longer counted");
+    }
+  }
+}
+
+/** App strings have no versions: within one app strings manifest they evolve like an island's. */
+export function compareAppStrings(
+  base: AppStrings | undefined,
+  head: AppStrings | undefined,
+): CompatIssue[] {
+  const issues: CompatIssue[] = [];
+  compareStrings(base?.strings ?? [], head?.strings ?? [], "strings", (path, message) =>
+    issues.push({
+      severity: "breaking",
+      island: "app strings",
+      path,
+      message,
+    }),
+  );
   return issues;
 }
 
@@ -222,6 +274,26 @@ export function loadActionManifestsAtRef(
 ): { actions: Action[]; issues: CompatIssue[] } {
   const { items, issues } = loadAtRef(actionsDir, ref, parseActionManifest);
   return { actions: items, issues };
+}
+
+/** The app strings manifest as it was at a git ref, or undefined if it didn't exist there. */
+export function loadAppStringsAtRef(file: string, ref: string): AppStrings | undefined {
+  const dir = dirname(file);
+  const git = (args: string[]) =>
+    execFileSync("git", args, {
+      cwd: dir,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+  const top = git(["rev-parse", "--show-toplevel"]).trim();
+  const path = relative(top, realpathSync(file)).split(sep).join("/");
+  let raw: string;
+  try {
+    raw = git(["-C", top, "show", `${ref}:${path}`]);
+  } catch {
+    return undefined;
+  }
+  return parseAppStrings(JSON.parse(raw), `${ref}:${path}`);
 }
 
 function loadAtRef<T>(

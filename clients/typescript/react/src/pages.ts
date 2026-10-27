@@ -157,7 +157,7 @@ async function fetchPage(
  * Rendered with new props (the screen reloaded, or opened with other params), it starts again from
  * them, and a page still on its way for the old ones is dropped.
  */
-export function usePages<P>(props: P): PagesState<P> {
+export function usePages<P>(props: P): PagesState<Omit<P, "t">> {
   const { config } = useClientCompose();
   const scope = useContext(IslandScopeContext);
   const [kept, setKept] = useState(() => startingFrom(props, scope?.next));

@@ -4,23 +4,68 @@
   "description": "Exercises every schema feature codegen supports.",
   "props": {
     "type": "object",
-    "required": ["title", "count", "enabled", "tags", "size", "author", "class"],
+    "required": [
+      "title",
+      "count",
+      "enabled",
+      "tags",
+      "size",
+      "author",
+      "class"
+    ],
     "properties": {
-      "title": { "type": "string", "description": "Shown as the heading." },
-      "count": { "type": "integer" },
-      "ratio": { "type": "number" },
-      "enabled": { "type": "boolean" },
-      "link": { "type": "string", "format": "uri" },
-      "tags": { "type": "array", "items": { "type": "string" } },
-      "size": { "type": "string", "enum": ["small", "medium", "extra-large"] },
+      "title": {
+        "type": "string",
+        "description": "Shown as the heading."
+      },
+      "count": {
+        "type": "integer"
+      },
+      "ratio": {
+        "type": "number"
+      },
+      "enabled": {
+        "type": "boolean"
+      },
+      "link": {
+        "type": "string",
+        "format": "uri"
+      },
+      "tags": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "size": {
+        "type": "string",
+        "enum": [
+          "small",
+          "medium",
+          "extra-large"
+        ]
+      },
       "author": {
         "type": "object",
         "description": "Who made it.",
-        "required": ["name"],
+        "required": [
+          "name"
+        ],
         "properties": {
-          "name": { "type": "string" },
-          "avatar-url": { "type": "string", "format": "uri" },
-          "role": { "type": "string", "enum": ["admin", "member"] }
+          "name": {
+            "type": "string"
+          },
+          "avatar-url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "admin",
+              "member"
+            ]
+          }
         }
       },
       "items": {
@@ -28,16 +73,49 @@
         "items": {
           "title": "Entry",
           "type": "object",
-          "required": ["id"],
+          "required": [
+            "id"
+          ],
           "properties": {
-            "id": { "type": "string" },
-            "label": { "type": "string" }
+            "id": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            }
           }
         }
       },
-      "metadata": { "type": "object", "additionalProperties": { "type": "string" } },
-      "class": { "type": "string", "description": "A reserved word in several languages." },
-      "bigNumber": { "type": "integer", "format": "int64" }
+      "metadata": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "string"
+        }
+      },
+      "class": {
+        "type": "string",
+        "description": "A reserved word in several languages."
+      },
+      "bigNumber": {
+        "type": "integer",
+        "format": "int64"
+      }
+    }
+  },
+  "strings": {
+    "heading": {
+      "description": "Over the items."
+    },
+    "greeting": {
+      "params": [
+        "name"
+      ]
+    },
+    "itemCount": {
+      "params": [
+        "count"
+      ],
+      "counted": true
     }
   }
 }

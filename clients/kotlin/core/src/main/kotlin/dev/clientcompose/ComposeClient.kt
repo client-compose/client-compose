@@ -78,6 +78,24 @@ public class ComposeClient(
         return decoded
     }
 
+    // ---- Strings ----
+
+    /**
+     * The app strings in the client's language (spec §4.7). Fetch them when the app starts, and keep
+     * them for the next launch. Throws [ScreenException] when the composer answers with an error.
+     *
+     *     val words = client.strings().app(::AppStrings)
+     */
+    public suspend fun strings(): StringsResponse {
+        val request = buildJsonObject {
+            put("protocol", PROTOCOL_VERSION)
+            put("client", context.toJson())
+        }
+        val response = post("strings", request.toString())
+        if (response.status !in 200..299) throw ScreenException(response.status, errorCode(response.body), response.body)
+        return ClientComposeJson.decodeFromString(StringsResponse.serializer(), response.body)
+    }
+
     // ---- Actions ----
 
     /**

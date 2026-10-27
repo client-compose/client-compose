@@ -99,6 +99,27 @@ An island entry carries `next` while the island has more pages (spec §4.5).
 next one: the island's entry again, with that page's props and its own `next`. Without a cursor, it
 resolves the island again from its first page. The React binding's `usePages` does this for you.
 
+## Strings
+
+Every word comes from the composer (spec §4.7). Register an island by a descriptor whose manifest
+declares strings, and its renderer's props have them as `t`, in the screen's language, with counted
+strings picking their words by its plural rules:
+
+```ts
+registry.register(RecipeListV1, (props) => `${props.t.heading}: ${props.t.recipeCount({ count: props.total })}`);
+```
+
+The app strings come from `POST {base}/strings`:
+
+```ts
+const response = await fetchStrings(baseUrl, client);
+const t = appStrings(AppStrings, response); // t.retry, t.uploaded({ count, total })
+```
+
+`formatString(template, values, plurals)` and `pluralCategory(plurals, count)` are there for
+anything else. In tests, the fake composer answers `strings: () => stringsResponse("en", { … })`,
+and `island(key, Descriptor, props, { strings })` gives an island its strings.
+
 ## Testing
 
 `@client-compose/client/testing` is a fake composer for tests, with no test framework of its own.
@@ -132,6 +153,8 @@ httpOnly cookie. `createComposerProxy({ baseUrl, client, headers, onActionRespon
 request (anyone can call a server endpoint with anything), sets the client context and headers,
 and returns the composer's failures as data. `@client-compose/react`'s `viaProxy` is the browser
 half.
+
+Strings go through your server too: `proxy.loadStrings()`.
 
 ## Links
 

@@ -1,0 +1,18 @@
+{
+  "app": {
+    "loading": "Ładowanie",
+    "retry": "Spróbuj ponownie"
+  },
+  "islands": {
+    "kitchen-sink@1": {
+      "heading": "Wszystko",
+      "greeting": "Cześć {name}",
+      "itemCount": {
+        "#0": "Brak elementów",
+        "#one": "{count} element",
+        "#few": "{count} elementy",
+        "#*": "{count} elementów"
+      }
+    }
+  }
+}

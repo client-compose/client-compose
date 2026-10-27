@@ -44,6 +44,8 @@ public final class FakeComposer: Transport, @unchecked Sendable {
     private var actions: [String: @Sendable (ActionRequest) throws -> FakeResponse] = [:]
     private var recordedScreens: [ScreenRequest] = []
     private var recordedActions: [ActionRequest] = []
+    private var stringsHandler: (@Sendable (ClientContextFields) -> FakeResponse)?
+    private var recordedStrings: [ClientContextFields] = []
 
     public init() {}
 
@@ -64,6 +66,16 @@ public final class FakeComposer: Transport, @unchecked Sendable {
         return self
     }
 
+    /// Answer strings requests (spec §4.7), given the client's language.
+    @discardableResult
+    public func strings(_ handler: @escaping @Sendable (ClientContextFields) -> FakeResponse) -> Self {
+        locked { stringsHandler = handler }
+        return self
+    }
+
+    /// Strings requests' client contexts, in the order the app sent them.
+    public var stringsRequests: [ClientContextFields] { locked { recordedStrings } }
+
     /// Screen requests, in the order the app sent them.
     public var screenRequests: [ScreenRequest] { locked { recordedScreens } }
 
@@ -74,7 +86,17 @@ public final class FakeComposer: Transport, @unchecked Sendable {
         let json = try JSONDecoder().decode(JSONValue.self, from: body)
         guard case .object(let fields) = json else { throw Unhandled(path: path) }
         let response: FakeResponse
-        if path.hasPrefix("screens/") {
+        if path == "strings" {
+            let client = fields["client"].flatMap { value -> ClientContextFields? in
+                guard case .object(let c) = value else { return nil }
+                return ClientContextFields(platform: c["platform"]?.string, locale: c["locale"]?.string)
+            } ?? ClientContextFields(platform: nil, locale: nil)
+            guard let handler = locked({ () -> (@Sendable (ClientContextFields) -> FakeResponse)? in
+                recordedStrings.append(client)
+                return stringsHandler
+            }) else { throw Unhandled(path: path) }
+            response = handler(client)
+        } else if path.hasPrefix("screens/") {
             let request = ScreenRequest(
                 screen: fields["screen"]?.string ?? "",
                 params: (try? fields["params"]?.decode([String: String].self)) ?? [:],
@@ -114,6 +136,12 @@ public final class FakeComposer: Transport, @unchecked Sendable {
     }
 }
 
+/// The client context a strings request was sent with.
+public struct ClientContextFields: Sendable, Equatable {
+    public let platform: String?
+    public let locale: String?
+}
+
 /// A response for `FakeComposer` to send, built from your generated types.
 public struct FakeResponse: Sendable {
     public let status: Int
@@ -127,8 +155,16 @@ public struct FakeResponse: Sendable {
         self.stream = stream
     }
 
-    /// A screen, all at once: its stream's head with every island, then its end (spec §4.6).
-    public static func screen(_ id: String, _ islands: [FakeIsland], title: String? = nil, cacheMaxAge: Int? = nil) -> FakeResponse {
+    /// A screen, all at once: its stream's head with every island, then its end (spec §4.6). Give
+    /// `locale` and `plurals` for islands with counted strings (spec §4.7).
+    public static func screen(
+        _ id: String,
+        _ islands: [FakeIsland],
+        title: String? = nil,
+        cacheMaxAge: Int? = nil,
+        locale: String? = nil,
+        plurals: PluralRules? = nil
+    ) -> FakeResponse {
         var body: [String: JSONValue] = [
             "kind": .string("head"),
             "protocol": .int(ClientCompose.protocolVersion),
@@ -137,7 +173,15 @@ public struct FakeResponse: Sendable {
         ]
         if let title { body["meta"] = .object(["title": .string(title)]) }
         if let cacheMaxAge { body["cache"] = .object(["maxAge": .int(cacheMaxAge)]) }
+        if let locale { body["locale"] = .string(locale) }
+        if let plurals { body["plurals"] = (try? JSONValue(encoding: plurals)) ?? .object([:]) }
         return FakeResponse(status: 200, body: .null, stream: [.object(body), .object(["kind": .string("end")])])
+    }
+
+    /// The app strings in a language (spec §4.7).
+    public static func strings(_ locale: String, _ strings: [String: StringTemplate], plurals: PluralRules = [:]) -> FakeResponse {
+        let response = StringsResponse(locale: locale, plurals: plurals, strings: strings)
+        return FakeResponse(status: 200, body: (try? JSONValue(encoding: response)) ?? .null)
     }
 
     /// A failed screen or action request, e.g. `.failure(404, "not_found")`.
@@ -179,15 +223,21 @@ public struct FakeResponse: Sendable {
 public struct FakeIsland: Sendable {
     let json: JSONValue
 
-    /// An island with props, typed by its generated props type.
-    public static func island<Props: IslandProps & Encodable>(_ key: String, _ props: Props) -> FakeIsland {
-        FakeIsland(json: .object([
+    /// An island with props, typed by its generated props type, and its strings (spec §4.7).
+    public static func island<Props: IslandProps & Encodable>(
+        _ key: String,
+        _ props: Props,
+        strings: [String: StringTemplate]? = nil
+    ) -> FakeIsland {
+        var json: [String: JSONValue] = [
             "key": .string(key),
             "type": .string(Props.islandType),
             "version": .int(Props.islandVersion),
             "status": .string("ok"),
             "props": (try? JSONValue(encoding: props)) ?? .object([:]),
-        ]))
+        ]
+        if let strings { json["strings"] = try? JSONValue(encoding: strings) }
+        return FakeIsland(json: .object(json))
     }
 
     /// An island that failed on the composer, e.g. `.islandError("posts", PostGridV1.self, code: "timeout")`.

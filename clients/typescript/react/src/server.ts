@@ -21,8 +21,9 @@ export type { ErrorEntry, ScreenConfig } from "./config.ts";
 export { loadScreen, streamScreen } from "./load.ts";
 export { ReactIslandRegistry } from "./registry.ts";
 // Re-exported so React apps (including codegen output) only need this one package.
-export type { ScreenStream } from "@client-compose/client";
+export { appStrings, fetchStrings, type ScreenStream } from "@client-compose/client";
 export type {
+  AppStringsDescriptor,
   IslandDescriptor,
   ScreenHead,
   ScreenMeta,

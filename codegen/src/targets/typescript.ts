@@ -1,4 +1,12 @@
-import type { Action, EnumDef, Island, ObjectDef, TypeRef } from "../manifest.ts";
+import type {
+  Action,
+  AppStrings,
+  EnumDef,
+  Island,
+  ObjectDef,
+  StringDef,
+  TypeRef,
+} from "../manifest.ts";
 
 export interface TypeScriptOptions {
   /** Module that exports `IslandDescriptor` (and `ActionDescriptor`, if there are actions). */
@@ -14,9 +22,11 @@ export function generateTypeScript(
   header: string,
   opts: TypeScriptOptions = {},
   actions: Action[] = [],
+  app?: AppStrings,
 ): string {
   const imports = [
-    ...(islands.length || !actions.length ? ["IslandDescriptor"] : []),
+    ...(app ? ["AppStringsDescriptor"] : []),
+    ...(islands.length || (!actions.length && !app) ? ["IslandDescriptor"] : []),
     ...(actions.length ? ["ActionDescriptor"] : []),
   ];
   const out: string[] = [
@@ -78,9 +88,24 @@ export function generateTypeScript(
     if (def.fields.length) {
       out.push("}");
     }
-    if (island) {
+    if (island && island.strings.length === 0) {
       out.push(
         `export const ${name}: IslandDescriptor<${name}> = { type: ${JSON.stringify(island.type)}, version: ${island.version} };`,
+      );
+    }
+    if (island && island.strings.length > 0) {
+      const strings = `${name}Strings`;
+      emitStrings(
+        strings,
+        island.strings,
+        `${island.type} v${island.version}'s strings: its component's \`t\`.`,
+      );
+      out.push(
+        `export const ${name}: IslandDescriptor<${name}, ${strings}> = {`,
+        `  type: ${JSON.stringify(island.type)},`,
+        `  version: ${island.version},`,
+        `  strings: ${paramsOf(island.strings)},`,
+        `};`,
       );
     }
     for (const child of def.children) {
@@ -91,6 +116,26 @@ export function generateTypeScript(
       }
     }
   };
+
+  /** A strings type: text for a string without params, a function of its params otherwise. */
+  const emitStrings = (name: string, defs: StringDef[], description: string) => {
+    out.push("");
+    doc("", description);
+    out.push(`export interface ${name} {`);
+    for (const d of defs) {
+      doc("  ", d.description);
+      const values = d.params.map(
+        (p) => `${key(p)}: ${p === "count" ? "number" : "string | number"}`,
+      );
+      out.push(
+        `  ${key(d.key)}: ${d.params.length === 0 ? "string" : `(values: { ${values.join("; ")} }) => string`};`,
+      );
+    }
+    out.push("}");
+  };
+
+  const paramsOf = (defs: StringDef[]) =>
+    `{ ${defs.map((d) => `${key(d.key)}: [${d.params.map((p) => JSON.stringify(p)).join(", ")}]`).join(", ")} }`;
 
   const emitAction = (action: Action) => {
     const name = flat(action.input.path.slice(0, -1));
@@ -137,6 +182,16 @@ export function generateTypeScript(
     );
   };
 
+  if (app) {
+    emitStrings(
+      "AppStrings",
+      app.strings,
+      app.description ?? "The app's strings, outside any island.",
+    );
+    out.push(
+      `export const AppStrings: AppStringsDescriptor<AppStrings> = { strings: ${paramsOf(app.strings)} };`,
+    );
+  }
   for (const island of islands) {
     emitObject(island.props, island);
   }

@@ -24,7 +24,7 @@ public struct PlannedIsland<Output>: Identifiable {
 /// Maps island type + version to a renderer. `Output` is whatever your UI layer renders,
 /// typically `AnyView` for SwiftUI or `UIView` for UIKit. Safe to share: registering takes a lock.
 public final class IslandRegistry<Output>: @unchecked Sendable {
-    private typealias AnyRenderer = (JSONValue, IslandEntry) throws -> Output
+    private typealias AnyRenderer = (JSONValue, IslandEntry, PluralRules) throws -> Output
     private let lock = NSLock()
     private var _renderers: [String: [Int: AnyRenderer]] = [:]
     private var renderers: [String: [Int: AnyRenderer]] {
@@ -52,8 +52,27 @@ public final class IslandRegistry<Output>: @unchecked Sendable {
         let decoder = self.decoder
         lock.lock()
         defer { lock.unlock() }
-        _renderers[type, default: [:]][version] = { json, entry in
+        _renderers[type, default: [:]][version] = { json, entry, _ in
             render(try json.decode(Props.self, using: decoder), entry)
+        }
+        return self
+    }
+
+    /// Register a renderer for a generated props type whose island declares strings: it receives
+    /// them as `t`, in the screen's language (spec §4.7).
+    ///
+    ///     registry.register(RecipeListV1.self) { props, t, _ in AnyView(RecipeList(props: props, t: t)) }
+    @discardableResult
+    public func register<Props: IslandPropsWithStrings>(
+        _ props: Props.Type,
+        render: @escaping (Props, Props.Strings, IslandEntry) -> Output
+    ) -> Self {
+        let decoder = self.decoder
+        lock.lock()
+        defer { lock.unlock() }
+        _renderers[Props.islandType, default: [:]][Props.islandVersion] = { json, entry, plurals in
+            let t = Props.Strings(StringsTable(strings: entry.strings ?? [:], plurals: plurals))
+            return render(try json.decode(Props.self, using: decoder), t, entry)
         }
         return self
     }
@@ -112,7 +131,8 @@ public final class IslandRegistry<Output>: @unchecked Sendable {
                     continue
                 }
                 do {
-                    out.append(PlannedIsland(id: entry.key, output: try render(entry.props ?? .object([:]), entry)))
+                    let output = try render(entry.props ?? .object([:]), entry, response.plurals ?? [:])
+                    out.append(PlannedIsland(id: entry.key, output: output))
                 } catch {
                     onSkipped?(entry, .invalidProps(String(describing: error)))
                 }

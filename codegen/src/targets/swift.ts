@@ -1,10 +1,12 @@
 import {
   type Action,
+  type AppStrings,
   camel,
   type EnumDef,
   type Field,
   type Island,
   type ObjectDef,
+  type StringDef,
   type TypeRef,
 } from "../manifest.ts";
 
@@ -29,6 +31,7 @@ export function generateSwift(
   header: string,
   opts: SwiftOptions = {},
   actions: Action[] = [],
+  app?: AppStrings,
 ): string {
   const access = opts.access === "public" ? "public " : "";
   const out: string[] = [
@@ -84,7 +87,7 @@ export function generateSwift(
     const name = island ? def.path.join("") : def.path[def.path.length - 1];
     doc(indent, island?.description ?? description ?? def.description);
     const conformances = island
-      ? "IslandProps, Codable, Equatable, Sendable"
+      ? `${island.strings.length ? "IslandPropsWithStrings" : "IslandProps"}, Codable, Equatable, Sendable`
       : "Codable, Equatable, Sendable";
     out.push(`${indent}${access}struct ${name}: ${conformances} {`);
     const inner = `${indent}    `;
@@ -114,6 +117,51 @@ export function generateSwift(
       } else {
         emitObject(child, inner);
       }
+    }
+    if (island?.strings.length) {
+      out.push("");
+      emitStrings(
+        "Strings",
+        "IslandStrings",
+        island.strings,
+        inner,
+        `${island.type} v${island.version}'s strings: what its renderer receives as \`t\`.`,
+      );
+    }
+    out.push(`${indent}}`);
+  };
+
+  /** A strings type: a property for a string without params, a function of its params otherwise. */
+  const emitStrings = (
+    name: string,
+    conformance: string,
+    defs: StringDef[],
+    indent: string,
+    description: string,
+  ) => {
+    const inner = `${indent}    `;
+    doc(indent, description);
+    out.push(`${indent}${access}struct ${name}: ${conformance} {`);
+    out.push(`${inner}private let table: StringsTable`);
+    out.push(`${inner}${access}init(_ table: StringsTable) { self.table = table }`);
+    for (const d of defs) {
+      out.push("");
+      doc(inner, d.description);
+      if (d.params.length === 0) {
+        out.push(
+          `${inner}${access}var ${ident(d.key)}: String { table.text(${JSON.stringify(d.key)}) }`,
+        );
+        continue;
+      }
+      const params = d.params.map((p) => `${ident(p)}: ${p === "count" ? "Int" : "String"}`);
+      const values = d.params.map(
+        (p) => `${JSON.stringify(p)}: ${p === "count" ? `String(${ident(p)})` : ident(p)}`,
+      );
+      out.push(
+        `${inner}${access}func ${ident(d.key)}(${params.join(", ")}) -> String {`,
+        `${inner}    table.format(${JSON.stringify(d.key)}, [${values.join(", ")}])`,
+        `${inner}}`,
+      );
     }
     out.push(`${indent}}`);
   };
@@ -238,6 +286,16 @@ export function generateSwift(
     );
   };
 
+  if (app) {
+    emitStrings(
+      "AppStrings",
+      "AppStringsProtocol",
+      app.strings,
+      "",
+      app.description ?? "The app's strings, outside any island.",
+    );
+    out.push("");
+  }
   islands.forEach((island, i) => {
     if (i > 0) {
       out.push("");

@@ -1,0 +1,6 @@
+{
+  "app": { "loading": "Loading", "retry": "Try again" },
+  "islands": {
+    "list@1": { "heading": "Numbers", "count": { "#1": "One number", "#*": "{count} numbers" } }
+  }
+}

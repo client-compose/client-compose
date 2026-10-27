@@ -6,6 +6,7 @@ import dev.clientcompose.DeclaredError
 import dev.clientcompose.IslandDescriptor
 import dev.clientcompose.PROTOCOL_VERSION
 import dev.clientcompose.ScreenRef
+import dev.clientcompose.StringsResponse
 import dev.clientcompose.Transport
 import dev.clientcompose.TransportResponse
 import kotlinx.serialization.KSerializer
@@ -61,6 +62,19 @@ public class FakeComposer : Transport {
     private val actions = mutableMapOf<String, (ActionRequest) -> FakeResponse>()
     private val recordedScreens = mutableListOf<ScreenRequest>()
     private val recordedActions = mutableListOf<ActionRequest>()
+    private var stringsHandler: ((StringsRequest) -> FakeResponse)? = null
+    private val recordedStrings = mutableListOf<StringsRequest>()
+
+    /** A strings request the app sent (spec §4.7). */
+    public data class StringsRequest(val locale: String?, val headers: Map<String, String>)
+
+    /** Answer strings requests, given the client's language. */
+    public fun strings(handler: (StringsRequest) -> FakeResponse): FakeComposer = apply {
+        synchronized(this) { stringsHandler = handler }
+    }
+
+    /** Strings requests, in the order the app sent them. */
+    public val stringsRequests: List<StringsRequest> get() = synchronized(this) { recordedStrings.toList() }
 
     /** Answer requests for a screen. */
     public fun screen(id: String, handler: (ScreenRequest) -> FakeResponse): FakeComposer = apply {
@@ -80,7 +94,14 @@ public class FakeComposer : Transport {
 
     override suspend fun post(path: String, body: String, headers: Map<String, String>): TransportResponse {
         val json = ClientComposeJson.parseToJsonElement(body).jsonObject
-        val response = if (path.startsWith("screens/")) {
+        val response = if (path == "strings") {
+            val request = StringsRequest(json["client"]?.jsonObject?.get("locale")?.jsonPrimitive?.contentOrNull, headers)
+            val handler = synchronized(this) {
+                recordedStrings += request
+                stringsHandler
+            } ?: throw Unhandled(path)
+            handler(request)
+        } else if (path.startsWith("screens/")) {
             val request = ScreenRequest(
                 screen = json["screen"]?.jsonPrimitive?.contentOrNull ?: "",
                 params = json["params"]?.let { ClientComposeJson.decodeFromJsonElement(stringMap, it) } ?: emptyMap(),
@@ -110,7 +131,7 @@ public class FakeComposer : Transport {
         return TransportResponse(response.status, response.body.toString())
     }
 
-    private companion object {
+    internal companion object {
         val stringMap = MapSerializer(String.serializer(), String.serializer())
         val capabilities = MapSerializer(String.serializer(), ListSerializer(Int.serializer()))
     }
@@ -125,7 +146,18 @@ public class FakeResponse(
 ) {
     public companion object {
         /** A screen, all at once: its stream's head with every island, then its end (spec §4.6). */
-        public fun screen(id: String, islands: List<FakeIsland>, title: String? = null, cacheMaxAge: Int? = null): FakeResponse {
+        /**
+         * A screen, all at once (spec §4.6). Give [locale] and [plurals] for islands with counted
+         * strings (spec §4.7).
+         */
+        public fun screen(
+            id: String,
+            islands: List<FakeIsland>,
+            title: String? = null,
+            cacheMaxAge: Int? = null,
+            locale: String? = null,
+            plurals: Map<String, String>? = null,
+        ): FakeResponse {
             val head = buildJsonObject {
                 put("kind", "head")
                 put("protocol", PROTOCOL_VERSION)
@@ -133,9 +165,15 @@ public class FakeResponse(
                 put("islands", kotlinx.serialization.json.JsonArray(islands.map { it.json }))
                 title?.let { put("meta", buildJsonObject { put("title", it) }) }
                 cacheMaxAge?.let { put("cache", buildJsonObject { put("maxAge", it) }) }
+                locale?.let { put("locale", it) }
+                plurals?.let { put("plurals", ClientComposeJson.encodeToJsonElement(FakeComposer.stringMap, it)) }
             }
             return FakeResponse(200, kotlinx.serialization.json.JsonNull, listOf(head, buildJsonObject { put("kind", "end") }))
         }
+
+        /** The app strings in a language (spec §4.7). */
+        public fun strings(locale: String, strings: Map<String, JsonElement>, plurals: Map<String, String> = emptyMap()): FakeResponse =
+            FakeResponse(200, ClientComposeJson.encodeToJsonElement(StringsResponse.serializer(), StringsResponse(locale = locale, plurals = plurals, strings = strings)))
 
         /** A failed screen or action request, e.g. `failure(404, "not_found")`. */
         public fun failure(status: Int, code: String): FakeResponse =
@@ -183,13 +221,19 @@ public class FakeResponse(
 /** An island in [FakeResponse.screen]. */
 public class FakeIsland private constructor(internal val json: JsonObject) {
     public companion object {
-        /** An island with props, typed by its generated props type. */
-        public fun <P> island(key: String, island: IslandDescriptor<P>, props: P): FakeIsland = FakeIsland(buildJsonObject {
+        /** An island with props, typed by its generated props type, and its strings (spec §4.7). */
+        public fun <P> island(
+            key: String,
+            island: IslandDescriptor<P>,
+            props: P,
+            strings: Map<String, JsonElement>? = null,
+        ): FakeIsland = FakeIsland(buildJsonObject {
             put("key", key)
             put("type", island.type)
             put("version", island.version)
             put("status", "ok")
             put("props", ClientComposeJson.encodeToJsonElement(island.propsSerializer, props))
+            strings?.let { put("strings", JsonObject(it)) }
         })
 
         /** An island that failed on the composer, e.g. `islandError("posts", PostGridV1, "timeout")`. */

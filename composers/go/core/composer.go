@@ -163,6 +163,9 @@ type Config struct {
 	Idempotency *Idempotency
 	// DefaultTimeout is each island's timeout unless its placement sets one. Default 2s.
 	DefaultTimeout time.Duration
+	// Strings, if set, are the words islands and the app show, in each language (spec §4.7).
+	// Without it, entries carry no strings, and POST /strings answers 404.
+	Strings *StringsConfig
 }
 
 // Result is a status code and a body: a *ScreenStream for a screen (spec §4.6), or a
@@ -181,6 +184,7 @@ type Composer struct {
 	cache          Cache
 	idempotency    *Idempotency
 	defaultTimeout time.Duration
+	strings        *StringsConfig
 	mux            *http.ServeMux
 	compose        ComposeFunc
 	perform        PerformFunc
@@ -196,6 +200,7 @@ func New(cfg Config) *Composer {
 		actions:        map[string]map[int]Action{},
 		defaultTimeout: cfg.DefaultTimeout,
 		cache:          cfg.Cache,
+		strings:        cfg.Strings,
 	}
 	if idem := cfg.Idempotency; idem != nil {
 		if idem.Store == nil || idem.Scope == nil {
@@ -335,6 +340,7 @@ func (c *Composer) composeScreen(ctx context.Context, req ScreenRequest) Result 
 	if !ok {
 		return res
 	}
+	words := c.words(req.Client.Locale)
 
 	// Every island resolves at once; each says when it's done.
 	type resolved struct {
@@ -344,7 +350,7 @@ func (c *Composer) composeScreen(ctx context.Context, req ScreenRequest) Result 
 	done := make(chan resolved, len(toResolve))
 	for i, t := range toResolve {
 		go func() {
-			entry, _ := c.resolveEntry(ctx, t.p, t.island, r) // a failure is in its entry
+			entry, _ := c.resolveEntry(ctx, t.p, t.island, r, words) // a failure is in its entry
 			done <- resolved{i, entry}
 		}()
 	}
@@ -382,6 +388,9 @@ func (c *Composer) composeScreen(ctx context.Context, req ScreenRequest) Result 
 	head := ScreenResponse{Protocol: ProtocolVersion, Screen: screen.ID, Islands: make([]IslandEntry, len(toResolve)), Meta: meta}
 	if screen.CacheMaxAge > 0 {
 		head.Cache = &CacheHint{MaxAge: int(screen.CacheMaxAge.Seconds())}
+	}
+	if words != nil {
+		head.Locale, head.Plurals = words.Locale, &words.Plurals
 	}
 	pending := 0
 	for i, t := range toResolve {
@@ -483,7 +492,7 @@ func (c *Composer) meta(ctx context.Context, screen Screen, r Request) (out *Scr
 
 // resolveEntry resolves one island to its entry. A failure is in the entry; it's returned too, so
 // an island request can tell an invalid cursor from a failure.
-func (c *Composer) resolveEntry(parent context.Context, p Placement, island Island, r Request) (IslandEntry, error) {
+func (c *Composer) resolveEntry(parent context.Context, p Placement, island Island, r Request, words *LocaleStrings) (IslandEntry, error) {
 	entry := IslandEntry{Key: p.Key, Type: island.Type, Version: island.Version}
 	timeout := p.Timeout
 	if timeout == 0 {
@@ -518,6 +527,9 @@ func (c *Composer) resolveEntry(parent context.Context, p Placement, island Isla
 			}
 			if entry.Props == nil {
 				entry.Props = map[string]any{}
+			}
+			if words != nil {
+				entry.Strings = words.Island(island.Type, island.Version)
 			}
 			return entry, nil
 		}

@@ -7,7 +7,9 @@ const clientModuleUrls = [
   new URL("../../dist/client.js", import.meta.url).href,
   new URL("../../dist/pages.js", import.meta.url).href,
   new URL("../../dist/provider.js", import.meta.url).href,
+  new URL("../../dist/strings.js", import.meta.url).href,
   new URL("./counter.mjs", import.meta.url).href,
+  new URL("./greeting.mjs", import.meta.url).href,
 ];
 const modules = {};
 for (const url of clientModuleUrls) {

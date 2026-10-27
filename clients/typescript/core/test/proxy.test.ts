@@ -16,6 +16,7 @@ import {
   islandResponse,
   screen,
   screenError,
+  stringsResponse,
 } from "../src/testing.ts";
 
 const SignIn: ActionDescriptor<{ email: string }, { token: string }, never> = {
@@ -180,4 +181,18 @@ test("loads islands' pages with the server's client context, checking the reques
     assert.equal(!answered.ok && answered.status, 400);
   }
   assert.equal(gateway.islandRequests().length, 1);
+});
+
+test("loads the app strings in the server's client context's language", async () => {
+  const gateway = createFakeGateway({
+    strings: (request) => stringsResponse(request.client?.locale ?? "", { retry: "Réessayer" }),
+  });
+  const result = await proxyFor(gateway).loadStrings();
+  assert.deepEqual(result.ok && result.response.strings, { retry: "Réessayer" });
+  assert.equal(gateway.stringsRequests()[0]?.headers.authorization, "Bearer secret");
+
+  const down = await proxyFor(
+    createFakeGateway({ strings: () => screenError(404, "no_strings") }),
+  ).loadStrings();
+  assert.equal(!down.ok && down.status, 404);
 });

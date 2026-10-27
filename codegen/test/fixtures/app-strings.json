@@ -1,0 +1,16 @@
+{
+  "description": "The app's strings, outside any island.",
+  "strings": {
+    "loading": {},
+    "retry": {
+      "description": "A button that tries again."
+    },
+    "uploaded": {
+      "params": [
+        "count",
+        "total"
+      ],
+      "counted": true
+    }
+  }
+}

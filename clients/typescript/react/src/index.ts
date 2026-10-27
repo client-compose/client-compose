@@ -25,12 +25,27 @@ export { type PagesState, type PagesStatus, usePages } from "./pages.ts";
 export { ClientComposeProvider } from "./provider.ts";
 export { type ProxyFunctions, type ProxyTransport, viaProxy } from "./proxy.ts";
 export { declaredError, isUnexpected } from "./results.ts";
-export { ActionFetchError, IslandFetchError, type ScreenStream } from "@client-compose/client";
+export {
+  AppStringsProvider,
+  type AppStringsProviderProps,
+  type StringsCache,
+  useAppStrings,
+} from "./strings.ts";
+export {
+  ActionFetchError,
+  appStrings,
+  formatString,
+  IslandFetchError,
+  type ScreenStream,
+  StringsFetchError,
+  type WithStrings,
+} from "@client-compose/client";
 export type {
   ActionDescriptor,
   ActionEffects,
   ActionRequest,
   ActionResponse,
+  AppStringsDescriptor,
   DeclaredError,
   IslandDescriptor,
   IslandEntry,
@@ -40,4 +55,5 @@ export type {
   ScreenMeta,
   ScreenRef,
   ScreenResponse,
+  StringsResponse,
 } from "@client-compose/protocol";

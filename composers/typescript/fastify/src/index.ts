@@ -38,7 +38,13 @@ export function composerPlugin<Ctx>(composer: Composer<Ctx, FastifyRequest>): Fa
         }
       );
     };
-    for (const route of ["/screens/:screen", "/screens/:screen/islands/:key", "/actions/:action"]) {
+    const routes = [
+      "/screens/:screen",
+      "/screens/:screen/islands/:key",
+      "/actions/:action",
+      "/strings",
+    ];
+    for (const route of routes) {
       app.post(route, async (request, reply) => {
         const result = await handler(request);
         reply.code(result.status).type(result.contentType);

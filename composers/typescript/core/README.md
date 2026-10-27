@@ -182,6 +182,42 @@ island again, so a client can refresh one without the whole screen. Paged island
 In tests, `app.nextPage(screen, "results")` fetches the page after a screen's island, `app.next`
 the one after that, and `page.props(ResultListV1)` reads it.
 
+## Strings
+
+Every word an app shows comes from the composer (spec §4.7), so copy changes, and new languages
+ship, without an app release. Islands declare their strings in their manifests, and the app its
+own in an app strings manifest; the words are a catalog, one JSON file per language:
+
+```json
+// strings/pl.json
+{
+  "app": { "loading": "Ładowanie" },
+  "islands": {
+    "recipe-list@1": {
+      "heading": "Najnowsze przepisy",
+      "count": { "#1": "{count} przepis", "#few": "{count} przepisy", "#*": "{count} przepisów" }
+    }
+  }
+}
+```
+
+```ts
+const composer = createComposer({
+  screens,
+  strings: { catalog: loadCatalog("strings"), defaultLocale: "en" },
+});
+```
+
+Each island's entry then carries its strings in the client's `locale`, or the nearest language the
+catalog has (`pl-PL`, then `pl`, then the default), with any string a language lacks taken from
+the default. The stream's head says which language that is, with its plural rules, for counted
+strings. `POST /strings` answers the app strings, without running `context`, since an app needs
+its words before anyone signs in. `client-compose-codegen strings` checks the catalog against the
+manifests.
+
+In tests, `app.strings({ locale: "pl" })` fetches the app strings, and an island's entry has its
+`strings`.
+
 ## Caching islands (optional)
 
 To keep an island's props between requests, give the composer a `Cache` and opt islands in. The

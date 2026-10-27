@@ -39,12 +39,31 @@ export interface EnumDef {
   description?: string;
 }
 
+/** A string an island or app shows (spec §2, §4.7): its key and the values it takes. */
+export interface StringDef {
+  key: string;
+  /** The values the client fills in, in declared order. */
+  params: string[];
+  /** It has variants by number: `params` includes `count`. */
+  counted: boolean;
+  description?: string;
+}
+
 export interface Island {
   type: string;
   version: number;
   description?: string;
   source: string;
   props: ObjectDef;
+  /** Its declared strings, by key order; empty when it declares none. */
+  strings: StringDef[];
+}
+
+/** The strings an app shows outside any island (spec §4.7). */
+export interface AppStrings {
+  source: string;
+  description?: string;
+  strings: StringDef[];
 }
 
 export interface ActionErrorDef {
@@ -154,7 +173,77 @@ export function parseManifest(raw: unknown, source: string): Island {
     description: str(raw.description),
     source,
     props: lowerObject(props, path, (p, msg) => at(`props${p}: ${msg}`), ""),
+    strings: parseStrings(raw.strings, (msg) => at(`strings${msg}`)),
   };
+}
+
+/** The app strings manifest (spec §4.7): `{ "strings": { … } }`, in the island manifest's format. */
+export function loadAppStrings(file: string): AppStrings {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(readFileSync(file, "utf8"));
+  } catch (err) {
+    const why = err instanceof Error ? err.message : String(err);
+    throw new ManifestError(`${file}: invalid JSON (${why})`);
+  }
+  return parseAppStrings(raw, file);
+}
+
+export function parseAppStrings(raw: unknown, source: string): AppStrings {
+  const at = (msg: string) => new ManifestError(`${source}: ${msg}`);
+  if (!isSchema(raw) || raw.strings === undefined) {
+    throw at(`an app strings manifest is an object with "strings"`);
+  }
+  return {
+    source,
+    description: str(raw.description),
+    strings: parseStrings(raw.strings, (msg) => at(`strings${msg}`)),
+  };
+}
+
+const STRING_KEY = /^[a-z][A-Za-z0-9]*$/;
+
+/** A manifest's `strings`: key -> { params?, counted?, description? }. */
+function parseStrings(raw: unknown, at: (msg: string) => ManifestError): StringDef[] {
+  if (raw === undefined) {
+    return [];
+  }
+  if (!isSchema(raw)) {
+    throw at(": must be an object of strings by key");
+  }
+  return Object.entries(raw).map(([key, def]): StringDef => {
+    if (!STRING_KEY.test(key)) {
+      throw at(`.${key}: a string's key is camelCase`);
+    }
+    if (!isSchema(def)) {
+      throw at(`.${key}: must be an object ({} for a string without params)`);
+    }
+    for (const field of Object.keys(def)) {
+      if (!["params", "counted", "description"].includes(field)) {
+        throw at(`.${key}: unknown field ${JSON.stringify(field)}`);
+      }
+    }
+    const params = def.params ?? [];
+    if (!isStringArray(params) || params.some((p) => !STRING_KEY.test(p))) {
+      throw at(`.${key}.params: a list of camelCase names`);
+    }
+    if (new Set(params).size !== params.length) {
+      throw at(`.${key}.params: names a param twice`);
+    }
+    if (def.counted !== undefined && typeof def.counted !== "boolean") {
+      throw at(`.${key}.counted: true or false`);
+    }
+    const counted = def.counted === true;
+    if (counted && !params.includes("count")) {
+      throw at(`.${key}: a counted string takes a "count" param`);
+    }
+    return {
+      key,
+      params,
+      counted,
+      description: str(def.description),
+    };
+  });
 }
 
 export function loadActionManifests(dir: string): Action[] {

@@ -60,6 +60,12 @@
         },
         "cache": {
           "$ref": "screen-response.json#/properties/cache"
+        },
+        "locale": {
+          "$ref": "screen-response.json#/properties/locale"
+        },
+        "plurals": {
+          "$ref": "screen-response.json#/properties/plurals"
         }
       },
       "required": [

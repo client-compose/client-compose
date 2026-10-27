@@ -1,18 +1,23 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, relative, resolve } from "node:path";
 
+import { type CatalogIssue, checkCatalog } from "./catalog.ts";
 import {
   compareActions,
+  compareAppStrings,
   compareIslands,
   type CompatIssue,
   loadActionManifestsAtRef,
+  loadAppStringsAtRef,
   loadManifestsAtRef,
 } from "./compat.ts";
 import {
   type Action,
+  type AppStrings,
   type EnumDef,
   type Island,
   loadActionManifests,
+  loadAppStrings,
   loadManifests,
   ManifestError,
   type ObjectDef,
@@ -24,19 +29,24 @@ import { generateTypeScript, type TypeScriptOptions } from "./targets/typescript
 
 export {
   compareActions,
+  compareAppStrings,
   compareIslands,
   type CompatIssue,
   loadActionManifestsAtRef,
+  loadAppStringsAtRef,
   loadManifestsAtRef,
 } from "./compat.ts";
 export {
   loadActionManifests,
+  loadAppStrings,
   loadManifests,
   ManifestError,
   parseActionManifest,
+  parseAppStrings,
   parseManifest,
 } from "./manifest.ts";
 export { generateGo, generateKotlin, generateSwift, generateTypeScript };
+export { type CatalogIssue, catalogLocales, checkCatalog } from "./catalog.ts";
 
 type OneOrMany<T> = T | T[];
 
@@ -49,6 +59,12 @@ export interface CodegenConfig {
   manifests?: string;
   /** Directory of action manifests (spec §5). Generated for every target. */
   actions?: string;
+  /** The app strings manifest (spec §4.7): the strings shown outside any island. */
+  appStrings?: string;
+  /** Directory of the strings catalog, one JSON file per language, checked by `codegen strings`. */
+  catalog?: string;
+  /** The catalog's default language, which must have every string. Default "en". */
+  defaultLocale?: string;
   targets: {
     go?: OneOrMany<GoOptions & { out: string }>;
     swift?: OneOrMany<SwiftOptions & { out: string }>;
@@ -74,21 +90,40 @@ function manifestsDirOf(configPath: string): {
   base: string;
   manifestsDir?: string;
   actionsDir?: string;
+  appStringsFile?: string;
+  catalogDir?: string;
 } {
   // The config file is the user's: each target checks the options it reads.
   // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
   const config = JSON.parse(readFileSync(configPath, "utf8")) as CodegenConfig;
   const base = dirname(resolve(configPath));
   const dir = (d: string | undefined) => (d === undefined ? undefined : resolve(base, d));
-  if (config.manifests === undefined && config.actions === undefined) {
-    throw new ManifestError(`${configPath}: set "manifests" (islands), "actions", or both`);
+  if (
+    config.manifests === undefined &&
+    config.actions === undefined &&
+    config.appStrings === undefined
+  ) {
+    throw new ManifestError(`${configPath}: set "manifests" (islands), "actions" or "appStrings"`);
   }
   return {
     config,
     base,
     manifestsDir: dir(config.manifests),
     actionsDir: dir(config.actions),
+    appStringsFile: dir(config.appStrings),
+    catalogDir: dir(config.catalog),
   };
+}
+
+/** Checks the config's strings catalog against its manifests (spec §4.7). */
+export function checkStrings(configPath: string): CatalogIssue[] {
+  const { config, manifestsDir, appStringsFile, catalogDir } = manifestsDirOf(configPath);
+  if (catalogDir === undefined) {
+    throw new ManifestError(`${configPath}: set "catalog", the strings catalog's directory`);
+  }
+  const islands = manifestsDir ? loadManifests(manifestsDir) : [];
+  const app = appStringsFile ? loadAppStrings(appStringsFile) : undefined;
+  return checkCatalog(catalogDir, config.defaultLocale ?? "en", islands, app);
 }
 
 /**
@@ -99,9 +134,10 @@ export function checkCompat(
   configPath: string,
   against: { ref: string } | { dir: string; actionsDir?: string },
 ): CompatIssue[] {
-  const { manifestsDir, actionsDir } = manifestsDirOf(configPath);
+  const { manifestsDir, actionsDir, appStringsFile } = manifestsDirOf(configPath);
   const head = manifestsDir ? loadManifests(manifestsDir) : [];
   const headActions = actionsDir ? loadActionManifests(actionsDir) : [];
+  const headApp = appStringsFile ? loadAppStrings(appStringsFile) : undefined;
   if ("dir" in against) {
     const baseActions = against.actionsDir ? loadActionManifests(against.actionsDir) : [];
     return [
@@ -118,13 +154,17 @@ export function checkCompat(
     const baseActions = loadActionManifestsAtRef(actionsDir, against.ref);
     issues.push(...baseActions.issues, ...compareActions(baseActions.actions, headActions));
   }
+  if (appStringsFile) {
+    issues.push(...compareAppStrings(loadAppStringsAtRef(appStringsFile, against.ref), headApp));
+  }
   return issues;
 }
 
 export function generate(configPath: string): GeneratedFile[] {
-  const { config, base, manifestsDir, actionsDir } = manifestsDirOf(configPath);
+  const { config, base, manifestsDir, actionsDir, appStringsFile } = manifestsDirOf(configPath);
   const islands = manifestsDir ? loadManifests(manifestsDir) : [];
   const actions = actionsDir ? loadActionManifests(actionsDir) : [];
+  const app: AppStrings | undefined = appStringsFile ? loadAppStrings(appStringsFile) : undefined;
   checkFlatNames(islands, actions);
 
   // Must not depend on the working directory, so `--check` agrees wherever codegen ran.
@@ -133,6 +173,7 @@ export function generate(configPath: string): GeneratedFile[] {
     [
       manifestsDir && `Manifests: ${relative(base, manifestsDir) || "."}`,
       actionsDir && `actions: ${relative(base, actionsDir) || "."}`,
+      appStringsFile && `app strings: ${relative(base, appStringsFile)}`,
       `config: ${basename(configPath)}`,
     ]
       .filter(Boolean)
@@ -150,19 +191,19 @@ export function generate(configPath: string): GeneratedFile[] {
   for (const t of list(swift)) {
     files.push({
       path: resolve(base, t.out),
-      contents: generateSwift(islands, header, t, actions),
+      contents: generateSwift(islands, header, t, actions, app),
     });
   }
   for (const t of list(kotlin)) {
     files.push({
       path: resolve(base, t.out),
-      contents: generateKotlin(islands, header, required(t, "package", "kotlin"), actions),
+      contents: generateKotlin(islands, header, required(t, "package", "kotlin"), actions, app),
     });
   }
   for (const t of list(typescript)) {
     files.push({
       path: resolve(base, t.out),
-      contents: generateTypeScript(islands, header, t, actions),
+      contents: generateTypeScript(islands, header, t, actions, app),
     });
   }
   if (files.length === 0) {

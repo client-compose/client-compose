@@ -1,10 +1,12 @@
 import {
   type Action,
+  type AppStrings,
   camel,
   type EnumDef,
   type Field,
   type Island,
   type ObjectDef,
+  type StringDef,
   type TypeRef,
   words,
 } from "../manifest.ts";
@@ -33,6 +35,7 @@ export function generateKotlin(
   header: string,
   opts: KotlinOptions,
   actions: Action[] = [],
+  app?: AppStrings,
 ): string {
   const body: string[] = [];
   let usesSerialName = false;
@@ -124,14 +127,54 @@ export function generateKotlin(
       if (def.children.length) {
         body.push("");
       }
+      const withStrings = island.strings.length > 0;
       body.push(
-        `${inner}companion object : IslandDescriptor<${name}> {`,
+        withStrings
+          ? `${inner}companion object : IslandDescriptorWithStrings<${name}, Strings> {`
+          : `${inner}companion object : IslandDescriptor<${name}> {`,
         `${inner}    override val type: String = ${JSON.stringify(island.type)}`,
         `${inner}    override val version: Int = ${island.version}`,
         `${inner}    override val propsSerializer: KSerializer<${name}> get() = serializer()`,
+        ...(withStrings
+          ? [`${inner}    override fun strings(table: StringsTable): Strings = Strings(table)`]
+          : []),
         `${inner}}`,
       );
+      if (withStrings) {
+        body.push("");
+        emitStrings(
+          "Strings",
+          island.strings,
+          inner,
+          `${island.type} v${island.version}'s strings: what its renderer receives as \`t\`.`,
+        );
+      }
     }
+    body.push(`${indent}}`);
+  };
+
+  /** A strings class: a property for a string without params, a function of its params otherwise. */
+  const emitStrings = (name: string, defs: StringDef[], indent: string, description: string) => {
+    const inner = `${indent}    `;
+    doc(indent, description);
+    body.push(`${indent}class ${name}(private val table: StringsTable) {`);
+    defs.forEach((d, i) => {
+      if (i > 0) {
+        body.push("");
+      }
+      doc(inner, d.description);
+      if (d.params.length === 0) {
+        body.push(`${inner}val ${d.key}: String get() = table.text(${JSON.stringify(d.key)})`);
+        return;
+      }
+      const params = d.params.map((p) => `${p}: ${p === "count" ? "Int" : "String"}`);
+      const values = d.params.map(
+        (p) => `${JSON.stringify(p)} to ${p === "count" ? `${p}.toString()` : p}`,
+      );
+      body.push(
+        `${inner}fun ${d.key}(${params.join(", ")}): String = table.format(${JSON.stringify(d.key)}, mapOf(${values.join(", ")}))`,
+      );
+    });
     body.push(`${indent}}`);
   };
 
@@ -222,6 +265,15 @@ export function generateKotlin(
     body.push("}");
   };
 
+  if (app) {
+    emitStrings(
+      "AppStrings",
+      app.strings,
+      "",
+      app.description ?? "The app's strings, outside any island.",
+    );
+    body.push("");
+  }
   islands.forEach((island, i) => {
     if (i > 0) {
       body.push("");
@@ -236,7 +288,11 @@ export function generateKotlin(
   const imports = [
     ...(actions.length ? ["dev.clientcompose.ActionDescriptor"] : []),
     ...(actions.some((a) => a.errors.length) ? ["dev.clientcompose.DeclaredError"] : []),
-    ...(islands.length ? ["dev.clientcompose.IslandDescriptor"] : []),
+    ...(islands.some((i) => !i.strings.length) ? ["dev.clientcompose.IslandDescriptor"] : []),
+    ...(islands.some((i) => i.strings.length)
+      ? ["dev.clientcompose.IslandDescriptorWithStrings"]
+      : []),
+    ...(app || islands.some((i) => i.strings.length) ? ["dev.clientcompose.StringsTable"] : []),
     "kotlinx.serialization.KSerializer",
     ...(usesSerialName ? ["kotlinx.serialization.SerialName"] : []),
     "kotlinx.serialization.Serializable",

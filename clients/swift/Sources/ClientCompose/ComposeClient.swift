@@ -84,6 +84,21 @@ public final class ComposeClient: Sendable {
         return ScreenWatch { [store] in Task { await store.unwatch(id) } }
     }
 
+    // MARK: Strings
+
+    /// The app strings in the client's language (spec §4.7). Fetch them when the app starts, and keep
+    /// them for the next launch; throws `ScreenError` when the composer answers with an error.
+    ///
+    ///     let words = try await client.strings().app(AppStrings.self)
+    public func strings() async throws -> StringsResponse {
+        let request = StringsRequest(protocol: ClientCompose.protocolVersion, client: context)
+        let response = try await post(path: "strings", body: JSONEncoder().encode(request))
+        guard (200..<300).contains(response.status) else {
+            throw ScreenError(status: response.status, code: ErrorBody.code(in: response.body), body: response.body)
+        }
+        return try JSONDecoder().decode(StringsResponse.self, from: response.body)
+    }
+
     // MARK: Actions
 
     /// Performs an action by its generated descriptor. Returns its result or one of its declared

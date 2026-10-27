@@ -8,6 +8,7 @@ npx @client-compose/codegen client-compose.codegen.json            # write
 npx @client-compose/codegen client-compose.codegen.json --check    # CI: exit 1 if out of date
 npx @client-compose/codegen compat client-compose.codegen.json --base origin/main
                                                                    # CI: exit 1 on breaking changes
+npx @client-compose/codegen strings client-compose.codegen.json    # CI: check the strings catalog
 ```
 
 Go output is formatted with `gofmt` if it's on your PATH. (In this repo, run `node codegen/cli.ts …`
@@ -54,6 +55,10 @@ downloaded through a browser needs `xattr -d com.apple.quarantine <file>` before
 `actions` is optional: a directory of action manifests (spec §5), generated for every target. A
 config may also have only `actions`.
 
+For strings (spec §4.7), add `"appStrings": "app-strings.json"` (the app strings manifest),
+`"catalog": "strings"` (the directory of `<locale>.json` files the composer serves) and, if it isn't
+`en`, `"defaultLocale"`. See [Strings](#strings).
+
 In a Go project, a `//go:generate client-compose-codegen <config>` (or `npx @client-compose/codegen <config>`) line lets `go generate` run it
 (see [`examples/profile/composer-go/main.go`](https://github.com/client-compose/client-compose/blob/main/examples/profile/composer-go/main.go)).
 
@@ -77,6 +82,51 @@ For action `follow-user` v1 (spec §5.1):
 | TypeScript | `FollowUserV1Input`, `FollowUserV1Result`, the `FollowUserV1Error` union, and the `FollowUserV1` descriptor | `action(FollowUserV1, perform)` in the composer, `callAction(…, FollowUserV1, input)` or `useAction(FollowUserV1)` in apps |
 | Kotlin     | `object FollowUserV1 : ActionDescriptor<…>` holding `Input`, `Result`, and a sealed `Error` with a subclass per declared error (`Error.Blocked`, or `Error.LimitReached(details)`) | `client.perform(FollowUserV1, FollowUserV1.Input(userId = id))` or `rememberAction(FollowUserV1)` |
 | Swift      | `enum FollowUserV1: ActionDescriptor` holding `Input`, `Result`, and a `DeclaredError` enum with a case per declared error (`.blocked`, or `.limitReached(LimitReached)` with its details) | `client.perform(FollowUserV1.self, .init(userId: id))` or `@ComposeAction(FollowUserV1.self)` |
+
+## Strings
+
+Every word an app shows comes from the composer (spec §4.7). An island manifest declares its
+strings by key, with the params each fills in, and `counted` for one whose words depend on a
+`count`:
+
+```json
+"strings": {
+  "heading": { "description": "Over the list." },
+  "greeting": { "params": ["name"] },
+  "recipeCount": { "params": ["count"], "counted": true }
+}
+```
+
+The app strings manifest declares the words that belong to no island (a placeholder's "Loading",
+a validation message), in the same format: `{ "strings": { … } }`. Each target generates a type
+whose members are the strings: text for those without params, functions for those with:
+
+| Stack      | Generated | Used as |
+| ---------- | --------- | ------- |
+| TypeScript | `RecipeListV1Strings`, and the descriptor's `strings`; `AppStrings` | `props.t.recipeCount({ count })` in a registered component; `useAppStrings(AppStrings).retry` |
+| Swift      | `RecipeListV1.Strings`; `struct AppStrings` | `registry.register(RecipeListV1.self) { props, t, _ in … t.recipeCount(count: n) }`; `response.app(AppStrings.self)` |
+| Kotlin     | `RecipeListV1.Strings`, built by the descriptor; `class AppStrings` | `registry.register(RecipeListV1) { props, t, _ -> … t.recipeCount(n) }`; `response.app(::AppStrings)` |
+
+The words are a catalog, one file per language, e.g. `strings/pl.json`:
+
+```json
+{
+  "app": { "retry": "Spróbuj ponownie" },
+  "islands": {
+    "recipe-list@1": {
+      "heading": "Najnowsze",
+      "greeting": "Cześć {name}",
+      "recipeCount": { "#0": "Brak przepisów", "#one": "{count} przepis", "#few": "{count} przepisy", "#*": "{count} przepisów" }
+    }
+  }
+}
+```
+
+A counted string's variants are keyed `#<number>`, `#<category>` (CLDR's `zero`, `one`, `two`,
+`few`, `many`, `other`) or `#*`, chosen in that order. `strings` checks the catalog against the
+manifests: the default language must have every string; another that lacks one gets a warning, and
+falls back to the default's. Unknown keys and islands, variants without `#*`, variants on a string
+that isn't counted, and `{slots}` that aren't params are errors.
 
 ## Supported schema subset
 
@@ -128,6 +178,10 @@ islands whose props don't decode (spec §4.4), so a breaking change silently hid
 
 Make breaking changes in a **new island version** (a new `profile-header.v3.json`) and keep the old
 version for apps already released.
+
+Strings within one island version, and the app strings, may be added, and their descriptions and
+words changed. Removing one, changing its params, or making it counted or not, is breaking: released
+apps still show it, with the params they were built with.
 
 Actions follow the same rules (spec §5.1). Released apps keep sending old inputs and decoding
 results and error details, so `input`, `result` and each error's `details` follow the table above.

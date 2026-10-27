@@ -59,6 +59,7 @@ them to say what they add.
 | CMP-18 | **Cache adapter.** An optional cache the app supplies; islands opt in with a TTL and a key (see [Adapters](#adapters)). | — |
 | CMP-19 | **Idempotency adapter.** An optional store the app supplies, so retried actions return their first outcome (see [Adapters](#adapters)). | §5.2 |
 | CMP-20 | **Island requests.** Define an island with pages by its generated props type; it resolves the page a cursor asks for, and the cursor of the next. One island of a screen can be resolved again on its own, laid out as its screen would be. | §4.5 |
+| CMP-22 | **Strings.** Load a catalog, one file per language. Each island's entry carries its strings in the language nearest the client's, string by string falling back to the default; the head says which language, with its plural rules. App strings are answered at `/strings` with no session. | §4.7 |
 | CMP-21 | **Streams.** Screens are answered as streams: the head once what can fail the screen is settled (requirements, layout and conditions, required islands, meta), then each other island as it's resolved, then the end. | §4.6 |
 
 ## The composer as a platform
@@ -190,6 +191,7 @@ own: the composer *is* their backend.
 | CLI-8 | **Test kit.** A fake composer answering screens and actions with typed builders, recording requests and effects. | — |
 | CLI-9 | **Conformance.** Passes the client fixtures, rendering and actions. | §8.2 |
 | CLI-10 | **Island requests.** Fetch an island's next page from its entry's `next`, or the island again; through a proxy too. | §4.5 |
+| CLI-12 | **Strings.** An island registered by a descriptor that declares strings gets them typed, as `t`. Counted strings pick their words by the language's plural rules, which the client evaluates itself and which pass CLDR's samples. Fetch the app strings, typed by their descriptor. | §4.7 |
 | CLI-11 | **Streams.** Read a screen's stream: its head, then each island as it arrives, or all of it at once; islands that never arrive are `incomplete`. | §4.6 |
 
 ## UI binding
@@ -206,6 +208,7 @@ own: the composer *is* their backend.
 | UI-8 | **Cancellation.** Leaving a screen or changing its params cancels its request. |
 | UI-9 | **Testing.** Render islands and screens in tests against the fake composer, in the platform's usual test tools. |
 | UI-10 | **Pages.** An island's pages so far, with loading, end and failed states and a way to load the next, starting again when the island is rendered with new props. |
+| UI-12 | **App strings.** The app strings fetched when the app starts, kept between launches and refreshed, with a state for "none, and the composer can't be reached". |
 | UI-11 | **Progressive screens.** Show a screen once its head arrives, each pending island as the placeholder the app registered for it (or nothing) until it does; or, by choice, wait for all of it. A reload keeps what's shown until it's replaced. |
 
 Some rows are one platform's business: server rendering and React Server Components, and the
@@ -219,6 +222,7 @@ proxy that keeps a session in an httpOnly cookie, are web-only.
 | TL-2 | **Codegen, actions.** Input, result, error and descriptor types for every language. |
 | TL-3 | **Compatibility lint.** Flags a change to a released version that breaks either side. |
 | TL-4 | **Standalone binaries.** Codegen without Node. |
+| TL-6 | **Codegen, strings.** Typed strings for each island and for the app, compatibility rules for them, and a check that the catalog has every string in the default language and nothing undeclared. |
 | TL-5 | **Conformance runner.** Runs the composer suite against any URL; client fixtures are plain JSON any language can load. |
 
 ## Ergonomics
@@ -283,6 +287,7 @@ Names in *italics* don't exist yet; the parity work below adds them.
 | CMP-19 idempotency adapter | ✅ `Config.Idempotency` | ✅ `idempotency` |
 | CMP-20 island requests | ✅ `cc.DefinePaged`, `ComposeIsland` | ✅ `pagedIsland`, `composeIsland` |
 | CMP-21 streams | ✅ `cc.ScreenStream`, `cc.ReadScreen` | ✅ `ScreenStream`, `collect`, every adapter |
+| CMP-22 strings | ✅ `cc.LoadCatalog`, `Config.Strings` | ✅ `loadCatalog`, `strings` |
 
 ### Clients
 
@@ -310,6 +315,8 @@ Names in *italics* don't exist yet; the parity work below adds them.
 | UI-10 pages | ✅ `usePages` | ✗ | ✗ |
 | CLI-11 streams | ✅ `openScreen`, `fetchScreen` | ◐ read to the end | ◐ read to the end |
 | UI-11 progressive screens | ✅ placeholders, `progressive`, streamed Server Components | ✗ (all at once) | ✗ (all at once) |
+| CLI-12 strings | ✅ `t`, `fetchStrings`, `proxy.loadStrings` | ✅ `t`, `client.strings()` | ✅ `t`, `client.strings()` |
+| UI-12 app strings | ✅ `AppStringsProvider`, `useAppStrings` | ✗ (`client.strings()`, kept by the app) | ✗ (`client.strings()`, kept by the app) |
 
 SwiftUI and Compose can't catch a view that crashes while rendering the way React can, so UI-6
 there means islands whose props don't decode are skipped.
@@ -320,6 +327,7 @@ there means islands whose props don't decode are skipped.
 | --- | --- | --- | --- | --- |
 | TL-1 props | ✅ | ✅ | ✅ | ✅ |
 | TL-2 actions | ✅ | ✅ | ✅ | ✅ |
+| TL-6 strings | — (the composer serves the catalog) | ✅ | ✅ | ✅ |
 
 TL-3 to TL-5 are language-neutral and done.
 

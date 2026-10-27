@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://client-compose.dev/schema/v0/strings-request.json",
+  "title": "Strings request",
+  "description": "POST {base}/strings: the app strings, in the client's language (spec §4.7).",
+  "type": "object",
+  "required": [
+    "protocol",
+    "client"
+  ],
+  "properties": {
+    "protocol": {
+      "const": 0
+    },
+    "client": {
+      "$ref": "screen-request.json#/properties/client"
+    }
+  }
+}

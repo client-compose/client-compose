@@ -12,16 +12,40 @@ import {
   type IslandEntry,
   type IslandRequest,
   type IslandResponse,
+  type PluralRules,
   PROTOCOL_VERSION,
   type ScreenHead,
   type ScreenRequest,
   type ScreenResponse,
+  type StringParams,
 } from "@client-compose/protocol";
+
+import { buildStrings } from "./strings.ts";
+
+export {
+  appStrings,
+  buildStrings,
+  fetchStrings,
+  formatString,
+  pluralCategory,
+  StringsFetchError,
+  type StringValues,
+} from "./strings.ts";
 
 type OkEntry<P = unknown> = IslandEntry<P> & { status: "ok" };
 type ErrorEntry = IslandEntry & { status: "error" };
 
-export type IslandRenderer<R, P = unknown> = (props: P, entry: OkEntry<P>) => R;
+/**
+ * An island's props as its renderer gets them: with its strings as `t` (spec §4.7), if its
+ * descriptor declares any.
+ */
+export type WithStrings<P, S> = P & (unknown extends S ? unknown : { t: S });
+
+/**
+ * Renders an island: its props (with `t`, if it declares strings), its entry as the composer sent
+ * it, and the screen's plural rules (spec §4.7).
+ */
+export type IslandRenderer<R, P = unknown> = (props: P, entry: OkEntry, plurals?: PluralRules) => R;
 
 /** What a client shows for an island still pending in a stream's head (spec §4.6). */
 export type IslandPlaceholder<R> = () => R;
@@ -29,6 +53,10 @@ export type IslandPlaceholder<R> = () => R;
 export class IslandRegistry<R> {
   private renderers = new Map<string, Map<number, IslandRenderer<R>>>();
   private placeholders = new Map<string, IslandPlaceholder<R>>();
+  private declaredStrings = new Map<string, StringParams>();
+  // Each entry's props with its `t`, made once: a screen streaming in plans again with each island
+  // that arrives, and the islands already shown keep the props they were rendered with.
+  private propsMade = new WeakMap<object, { plurals?: PluralRules; props: unknown }>();
 
   /**
    * Register a placeholder for an island version, shown while it's pending in a stream's head
@@ -44,17 +72,29 @@ export class IslandRegistry<R> {
     return this.placeholders.get(`${type}@${version}`);
   }
 
-  /** Register a renderer for a generated island descriptor: `register(ProfileHeaderV2, (props) => …)`. */
-  register<P>(island: IslandDescriptor<P>, render: IslandRenderer<R, P>): this;
+  /**
+   * Register a renderer for a generated island descriptor: `register(ProfileHeaderV2, (props) => …)`.
+   * If the island declares strings, its props have them as `t`: `props.t.heading`.
+   */
+  register<P, S>(
+    island: IslandDescriptor<P, S>,
+    render: IslandRenderer<R, WithStrings<P, S>>,
+  ): this;
   register<P>(type: string, version: number, render: IslandRenderer<R, P>): this;
-  register<P>(
-    islandOrType: IslandDescriptor<P> | string,
-    versionOrRender: number | IslandRenderer<R, P>,
+  register<P, S>(
+    islandOrType: IslandDescriptor<P, S> | string,
+    versionOrRender: number | IslandRenderer<R, WithStrings<P, S>>,
     maybeRender?: IslandRenderer<R, P>,
   ): this {
     if (typeof islandOrType !== "string") {
       if (typeof versionOrRender === "number") {
         throw new Error("register(descriptor, render): pass the renderer, not a version");
+      }
+      const id = `${islandOrType.type}@${islandOrType.version}`;
+      if (islandOrType.strings) {
+        this.declaredStrings.set(id, islandOrType.strings);
+      } else {
+        this.declaredStrings.delete(id);
       }
       return this.add(islandOrType.type, islandOrType.version, versionOrRender);
     }
@@ -85,6 +125,27 @@ export class IslandRegistry<R> {
 
   get(type: string, version: number): IslandRenderer<R> | undefined {
     return this.renderers.get(type)?.get(version);
+  }
+
+  /**
+   * An island's props as its renderer gets them: with its strings as `t`, built with the screen's
+   * plural rules, if its descriptor declares any.
+   */
+  propsOf(entry: OkEntry, plurals: PluralRules | undefined): unknown {
+    const declared = this.declaredStrings.get(`${entry.type}@${entry.version}`);
+    if (!declared) {
+      return entry.props;
+    }
+    const made = this.propsMade.get(entry);
+    if (made && made.plurals === plurals) {
+      return made.props;
+    }
+    const props = {
+      ...(typeof entry.props === "object" ? entry.props : {}),
+      t: buildStrings(declared, entry.strings, plurals),
+    };
+    this.propsMade.set(entry, { plurals, props });
+    return props;
   }
 }
 
@@ -159,7 +220,8 @@ export function plan<R>(
       options.onSkipped?.(entry, "unknown_island");
       continue;
     }
-    out.push({ key: entry.key, render: () => renderer(entry.props, entry) });
+    const props = registry.propsOf(entry, response.plurals);
+    out.push({ key: entry.key, render: () => renderer(props, entry, response.plurals) });
   }
   return out;
 }

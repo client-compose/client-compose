@@ -54,6 +54,8 @@ test("renders a screen in React Server Components", async () => {
   assert.match(html, /<h1>Ada<\/h1>/);
   // Client Component islands are server-rendered too, ready to hydrate.
   assert.match(html, /<button>count 1<\/button>/);
+  // A Client Component island's strings are built in the browser: functions can't be sent there.
+  assert.match(html, /<p>Hi Grace 2 posts<\/p>/);
   // A crashing island renders as nothing; the rest of the screen is unaffected, in order.
   assert.doesNotMatch(html, /loading/);
   assert.ok(html.indexOf("<h1>Ada</h1>") < html.indexOf("<button>"), "islands keep their order");

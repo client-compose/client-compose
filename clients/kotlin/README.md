@@ -90,6 +90,25 @@ when (val outcome = client.perform(RenameThingV1, RenameThingV1.Input(thingId = 
 }
 ```
 
+## Strings
+
+Every word comes from the composer (spec §4.7). Register an island whose manifest declares strings,
+and its renderer gets them as `t`, in the screen's language:
+
+```kotlin
+registry.register(RecipeListV1) { props, t, _ -> { Text("${t.heading}: ${t.recipeCount(props.total)}") } }
+```
+
+Fetch the app strings when the app starts, and keep them for the next launch:
+
+```kotlin
+val response = client.strings()
+val t = response.app(::AppStrings) // t.retry
+```
+
+`StringsResponse` is `@Serializable`, so it can be kept as it is. In tests,
+`FakeComposer().strings { FakeResponse.strings("en", mapOf("retry" to JsonPrimitive("Try again"))) }`.
+
 ## Transport
 
 `HttpUrlConnectionTransport` needs no dependencies. To use OkHttp (or Ktor), implement `Transport`

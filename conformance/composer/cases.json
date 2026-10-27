@@ -1,5 +1,5 @@
 {
-  "$comment": "Composer conformance cases (spec §8.1). The runner POSTs to {base}/screens/{path ?? request.screen} with a request built from `placements` and `capabilities`, merged with any `request` overrides; `rawBody` replaces the body entirely. Expected bodies are subset matches, except arrays, which must match in length and order.",
+  "$comment": "Composer conformance cases (spec §8.1). The runner POSTs to {base}/screens/{path ?? request.screen} with a request built from `placements` and `capabilities`, merged with any `request` overrides; `rawBody` replaces the body entirely. Expected bodies are subset matches, except arrays, which must match in length and order. Strings cases (spec §4.7) run against a composer whose catalog is conformance/composer/strings/.",
   "cases": [
     {
       "name": "picks highest mutually supported version",
@@ -987,6 +987,244 @@
           "error": {
             "code": "forbidden"
           }
+        }
+      }
+    },
+    {
+      "name": "an island's entry carries its strings, in the language nearest the client's",
+      "placements": [
+        {
+          "key": "header",
+          "type": "profile-header",
+          "versions": [
+            2
+          ],
+          "outcome": "ok"
+        }
+      ],
+      "capabilities": {
+        "profile-header": [
+          2
+        ]
+      },
+      "request": {
+        "client": {
+          "platform": "conformance",
+          "appVersion": "0.0.0",
+          "locale": "pl-PL"
+        }
+      },
+      "expect": {
+        "status": 200,
+        "body": {
+          "locale": "pl",
+          "plurals": {
+            "one": "i = 1 and v = 0",
+            "few": "v = 0 and i % 10 = 2..4 and i % 100 != 12..14",
+            "many": "v = 0 and i != 1 and i % 10 = 0..1 or v = 0 and i % 10 = 5..9 or v = 0 and i % 100 = 12..14"
+          },
+          "islands": [
+            {
+              "key": "header",
+              "status": "ok",
+              "strings": {
+                "follow": "Obserwuj",
+                "share": "Share"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "an island's strings are its version's",
+      "placements": [
+        {
+          "key": "header",
+          "type": "profile-header",
+          "versions": [
+            1,
+            2
+          ],
+          "outcome": "ok"
+        }
+      ],
+      "capabilities": {
+        "profile-header": [
+          1
+        ]
+      },
+      "request": {
+        "client": {
+          "platform": "conformance",
+          "appVersion": "0.0.0",
+          "locale": "pl"
+        }
+      },
+      "expect": {
+        "status": 200,
+        "body": {
+          "islands": [
+            {
+              "version": 1,
+              "strings": {
+                "follow": "Follow (v1)",
+                "share": "$absent"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a language the catalog doesn't have is answered in the default",
+      "placements": [
+        {
+          "key": "header",
+          "type": "profile-header",
+          "versions": [
+            2
+          ],
+          "outcome": "ok"
+        }
+      ],
+      "capabilities": {
+        "profile-header": [
+          2
+        ]
+      },
+      "request": {
+        "client": {
+          "platform": "conformance",
+          "appVersion": "0.0.0",
+          "locale": "xx-YY"
+        }
+      },
+      "expect": {
+        "status": 200,
+        "body": {
+          "locale": "en",
+          "plurals": {
+            "one": "i = 1 and v = 0",
+            "two": "$absent",
+            "few": "$absent",
+            "many": "$absent",
+            "zero": "$absent"
+          },
+          "islands": [
+            {
+              "strings": {
+                "follow": "Follow",
+                "share": "Share"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "without a locale, the screen is answered in the default",
+      "placements": [
+        {
+          "key": "header",
+          "type": "profile-header",
+          "versions": [
+            2
+          ],
+          "outcome": "ok"
+        }
+      ],
+      "capabilities": {
+        "profile-header": [
+          2
+        ]
+      },
+      "expect": {
+        "status": 200,
+        "body": {
+          "locale": "en",
+          "islands": [
+            {
+              "strings": {
+                "follow": "Follow"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "an island the catalog has no strings for has none",
+      "placements": [
+        {
+          "key": "follow",
+          "type": "follow-button",
+          "versions": [
+            1
+          ],
+          "outcome": "ok"
+        }
+      ],
+      "capabilities": {
+        "follow-button": [
+          1
+        ]
+      },
+      "request": {
+        "client": {
+          "platform": "conformance",
+          "appVersion": "0.0.0",
+          "locale": "pl"
+        }
+      },
+      "expect": {
+        "status": 200,
+        "body": {
+          "locale": "pl",
+          "islands": [
+            {
+              "key": "follow",
+              "status": "ok",
+              "strings": "$absent"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a failed island has no strings",
+      "placements": [
+        {
+          "key": "header",
+          "type": "profile-header",
+          "versions": [
+            2
+          ],
+          "outcome": "error"
+        }
+      ],
+      "capabilities": {
+        "profile-header": [
+          2
+        ]
+      },
+      "request": {
+        "client": {
+          "platform": "conformance",
+          "appVersion": "0.0.0",
+          "locale": "pl"
+        }
+      },
+      "expect": {
+        "status": 200,
+        "body": {
+          "islands": [
+            {
+              "key": "header",
+              "status": "error",
+              "strings": "$absent"
+            }
+          ]
         }
       }
     }
