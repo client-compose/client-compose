@@ -60,6 +60,8 @@ public struct IslandEntry: Decodable, Sendable {
     public let status: String
     public let props: JSONValue?
     public let error: IslandError?
+    /// The island's strings, in the screen's language (spec §4.7).
+    public let strings: [String: StringTemplate]?
 }
 
 public struct CacheHint: Decodable, Sendable {
@@ -80,6 +82,10 @@ public struct ScreenResponse: Decodable, Sendable {
     public let islands: [IslandEntry]
     public let meta: ScreenMeta?
     public let cache: CacheHint?
+    /// The language the composer answered in, when it has strings (spec §4.7).
+    public let locale: String?
+    /// That language's plural rules, for the islands' counted strings.
+    public let plurals: PluralRules?
 }
 
 /// Refers to screens: those with this id whose params include all of `params` (spec §5.3).

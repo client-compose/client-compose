@@ -25,7 +25,7 @@ public enum ScreenStream {
         for raw in lines.dropFirst() {
             guard let line = try? decoder.decode(Line.self, from: Data(raw)) else { continue }
             if line.kind == "end" {
-                return ScreenResponse(protocol: head.protocol, screen: head.screen, islands: islands, meta: head.meta, cache: head.cache)
+                return ScreenResponse(protocol: head.protocol, screen: head.screen, islands: islands, meta: head.meta, cache: head.cache, locale: head.locale, plurals: head.plurals)
             }
             guard line.kind == "island", let entry = line.island, entry.status != "pending",
                   let i = islands.firstIndex(where: { $0.key == entry.key && $0.status == "pending" }) else { continue }
@@ -34,9 +34,9 @@ public enum ScreenStream {
         let completed = islands.map { entry in
             entry.status == "pending"
                 ? IslandEntry(key: entry.key, type: entry.type, version: entry.version, status: "error", props: nil,
-                              error: IslandError(code: "incomplete", message: nil, retryable: true))
+                              error: IslandError(code: "incomplete", message: nil, retryable: true), strings: nil)
                 : entry
         }
-        return ScreenResponse(protocol: head.protocol, screen: head.screen, islands: completed, meta: head.meta, cache: head.cache)
+        return ScreenResponse(protocol: head.protocol, screen: head.screen, islands: completed, meta: head.meta, cache: head.cache, locale: head.locale, plurals: head.plurals)
     }
 }
