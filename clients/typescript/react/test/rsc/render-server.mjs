@@ -9,6 +9,8 @@ import { registry } from "./islands.mjs";
 const response = {
   protocol: 0,
   screen: "profile",
+  locale: "en",
+  plurals: { one: "i = 1 and v = 0" },
   islands: [
     {
       key: "header",
@@ -30,6 +32,14 @@ const response = {
       version: 1,
       status: "ok",
       props: { start: 1 },
+    },
+    {
+      key: "greeting",
+      type: "greeting",
+      version: 1,
+      status: "ok",
+      props: { name: "Grace" },
+      strings: { hello: "Hi {name}", posts: { "#one": "{count} post", "#*": "{count} posts" } },
     },
   ],
 };

@@ -4,6 +4,7 @@ import { createElement } from "react";
 
 import { ReactIslandRegistry } from "../../dist/index.js";
 import { Counter } from "./counter.mjs";
+import { Greeting } from "./greeting.mjs";
 
 /** An async Server Component island. */
 async function Header({ name }) {
@@ -21,4 +22,12 @@ export const registry = new ReactIslandRegistry()
   .registerComponent({ type: "counter", version: 1 }, Counter, {
     placeholder: () => createElement("p", { "aria-busy": true }, "counting…"),
   })
-  .registerComponent({ type: "broken", version: 1 }, Broken);
+  .registerComponent({ type: "broken", version: 1 }, Broken)
+  .registerComponent(
+    {
+      type: "greeting",
+      version: 1,
+      strings: { hello: ["name"], posts: ["count"] },
+    },
+    Greeting,
+  );

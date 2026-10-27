@@ -6,6 +6,7 @@
 //       screens: { profile: () => screen("profile", [island("header", ProfileHeaderV1, { name: "Ada" })]) },
 //       actions: { follow: () => actionOk(FollowUserV1, { followers: 8 }) },
 //       islands: { "profile/posts": (r) => islandResponse("profile", island("posts", PostsV1, …, "page:3")) },
+//       strings: () => stringsResponse("en", { retry: "Try again" }),
 //     });
 //     // pass gateway.fetch as the client's fetch, then assert on gateway.actionRequests()
 //
@@ -21,8 +22,10 @@ import {
   type IslandEntry,
   type IslandError,
   type PendingIsland,
+  type PluralRules,
   PROTOCOL_VERSION,
   type ScreenMeta,
+  type Strings,
 } from "@client-compose/protocol";
 
 /**
@@ -71,6 +74,11 @@ export interface RecordedActionRequest extends RecordedRequest {
   idempotencyKey: string | undefined;
 }
 
+/** A strings request (spec §4.7): the app strings, in the client's language. */
+export interface RecordedStringsRequest extends RecordedRequest {
+  client: ClientContext | undefined;
+}
+
 export interface FakeGatewayHandlers {
   /** By screen id. */
   screens?: Record<string, (request: RecordedScreenRequest) => FakeResponse>;
@@ -78,6 +86,8 @@ export interface FakeGatewayHandlers {
   actions?: Record<string, (request: RecordedActionRequest) => FakeResponse>;
   /** Island requests, by `"{screen}/{key}"`. */
   islands?: Record<string, (request: RecordedIslandRequest) => FakeResponse>;
+  /** The app strings (POST /strings). */
+  strings?: (request: RecordedStringsRequest) => FakeResponse;
   /** Anything else, e.g. uploads to storage: return undefined to leave a request to the others. */
   other?: (request: RecordedRequest) => FakeResponse | undefined;
 }
@@ -90,6 +100,7 @@ export interface FakeGateway {
   screenRequests(): RecordedScreenRequest[];
   islandRequests(): RecordedIslandRequest[];
   actionRequests(): RecordedActionRequest[];
+  stringsRequests(): RecordedStringsRequest[];
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -208,6 +219,14 @@ function asActionRequest(request: RecordedRequest): RecordedActionRequest | unde
   };
 }
 
+function asStringsRequest(request: RecordedRequest): RecordedStringsRequest | undefined {
+  const path = request.url.split("?")[0] ?? "";
+  if (!/\/strings\/?$/.test(path) || !isRecord(request.body)) {
+    return undefined;
+  }
+  return { ...request, client: clientContext(request.body.client) };
+}
+
 function respond(response: FakeResponse): Response {
   if (response.stream) {
     return new Response(response.stream(), {
@@ -253,6 +272,10 @@ export function createFakeGateway(handlers: FakeGatewayHandlers = {}): FakeGatew
     if (actionRequest && actionHandler) {
       return respond(actionHandler(actionRequest));
     }
+    const stringsRequest = asStringsRequest(request);
+    if (stringsRequest && handlers.strings) {
+      return respond(handlers.strings(stringsRequest));
+    }
     throw new Error(
       `fake gateway: no handler for ${request.method} ${request.url} ${JSON.stringify(request.body)}`,
     );
@@ -263,6 +286,7 @@ export function createFakeGateway(handlers: FakeGatewayHandlers = {}): FakeGatew
     screenRequests: () => requests.flatMap((r) => asScreenRequest(r) ?? []),
     islandRequests: () => requests.flatMap((r) => asIslandRequest(r) ?? []),
     actionRequests: () => requests.flatMap((r) => asActionRequest(r) ?? []),
+    stringsRequests: () => requests.flatMap((r) => asStringsRequest(r) ?? []),
   };
 }
 
@@ -289,16 +313,24 @@ export function installFakeGateway(handlers: FakeGatewayHandlers = {}): Installe
 
 // ---- Responses ----
 
+/** More of an island's entry: its next page's cursor (spec §4.5), and its strings (spec §4.7). */
+export interface IslandOptions {
+  next?: string;
+  strings?: Strings;
+}
+
 /**
  * An island in a screen or island response, typed by its generated descriptor. Give `next` for an
- * island with more pages (spec §4.5).
+ * island with more pages (spec §4.5), or `{ next, strings }`.
  */
-export function island<P>(
+export function island<P, S>(
   key: string,
-  descriptor: IslandDescriptor<P>,
+  descriptor: IslandDescriptor<P, S>,
   props: P,
-  next?: string,
+  more?: string | IslandOptions,
 ): IslandEntry<P> {
+  const { next, strings } =
+    typeof more === "string" ? { next: more, strings: undefined } : (more ?? {});
   return {
     key,
     type: descriptor.type,
@@ -306,7 +338,14 @@ export function island<P>(
     status: "ok",
     props,
     ...(next !== undefined && { next }),
+    ...(strings !== undefined && { strings }),
   };
+}
+
+/** The language a screen is in, and its plural rules (spec §4.7). */
+export interface ScreenLanguage {
+  locale: string;
+  plurals: PluralRules;
 }
 
 /** An island that failed on the composer (spec §3.4). */
@@ -329,6 +368,7 @@ export function screen(
   id: string,
   islands: IslandEntry<unknown>[],
   meta?: ScreenMeta,
+  language?: ScreenLanguage,
 ): FakeResponse {
   const head = {
     kind: "head",
@@ -336,6 +376,7 @@ export function screen(
     screen: id,
     islands,
     ...(meta && { meta }),
+    ...language,
   };
   return {
     status: 200,
@@ -376,6 +417,7 @@ export function streamedScreen(
   id: string,
   islands: (IslandEntry<unknown> | PendingIsland)[],
   meta?: ScreenMeta,
+  language?: ScreenLanguage,
 ): StreamedScreen {
   const encoder = new TextEncoder();
   const queued: string[] = [];
@@ -399,6 +441,7 @@ export function streamedScreen(
     screen: id,
     islands,
     ...(meta && { meta }),
+    ...language,
   });
   return {
     status: 200,
@@ -443,6 +486,23 @@ export function islandResponse(screen: string, entry: IslandEntry<unknown>): Fak
       protocol: PROTOCOL_VERSION,
       screen,
       island: entry,
+    },
+  };
+}
+
+/** The app strings in a language (spec §4.7), with its plural rules if its counted strings need them. */
+export function stringsResponse(
+  locale: string,
+  strings: Strings,
+  plurals: PluralRules = {},
+): FakeResponse {
+  return {
+    status: 200,
+    body: {
+      protocol: PROTOCOL_VERSION,
+      locale,
+      plurals,
+      strings,
     },
   };
 }

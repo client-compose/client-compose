@@ -9,6 +9,7 @@ import type {
   IslandEntry,
   IslandRequest,
   ScreenRef,
+  StringsResponse,
 } from "@client-compose/protocol";
 import type { ReactNode } from "react";
 
@@ -58,6 +59,11 @@ export interface ClientComposeConfig extends ScreenConfig {
    * with the island's entry; throw (e.g. `IslandFetchError`) for anything else.
    */
   loadIsland?: (request: IslandRequest) => Promise<IslandEntry>;
+  /**
+   * Fetch the app strings (`<AppStringsProvider>`) some other way than POSTing to
+   * `${baseUrl}/strings`, e.g. through your server (`viaProxy`).
+   */
+  loadStrings?: () => Promise<StringsResponse>;
   /** An action suggested a screen to show next (spec §5.3). Map it to your router. */
   onNavigate?: (ref: ScreenRef) => void;
   /**

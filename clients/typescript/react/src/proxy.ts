@@ -5,7 +5,12 @@
 //     const transport = viaProxy({ performAction, loadScreen, loadIsland });
 //     const config = { registry, baseUrl: "", client, ...transport };
 
-import { ActionFetchError, IslandFetchError, screenLines } from "@client-compose/client";
+import {
+  ActionFetchError,
+  IslandFetchError,
+  screenLines,
+  StringsFetchError,
+} from "@client-compose/client";
 import type { ProxyResult } from "@client-compose/client/proxy";
 import type {
   ActionRequest,
@@ -13,6 +18,7 @@ import type {
   IslandEntry,
   IslandRequest,
   ScreenResponse,
+  StringsResponse,
 } from "@client-compose/protocol";
 
 import type { ClientComposeConfig } from "./config.ts";
@@ -27,11 +33,13 @@ export interface ProxyFunctions {
    * island loads pages.
    */
   loadIsland?: (request: unknown) => Promise<ProxyResult<IslandEntry>>;
+  /** Calls the server's `proxy.loadStrings`, for `<AppStringsProvider>`. */
+  loadStrings?: () => Promise<ProxyResult<StringsResponse>>;
 }
 
 /** What a config needs to go through your server: spread it into the config. */
 export type ProxyTransport = Required<Pick<ClientComposeConfig, "fetch" | "performAction">> &
-  Pick<ClientComposeConfig, "loadIsland">;
+  Pick<ClientComposeConfig, "loadIsland" | "loadStrings">;
 
 function parseBody(body: BodyInit | null | undefined): unknown {
   if (typeof body !== "string") {
@@ -46,8 +54,8 @@ function parseBody(body: BodyInit | null | undefined): unknown {
 }
 
 /**
- * `fetch`, `performAction` and (given `loadIsland`) `loadIsland` for `ClientComposeConfig`, going
- * through your server.
+ * `fetch`, `performAction` and (given them) `loadIsland` and `loadStrings` for
+ * `ClientComposeConfig`, going through your server.
  */
 export function viaProxy(proxy: ProxyFunctions): ProxyTransport {
   async function proxiedFetch(_input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
@@ -83,9 +91,22 @@ export function viaProxy(proxy: ProxyFunctions): ProxyTransport {
     return result.response;
   }
 
+  const serverLoadStrings = proxy.loadStrings;
+  async function loadStrings(): Promise<StringsResponse> {
+    if (!serverLoadStrings) {
+      throw new Error("viaProxy: no loadStrings given, so the app strings can't load");
+    }
+    const result = await serverLoadStrings();
+    if (!result.ok) {
+      throw new StringsFetchError(result.status, result.body);
+    }
+    return result.response;
+  }
+
   return {
     fetch: proxiedFetch,
     performAction,
     ...(serverLoadIsland && { loadIsland }),
+    ...(serverLoadStrings && { loadStrings }),
   };
 }

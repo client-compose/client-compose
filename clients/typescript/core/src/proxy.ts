@@ -23,6 +23,7 @@ import {
   PROTOCOL_VERSION,
   type ScreenRequest,
   type ScreenResponse,
+  type StringsResponse,
 } from "@client-compose/protocol";
 
 import {
@@ -33,6 +34,7 @@ import {
   IslandFetchError,
   ScreenFetchError,
 } from "./index.ts";
+import { fetchStrings, StringsFetchError } from "./strings.ts";
 
 /** A screen request from the browser: the server sets the client context. */
 export type ProxiedScreenRequest = Omit<ScreenRequest, "client">;
@@ -76,6 +78,8 @@ export interface ComposerProxy {
    * server's context and headers. Resolves with the island's entry.
    */
   loadIsland(body: unknown): Promise<ProxyResult<IslandEntry>>;
+  /** Loads the app strings (spec §4.7) in the server's client context's language. */
+  loadStrings(): Promise<ProxyResult<StringsResponse>>;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -221,9 +225,33 @@ export function createComposerProxy(options: ComposerProxyOptions): ComposerProx
     }
   }
 
+  async function loadStrings(): Promise<ProxyResult<StringsResponse>> {
+    try {
+      return {
+        ok: true,
+        response: await fetchStrings(
+          options.baseUrl,
+          await options.client(),
+          await init(),
+          options.fetch,
+        ),
+      };
+    } catch (error) {
+      if (error instanceof StringsFetchError) {
+        return {
+          ok: false,
+          status: error.status,
+          body: error.body,
+        };
+      }
+      throw error;
+    }
+  }
+
   return {
     performAction,
     loadScreen,
     loadIsland,
+    loadStrings,
   };
 }

@@ -3,6 +3,7 @@
 // become the typed `t` its renderer receives.
 
 import {
+  type AppStringsDescriptor,
   type ClientContext,
   type PluralRules,
   PROTOCOL_VERSION,
@@ -115,6 +116,11 @@ export function buildStrings<S>(
 }
 
 // ---- App strings ----
+
+/** The app strings, typed by their generated descriptor: `appStrings(AppStrings, response).retry`. */
+export function appStrings<S>(descriptor: AppStringsDescriptor<S>, response: StringsResponse): S {
+  return buildStrings<S>(descriptor.strings, response.strings, response.plurals);
+}
 
 /** Thrown for a strings request the composer didn't answer with 200 and its strings. */
 export class StringsFetchError extends Error {
