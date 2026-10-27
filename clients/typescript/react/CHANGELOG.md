@@ -1,5 +1,12 @@
 # @client-compose/react
 
+## 0.11.2
+
+### Patch Changes
+
+- [#45](https://github.com/client-compose/client-compose/pull/45) [`91eed53`](https://github.com/client-compose/client-compose/commit/91eed53fd05734849e8b7c5a12e454fecb535709) Thanks [@LewisYearsley](https://github.com/LewisYearsley)! - Re-export `ScreenStringsDescriptor`, so codegen output with screen strings and
+  `"protocolImport": "@client-compose/react"` compiles.
+
 ## 0.11.1
 
 ### Patch Changes
