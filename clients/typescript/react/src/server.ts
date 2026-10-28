@@ -17,11 +17,19 @@ import { streamScreen } from "./load.ts";
 import { IslandScope } from "./pages.ts";
 import { scopeOf } from "./scope.ts";
 
+export { type ServerComposer, serverComposer, type ServerComposerOptions } from "./composer.ts";
 export type { ErrorEntry, ScreenConfig } from "./config.ts";
 export { loadScreen, streamScreen } from "./load.ts";
 export { ReactIslandRegistry } from "./registry.ts";
+export { richText } from "./rich.ts";
 // Re-exported so React apps (including codegen output) only need this one package.
-export { appStrings, fetchStrings, type ScreenStream } from "@client-compose/client";
+export {
+  appStrings,
+  fetchStrings,
+  type IslandProps,
+  preferredLocale,
+  type ScreenStream,
+} from "@client-compose/client";
 export type {
   AppStringsDescriptor,
   IslandDescriptor,

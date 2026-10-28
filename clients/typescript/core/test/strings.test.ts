@@ -5,7 +5,16 @@ import { test } from "node:test";
 import { pluralCases, pluralRules, stringCases } from "@client-compose/conformance";
 import type { IslandDescriptor, ScreenResponse } from "@client-compose/protocol";
 
-import { buildStrings, formatString, IslandRegistry, plan, pluralCategory } from "../src/index.ts";
+import {
+  buildStrings,
+  formatString,
+  type IslandProps,
+  IslandRegistry,
+  plan,
+  pluralCategory,
+  preferredLocale,
+} from "../src/index.ts";
+import { catalogStrings } from "../src/testing.ts";
 
 const rules = pluralRules();
 
@@ -89,4 +98,65 @@ test("plan gives an island that declares strings its t, and leaves others' props
     plan(registry, response).map((island) => island.render()),
     ["Przepisy: 3 przepisy", '{"name":"Ada"}'],
   );
+});
+
+test("the language a person most wants, from a device's tags or an Accept-Language header", () => {
+  assert.equal(preferredLocale(["pl-PL", "en-GB"]), "pl-PL");
+  assert.equal(preferredLocale([null, "uk"]), "uk");
+  assert.equal(preferredLocale("en;q=0.5, pl-PL, de;q=0.9"), "pl-PL");
+  assert.equal(preferredLocale("fr;q=0, *, de;q=0.1"), "de");
+  assert.equal(preferredLocale(""), "en");
+  assert.equal(preferredLocale(undefined, "de"), "de");
+});
+
+interface CardWords {
+  heading: (values: { name: string }) => string;
+}
+const CardV1: IslandDescriptor<{ name: string }, CardWords> = {
+  type: "card",
+  version: 1,
+  strings: { heading: ["name"] },
+};
+const PlainV1: IslandDescriptor<{ name: string }> = { type: "plain", version: 1 };
+
+test("an island's props, from its descriptor: with t only if it declares strings", () => {
+  const card: IslandProps<typeof CardV1> = {
+    name: "Ada",
+    t: { heading: ({ name }) => name },
+  };
+  const plain: IslandProps<typeof PlainV1> = { name: "Ada" };
+  // @ts-expect-error: an island with strings gets them as t.
+  const missing: IslandProps<typeof CardV1> = { name: "Ada" };
+  assert.equal(card.t.heading(plain), "Ada");
+  assert.equal(missing.name, "Ada");
+});
+
+test("a catalog's words, as the composer would send them, for tests", () => {
+  const AppStrings = { strings: { posts: ["count"] } };
+  const english = catalogStrings({
+    app: { posts: { "#1": "{count} post", "#*": "{count} posts" } },
+    islands: { "card@1": { heading: "Hello {name}" } },
+  });
+  assert.equal(english.t(CardV1).heading({ name: "Ada" }), "Hello Ada");
+  assert.equal(
+    english.app<{ posts: (v: { count: number }) => string }>(AppStrings).posts({ count: 1 }),
+    "1 post",
+  );
+  assert.equal(english.appStrings.locale, "en");
+  assert.deepEqual(english.island("card", CardV1, { name: "Ada" }, "page:2"), {
+    key: "card",
+    type: "card",
+    version: 1,
+    status: "ok",
+    props: { name: "Ada" },
+    next: "page:2",
+    strings: { heading: "Hello {name}" },
+  });
+  assert.deepEqual(english.island("plain", PlainV1, { name: "Ada" }), {
+    key: "plain",
+    type: "plain",
+    version: 1,
+    status: "ok",
+    props: { name: "Ada" },
+  });
 });

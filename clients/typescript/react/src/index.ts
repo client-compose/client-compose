@@ -25,17 +25,21 @@ export { type PagesState, type PagesStatus, usePages } from "./pages.ts";
 export { ClientComposeProvider } from "./provider.ts";
 export { type ProxyFunctions, type ProxyTransport, viaProxy } from "./proxy.ts";
 export { declaredError, isUnexpected } from "./results.ts";
+export { richText } from "./rich.ts";
 export {
   AppStringsProvider,
   type AppStringsProviderProps,
   type StringsCache,
   useAppStrings,
+  useLocale,
 } from "./strings.ts";
 export {
   ActionFetchError,
   appStrings,
   formatString,
   IslandFetchError,
+  type IslandProps,
+  preferredLocale,
   type ScreenStream,
   StringsFetchError,
   type WithStrings,
