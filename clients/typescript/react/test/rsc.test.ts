@@ -69,6 +69,16 @@ test("renders a response passed in instead of fetching", async () => {
   assert.match(html, /<button>count 1<\/button>/);
 });
 
+test("serverComposer asks the composer once per request for the same screen, and the app strings", async () => {
+  execFileSync("pnpm", ["exec", "tsc", "-b", here("../tsconfig.build.json")], { stdio: "inherit" });
+  const { html } = await renderRsc("composer");
+  // The same screen, its params in another order, and the strings, each fetched once, in the
+  // language the request's client asks for.
+  assert.match(html, /<h2>Witaj<\/h2>/);
+  assert.match(html, /<p>screens 1 strings 1 in pl<\/p>/);
+  assert.match(html, /<h1>Ada<\/h1>/);
+});
+
 test("streams an island pending in the screen's head: its placeholder first, then the island", async () => {
   execFileSync("pnpm", ["exec", "tsc", "-b", here("../tsconfig.build.json")], { stdio: "inherit" });
   const payload = await run(process.execPath, [

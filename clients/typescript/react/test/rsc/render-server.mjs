@@ -3,7 +3,7 @@
 import { createElement } from "react";
 import { renderToPipeableStream } from "react-server-dom-webpack/server";
 
-import { ComposedScreen } from "../../dist/server.js";
+import { ComposedScreen, serverComposer } from "../../dist/server.js";
 import { registry } from "./islands.mjs";
 
 const response = {
@@ -88,6 +88,11 @@ function streamed() {
   });
 }
 
+// "composer": the page asks serverComposer for the same things more than once.
+const composed = process.argv[2] === "composer";
+const requests = { screens: 0, strings: 0 };
+const locales = [];
+
 const config = {
   registry,
   baseUrl: "https://composer.test",
@@ -96,8 +101,49 @@ const config = {
     ? async () => {
         throw new Error("fetched although a response was passed in");
       }
-    : async () => new Response(streamed(), { headers: { "content-type": "application/jsonl" } }),
+    : async (url, init) => {
+        locales.push(JSON.parse(String(init.body)).client.locale);
+        if (String(url).endsWith("/strings")) {
+          requests.strings++;
+          return Response.json({
+            protocol: 0,
+            locale: "pl",
+            plurals: {},
+            strings: { title: "Witaj" },
+          });
+        }
+        requests.screens++;
+        return new Response(streamed(), { headers: { "content-type": "application/jsonl" } });
+      },
 };
+
+const composer = serverComposer(config, {
+  client: async () => ({ ...config.client, locale: "pl" }),
+});
+const AppStrings = { strings: { title: [] } };
+
+/** A page that asks for the screen and the app strings twice each, its params in either order. */
+async function Page() {
+  const stream = composer.openScreen("profile", { a: "1", b: "2" });
+  await composer.openScreen("profile", { b: "2", a: "1" });
+  await composer.appStrings();
+  const strings = await composer.strings(AppStrings);
+  return createElement(
+    "div",
+    null,
+    createElement("h2", null, strings.title),
+    createElement(
+      "p",
+      null,
+      `screens ${requests.screens} strings ${requests.strings} in ${[...new Set(locales)].join()}`,
+    ),
+    createElement(ComposedScreen, {
+      config,
+      screen: "profile",
+      stream,
+    }),
+  );
+}
 
 // Client references are "<file url>#<export>"; this test loads modules by URL, so map them as-is.
 const clientManifest = new Proxy(
@@ -117,11 +163,13 @@ const clientManifest = new Proxy(
 const element = createElement(
   "main",
   null,
-  createElement(ComposedScreen, {
-    config,
-    screen: "profile",
-    fallback: "loading",
-    response: preloaded ? Promise.resolve(response) : undefined,
-  }),
+  composed
+    ? createElement(Page)
+    : createElement(ComposedScreen, {
+        config,
+        screen: "profile",
+        fallback: "loading",
+        response: preloaded ? Promise.resolve(response) : undefined,
+      }),
 );
 renderToPipeableStream(element, clientManifest, { onError: () => {} }).pipe(process.stdout);

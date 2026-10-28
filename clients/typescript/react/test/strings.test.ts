@@ -20,8 +20,10 @@ import {
   ClientComposeProvider,
   ComposedScreen,
   ReactIslandRegistry,
+  richText,
   type StringsCache,
   useAppStrings,
+  useLocale,
   viaProxy,
 } from "../src/index.ts";
 import {
@@ -327,5 +329,40 @@ test("through a proxy, strings come from the server's loadStrings", async () => 
   await settle();
   assert.equal(view.html(), "<p>Try again · 2 of 3 uploaded</p>");
   assert.equal(view.gateway.stringsRequests().length, 0);
+  await view.unmount();
+});
+
+test("richText puts nodes into a sentence, keeping it whole", async () => {
+  const view = await mount(
+    createElement(
+      "p",
+      null,
+      richText("New here? {link}, or {link} later. {unknown}", {
+        link: createElement("a", { href: "/sign-up" }, "Sign up"),
+      }),
+    ),
+  );
+  assert.equal(
+    view.html(),
+    '<p>New here? <a href="/sign-up">Sign up</a>, or <a href="/sign-up">Sign up</a> later. {unknown}</p>',
+  );
+  await view.unmount();
+});
+
+function Locale() {
+  return createElement("p", null, useLocale());
+}
+
+test("useLocale is the language the client asks for, to format dates and numbers in", async () => {
+  const { config } = createTestConfig({
+    registry,
+    client: {
+      platform: "web",
+      appVersion: "test",
+      locale: "pl-PL",
+    },
+  });
+  const view = await mount(createElement(ClientComposeProvider, { config }, createElement(Locale)));
+  assert.equal(view.html(), "<p>pl-PL</p>");
   await view.unmount();
 });

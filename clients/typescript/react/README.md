@@ -199,6 +199,29 @@ export default async function Page({ params }: { params: Promise<{ userId: strin
   ```
 
   Or pass a whole `response` from `loadScreen`, which renders without streaming.
+- `serverComposer(config, { client })` asks the composer for what a request needs at most once,
+  however many components ask (React's `cache`): `openScreen(screen, params)` for the page and its
+  metadata, `appStrings()` to pass on to `<AppStringsProvider initial>`, and `strings(AppStrings)`
+  for a Server Component's own words. `client` works out who's asking for each request, such as
+  its language from a cookie or Accept-Language (`preferredLocale(header)`). Make it once, in a
+  module of your own:
+
+  ```tsx
+  export const composer = serverComposer(config, {
+    client: async () => ({ ...config.client, locale: preferredLocale((await headers()).get("accept-language")) }),
+  });
+
+  export async function generateMetadata({ params }) {
+    const { head } = await composer.openScreen("recipe", await params);
+    return { title: head.meta?.title };
+  }
+
+  export default async function Page({ params }) {
+    const p = await params;
+    return <ComposedScreen config={config} screen="recipe" params={p} stream={composer.openScreen("recipe", p)} />;
+  }
+  ```
+
 - `onRenderError` in this config sees errors thrown while creating an island's element on the
   server. Errors thrown inside a Server Component island are re-thrown in the browser and caught
   there; to report those, put a `<ClientComposeProvider>` with `onRenderError` above the page.
@@ -209,11 +232,23 @@ Every word an app shows comes from the composer (spec §4.7), so copy changes, a
 ship, without a release. An island whose manifest declares strings gets them as `t`:
 
 ```tsx
-function RecipeList(props: RecipeListV1 & { t: RecipeListV1Strings }) {
+function RecipeList(props: IslandProps<typeof RecipeListV1>) {
   return <h2>{props.t.heading}: {props.t.recipeCount({ count: props.total })}</h2>;
 }
 registry.registerComponent(RecipeListV1, RecipeList);
 ```
+
+`IslandProps<typeof RecipeListV1>` is the island's props, with `t` when it declares strings.
+
+A sentence with a link in it stays whole for translators: fill the string's params with their own
+placeholders, and `richText` puts the nodes in (it has no hooks, so Server Components can use it):
+
+```tsx
+richText(t.newHere({ link: "{link}" }), { link: <a href="/sign-up">{t.signUp}</a> })
+```
+
+`useLocale()` is the language the client asks for (`config.client.locale`), for what the app
+formats itself: `new Intl.DateTimeFormat(useLocale())`.
 
 `t` is made of functions, which can't be sent from a Server Component to a Client Component, so a
 Client Component island rendered by `@client-compose/react/server` gets its `t` built in the
@@ -419,6 +454,12 @@ expect(navigations).toEqual([{ screen: "feed" }]);
   const { config, gateway } = createTestConfig({ registry, handlers: paged.handlers });
   render(<ClientComposeProvider config={config}>{paged.element}</ClientComposeProvider>);
   ```
+
+To test with the words people will see, `catalogStrings(catalog)` reads a catalog file (codegen's
+`catalog`, e.g. `catalog/en.json`) as the composer would send it: `english.t(RecipeListV1)` for an
+island's `t`, `english.island(key, RecipeListV1, props)` for an island that carries its strings,
+`english.appStrings` for `<AppStringsProvider initial>`, and `english.stringsResponse` for the fake
+composer's `strings` handler. It's English, with English plural rules, unless you pass a language.
 
 The fake composer itself (no React) is `@client-compose/client/testing`.
 

@@ -15,6 +15,8 @@
 import {
   type ActionDescriptor,
   type ActionEffects,
+  type AppStringsDescriptor,
+  buildStrings,
   type Capabilities,
   type ClientContext,
   type DeclaredError,
@@ -26,6 +28,7 @@ import {
   PROTOCOL_VERSION,
   type ScreenMeta,
   type Strings,
+  type StringsResponse,
 } from "@client-compose/protocol";
 
 /**
@@ -557,4 +560,68 @@ export function actionError<I, R, E extends DeclaredError>(
 /** An action the composer didn't perform, e.g. `actionFailure(401, "unauthenticated")` (spec §5.4). */
 export function actionFailure(status: number, code: string): FakeResponse {
   return { status, body: { protocol: PROTOCOL_VERSION, error: { code } } };
+}
+
+// ---- A catalog's words ----
+
+/**
+ * A language's strings as a composer keeps them (codegen's `catalog`, e.g. `catalog/en.json`): the
+ * app strings, and each island's by `"{type}@{version}"`. Anything else in it is ignored here.
+ */
+export interface Catalog {
+  app?: Strings;
+  islands?: Record<string, Strings>;
+}
+
+/** A catalog's words, as a client gets them from the composer: for tests that read real copy. */
+export interface CatalogStrings {
+  /** An island's strings, as its component gets them: `<RecipeList t={english.t(RecipeListV1)} …>`. */
+  t<P, S>(descriptor: IslandDescriptor<P, S>): S;
+  /** The app strings, typed by their generated descriptor: `english.app(AppStrings).retry`. */
+  app<S>(descriptor: AppStringsDescriptor<S>): S;
+  /** The app strings as the composer answers `/strings`, e.g. for `<AppStringsProvider initial>`. */
+  appStrings: StringsResponse;
+  /** The fake composer's `strings` answer. */
+  stringsResponse(): FakeResponse;
+  /** An island in a screen or island response, with its strings, as the composer sends it. */
+  island<P, S>(
+    key: string,
+    descriptor: IslandDescriptor<P, S>,
+    props: P,
+    next?: string,
+  ): IslandEntry<P>;
+}
+
+/** English's plural rules: one for 1, other for everything else. */
+const english: ScreenLanguage = { locale: "en", plurals: { one: "i = 1 and v = 0" } };
+
+/**
+ * A catalog's words, for tests: islands' `t`, the app strings, and islands that carry their strings,
+ * as the composer would send them. Its language is English unless you say (with its plural rules).
+ *
+ *     import catalog from "../catalog/en.json" with { type: "json" };
+ *     const english = catalogStrings(catalog);
+ *     render(<RecipeList t={english.t(RecipeListV1)} {...props} />);
+ */
+export function catalogStrings(
+  catalog: Catalog,
+  language: ScreenLanguage = english,
+): CatalogStrings {
+  const islandStrings = (descriptor: IslandDescriptor<unknown, unknown>) =>
+    catalog.islands?.[`${descriptor.type}@${descriptor.version}`];
+  const appStrings: StringsResponse = {
+    protocol: PROTOCOL_VERSION,
+    locale: language.locale,
+    plurals: language.plurals,
+    strings: catalog.app ?? {},
+  };
+  return {
+    t: (descriptor) =>
+      buildStrings(descriptor.strings ?? {}, islandStrings(descriptor), language.plurals),
+    app: (descriptor) => buildStrings(descriptor.strings, appStrings.strings, language.plurals),
+    appStrings,
+    stringsResponse: () => stringsResponse(language.locale, appStrings.strings, language.plurals),
+    island: (key, descriptor, props, next) =>
+      island(key, descriptor, props, { next, strings: islandStrings(descriptor) }),
+  };
 }

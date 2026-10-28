@@ -22,6 +22,7 @@ import {
 
 import { buildStrings } from "./strings.ts";
 
+export { preferredLocale } from "./locale.ts";
 export {
   appStrings,
   buildStrings,
@@ -40,6 +41,13 @@ type ErrorEntry = IslandEntry & { status: "error" };
  * descriptor declares any.
  */
 export type WithStrings<P, S> = P & (unknown extends S ? unknown : { t: S });
+
+/**
+ * The props an island's component gets, from its generated descriptor: its props, and its strings
+ * as `t` if it declares any. `function ProfileHeader(props: IslandProps<typeof ProfileHeaderV1>)`.
+ */
+export type IslandProps<D> =
+  D extends IslandDescriptor<infer P, infer S> ? WithStrings<P, S> : never;
 
 /**
  * Renders an island: its props (with `t`, if it declares strings), its entry as the composer sent

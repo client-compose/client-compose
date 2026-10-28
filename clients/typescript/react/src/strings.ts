@@ -140,6 +140,14 @@ export function useAppStrings<S>(descriptor: AppStringsDescriptor<S>): S {
   return useMemo(() => appStrings(descriptor, response), [descriptor, response]);
 }
 
+/**
+ * The language the client asks the composer for (`config.client.locale`), for what the app formats
+ * itself, such as dates and numbers: `new Intl.DateTimeFormat(useLocale())`.
+ */
+export function useLocale(): string | undefined {
+  return useClientCompose().config.client.locale;
+}
+
 // ---- Islands' strings, built in the browser ----
 
 export interface IslandWithStringsProps {

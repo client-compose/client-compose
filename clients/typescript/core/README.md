@@ -116,9 +116,13 @@ const response = await fetchStrings(baseUrl, client);
 const t = appStrings(AppStrings, response); // t.retry, t.uploaded({ count, total })
 ```
 
-`formatString(template, values, plurals)` and `pluralCategory(plurals, count)` are there for
-anything else. In tests, the fake composer answers `strings: () => stringsResponse("en", { … })`,
-and `island(key, Descriptor, props, { strings })` gives an island its strings.
+Send the person's language as `client.locale`; `preferredLocale` picks it from a device's tags or
+an Accept-Language header (`preferredLocale("pl-PL,pl;q=0.9")` is `"pl-PL"`), and the composer
+answers in the nearest language it has. `formatString(template, values, plurals)` and
+`pluralCategory(plurals, count)` are there for anything else. In tests, the fake composer answers `strings: () => stringsResponse("en", { … })`,
+and `island(key, Descriptor, props, { strings })` gives an island its strings. `catalogStrings(catalog)`
+reads a catalog file (codegen's `catalog`) as the composer would send it, for tests that read the
+real words: `t(Descriptor)`, `app(AppStrings)`, `island(…)` with its strings, and `stringsResponse()`.
 
 ## Testing
 
