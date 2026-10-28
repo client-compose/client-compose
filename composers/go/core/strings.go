@@ -258,8 +258,13 @@ func (t StringsTable) Format(key string, values map[string]string) string {
 // CreatorScreenStringsFor(r).Title(name). Without a catalog, every string is empty.
 func (r Request) ScreenStrings(screen string) StringsTable { return r.words.table(screen) }
 
-// ScreenStringsSource is what generated screen strings types read from: a Request, or an action's
-// Call.
+// ScreenStrings returns a screen's own strings in this language, for words the composer sends
+// outside any request, such as an email or a notification:
+// CreatorScreenStringsFor(config.For(locale)).Title(name).
+func (l LocaleStrings) ScreenStrings(screen string) StringsTable { return l.table(screen) }
+
+// ScreenStringsSource is what generated screen strings types read from: a Request, an action's
+// Call, or a language's strings (StringsConfig.For) outside any request.
 type ScreenStringsSource interface {
 	ScreenStrings(screen string) StringsTable
 }

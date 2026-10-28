@@ -209,4 +209,9 @@ test("a screen reads its own strings, typed by their descriptor", async () => {
   assert.deepEqual(polish.head?.meta, { title: "Liczby o Ada", description: "3 numbers" });
   const without = await withMeta().screen("numbers");
   assert.equal(without.head?.meta, undefined);
+
+  // The same words outside any request, e.g. for an email.
+  const outside = stringsFor({ catalog }, "pl-PL").strings(NumbersScreenStrings);
+  assert.equal(outside.title({ name: "Ada" }), "Liczby o Ada");
+  assert.equal(outside.description({ count: 1 }), "One number");
 });

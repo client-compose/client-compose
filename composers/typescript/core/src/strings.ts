@@ -44,6 +44,12 @@ export interface LocaleStrings {
   app(): Strings;
   /** A screen's own strings, each from the nearest language that has it. */
   screen(id: string): Strings | undefined;
+  /**
+   * A screen's own strings, typed by their generated descriptor, for words the composer sends
+   * outside any request, such as an email or a notification:
+   * `stringsFor(config, locale).strings(InviteScreenStrings).subject({ name })`.
+   */
+  strings<S>(descriptor: ScreenStringsDescriptor<S>): S;
 }
 
 /** A catalog from a directory of `<locale>.json` files. */
@@ -101,12 +107,15 @@ export function stringsFor(config: StringsConfig, locale: string | undefined): L
     // Nearest last, so its words win.
     return Object.assign({}, ...found.reverse());
   };
+  const plurals = rulesFor(answered);
+  const screen = (id: string) => merge((file) => file.screens?.[id]);
   return {
     locale: answered,
-    plurals: rulesFor(answered),
+    plurals,
     island: (type, version) => merge((file) => file.islands?.[`${type}@${version}`]),
     app: () => merge((file) => file.app) ?? {},
-    screen: (id) => merge((file) => file.screens?.[id]),
+    screen,
+    strings: (descriptor) => buildStrings(descriptor.strings, screen(descriptor.screen), plurals),
   };
 }
 
