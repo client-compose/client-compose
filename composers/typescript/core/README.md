@@ -222,7 +222,9 @@ manifest, in the catalog under `screens`, and read with the generated descriptor
 meta: (lc) => ({ title: lc.strings(CreatorScreenStrings).title({ creator: name }) }),
 ```
 
-Actions whose results carry words read them the same way: `ac.strings(SearchScreenStrings)`.
+Actions whose results carry words read them the same way: `ac.strings(SearchScreenStrings)`. Words
+sent outside any request, such as an email or a notification, read them from a language's strings:
+`stringsFor(config.strings, locale).strings(InviteScreenStrings)`.
 
 In tests, `app.strings({ locale: "pl" })` fetches the app strings, and an island's entry has its
 `strings`.
