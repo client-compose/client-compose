@@ -1,5 +1,13 @@
 # @client-compose/composer
 
+## 0.13.0
+
+### Minor Changes
+
+- [#51](https://github.com/client-compose/client-compose/pull/51) [`f9db680`](https://github.com/client-compose/client-compose/commit/f9db680e2e5d9df2030f00f65da6674fc412280d) Thanks [@LewisYearsley](https://github.com/LewisYearsley)! - Screen strings outside a request: `stringsFor(config, locale).strings(InviteScreenStrings)` reads a
+  screen's strings, typed by their generated descriptor, for words a composer sends outside any
+  request, such as an email or a notification.
+
 ## 0.12.0
 
 ### Minor Changes
