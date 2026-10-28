@@ -1,6 +1,6 @@
 {
   "name": "@client-compose/fastify",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Fastify adapter for the Client Compose composer.",
   "keywords": [
     "client-compose",
