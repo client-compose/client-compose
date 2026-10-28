@@ -248,6 +248,19 @@ func TestAScreenReadsItsOwnStrings(t *testing.T) {
 	}
 }
 
+func TestScreenStringsOutsideARequest(t *testing.T) {
+	config := cc.StringsConfig{Catalog: catalog(t)}
+	var source cc.ScreenStringsSource = config.For("pl-PL")
+	words := source.ScreenStrings("numbers")
+	// Polish has the title; its description falls back to English's.
+	if title := words.Format("title", map[string]string{"name": "Ada"}); title != "Liczby o Ada" {
+		t.Fatalf("title: %q", title)
+	}
+	if description := words.Format("description", map[string]string{"count": "3"}); description != "3 numbers" {
+		t.Fatalf("description: %q", description)
+	}
+}
+
 func readJSON(t *testing.T, path string, into any) {
 	t.Helper()
 	raw, err := os.ReadFile(path)
