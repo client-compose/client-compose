@@ -6,7 +6,11 @@ import {
   type ActionRequest,
   type ClientContext,
   type DeclaredError,
+  type EntityChange,
+  type EntityDescriptor,
+  type IslandUpdate,
   PROTOCOL_VERSION,
+  type ScreenRef,
   type ScreenStringsDescriptor,
 } from "@client-compose/protocol";
 
@@ -44,9 +48,69 @@ export interface ActionContext<Ctx> extends LoadContext {
   strings: <S>(descriptor: ScreenStringsDescriptor<S>) => S;
 }
 
+/** An island on the screen with exactly these params (spec §5.3), whose content an action changed. */
+export interface IslandRef {
+  screen: string;
+  params?: Record<string, string>;
+  key: string;
+}
+
+/**
+ * What an action changed (spec §5.3), as narrowly as it can say: entities' properties, then
+ * islands' content, then whole screens.
+ */
+export interface Effects {
+  /**
+   * Entities the action changed: clients apply them to every island holding them, and nothing is
+   * resolved again. Build them with `changed` and `deleted`.
+   */
+  changes?: EntityChange[];
+  /**
+   * Islands whose content changed beyond their entities, such as a new item in a list. The
+   * composer resolves each again and sends its entry, or invalidates its screen if the island isn't
+   * on it any more, or fails.
+   */
+  update?: IslandRef[];
+  /** Screens whose layout may have changed. Clients reload the ones on show. */
+  invalidate?: ScreenRef[];
+  /** A screen to show next. Clients map it to their own routes, and may ignore it. */
+  navigate?: ScreenRef;
+}
+
+/** An entity's properties an action changed: `changed(TodoEntity, "3", { done: true })`. */
+export function changed<Properties extends object>(
+  entity: EntityDescriptor<Properties>,
+  id: string,
+  set: Properties,
+): EntityChange {
+  return {
+    entity: entity.entity,
+    id,
+    set: Object.fromEntries(Object.entries(set)),
+  };
+}
+
+/** An entity an action deleted: clients remove it from the lists that hold it. */
+export function deleted<Properties>(
+  entity: EntityDescriptor<Properties>,
+  id: string,
+): EntityChange {
+  return {
+    entity: entity.entity,
+    id,
+    delete: true,
+  };
+}
+
+/** The islands an action named in `update`, resolved (spec §5.3), and the screens to reload instead. */
+export interface ResolvedUpdates {
+  update: IslandUpdate[];
+  invalidate: ScreenRef[];
+}
+
 /** What an action returns: a result (and optionally its effects), or one of its declared errors. */
 export type ActionOutcome<R, E extends DeclaredError> =
-  { result: R; effects?: ActionEffects } | { error: E };
+  { result: R; effects?: Effects } | { error: E };
 
 /** One action version and how to perform it. Build one with `action`. */
 export interface Action<Ctx, I = unknown, R = unknown, E extends DeclaredError = DeclaredError> {
@@ -107,7 +171,8 @@ export async function performAction<Ctx>(
   req: ActionRequest,
   ctx: Ctx,
   report: (failure: Failure) => void,
-  words?: LocaleStrings,
+  words: LocaleStrings | undefined,
+  resolveUpdates: (refs: IslandRef[]) => Promise<ResolvedUpdates>,
 ): Promise<PerformResult> {
   const { descriptor } = handler;
   const reportFailure = (error: unknown) =>
@@ -167,8 +232,9 @@ export async function performAction<Ctx>(
         },
       };
     }
-    const effects = outcome.effects;
-    const hasEffects = Boolean(effects?.invalidate?.length || effects?.navigate);
+    const effects = await sentEffects(outcome.effects ?? {}, resolveUpdates);
+    const hasEffects = Object.keys(effects).length > 0;
+
     return {
       status: 200,
       body: {
@@ -176,7 +242,7 @@ export async function performAction<Ctx>(
         status: "ok",
         // Results are objects: the manifest's result schema says so (spec §5.1).
         result: isRecord(outcome.result) ? outcome.result : {},
-        ...(hasEffects && effects && { effects: compactEffects(effects) }),
+        ...(hasEffects && { effects }),
       },
     };
   } catch (err) {
@@ -191,9 +257,20 @@ export async function performAction<Ctx>(
   }
 }
 
-function compactEffects(effects: ActionEffects): ActionEffects {
+/** The effects clients get: updates resolved, and nothing empty. */
+async function sentEffects(
+  effects: Effects,
+  resolveUpdates: (refs: IslandRef[]) => Promise<ResolvedUpdates>,
+): Promise<ActionEffects> {
+  const resolved = effects.update?.length
+    ? await resolveUpdates(effects.update)
+    : { update: [], invalidate: [] };
+  const invalidate = [...(effects.invalidate ?? []), ...resolved.invalidate];
+
   return {
-    ...(effects.invalidate?.length && { invalidate: effects.invalidate }),
+    ...(effects.changes?.length && { changes: effects.changes }),
+    ...(resolved.update.length && { update: resolved.update }),
+    ...(invalidate.length && { invalidate }),
     ...(effects.navigate && { navigate: effects.navigate }),
   };
 }
@@ -205,5 +282,5 @@ export function isActionRequestShape(v: unknown): v is ActionRequest {
   const named = typeof v.protocol === "number" && typeof v.action === "string" && v.action !== "";
   const versioned = typeof v.version === "number" && Number.isInteger(v.version) && v.version > 0;
   const hasInput = v.input !== undefined && v.input !== null;
-  return named && versioned && hasInput && isRecord(v.client);
+  return named && versioned && hasInput && isRecord(v.client) && isRecord(v.islands);
 }

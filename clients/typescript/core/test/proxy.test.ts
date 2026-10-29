@@ -35,6 +35,7 @@ const actionBody = {
   action: "sign-in",
   version: 1,
   input: { email: "ada@example.com" },
+  islands: { feed: [1] },
 };
 const screenBody = {
   protocol: 0,

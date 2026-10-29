@@ -293,8 +293,8 @@ Names in *italics* don't exist yet; the parity work below adds them.
 | CMP-20 island requests | ✅ `cc.DefinePaged`, `ComposeIsland` | ✅ `pagedIsland`, `composeIsland` |
 | CMP-21 streams | ✅ `cc.ScreenStream`, `cc.ReadScreen` | ✅ `ScreenStream`, `collect`, every adapter |
 | CMP-22 strings | ✅ `cc.LoadCatalog`, `Config.Strings`, `r.ScreenStrings` | ✅ `loadCatalog`, `strings`, `lc.strings` |
-| CMP-23 island updates | ✗ | ✗ |
-| CMP-24 entity changes | ✗ | ✗ |
+| CMP-23 island updates | ✅ `Effects.Update` | ✅ `effects.update` |
+| CMP-24 entity changes | ✅ `cc.Set`, `cc.Delete`, `cctest.CheckEffects` | ✅ `changed`, `deleted`, `checkEffects` |
 
 ### Clients
 
@@ -337,7 +337,7 @@ there means islands whose props don't decode are skipped.
 | TL-1 props | ✅ | ✅ | ✅ | ✅ |
 | TL-2 actions | ✅ | ✅ | ✅ | ✅ |
 | TL-6 strings | — (the composer serves the catalog) | ✅ | ✅ | ✅ |
-| TL-7 entities | ✗ | ✗ | ✗ | ✗ |
+| TL-7 entities | ✅ | ✅ | ✗ | ✗ |
 
 TL-3 to TL-5 are language-neutral and done.
 

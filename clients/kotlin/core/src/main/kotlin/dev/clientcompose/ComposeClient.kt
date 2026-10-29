@@ -7,8 +7,10 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
@@ -112,11 +114,14 @@ public class ComposeClient(
      *         }
      *     }
      *
+     * @param islands the app's capabilities, usually `registry.capabilities`: the composer resolves
+     * the islands an action updates at them (spec §5.2).
      * @param idempotencyKey one per user intent. Pass the same key again to retry it.
      */
     public suspend fun <I, R, E : DeclaredError> perform(
         action: ActionDescriptor<I, R, E>,
         input: I,
+        islands: Map<String, List<Int>> = emptyMap(),
         idempotencyKey: String = UUID.randomUUID().toString(),
     ): ActionOutcome<R, E> {
         val request = buildJsonObject {
@@ -125,6 +130,7 @@ public class ComposeClient(
             put("version", action.version)
             put("input", ClientComposeJson.encodeToJsonElement(action.inputSerializer, input))
             put("client", context.toJson())
+            put("islands", buildJsonObject { islands.forEach { (type, versions) -> put(type, JsonArray(versions.map { JsonPrimitive(it) })) } })
             put("idempotencyKey", idempotencyKey)
         }
         val response = post("actions/${segment(action.action)}", request.toString())

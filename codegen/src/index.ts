@@ -14,10 +14,12 @@ import {
 import {
   type Action,
   type AppStrings,
+  checkEntities,
   type EnumDef,
   type Island,
   loadActionManifests,
   loadAppStrings,
+  loadEntities,
   loadManifests,
   loadScreenStrings,
   ManifestError,
@@ -38,13 +40,17 @@ export {
   loadManifestsAtRef,
 } from "./compat.ts";
 export {
+  checkEntities,
+  islandEntityPaths,
   loadActionManifests,
   loadAppStrings,
+  loadEntities,
   loadManifests,
   loadScreenStrings,
   ManifestError,
   parseActionManifest,
   parseAppStrings,
+  parseEntityManifest,
   parseManifest,
   parseScreenStrings,
 } from "./manifest.ts";
@@ -62,6 +68,11 @@ export interface CodegenConfig {
   manifests?: string;
   /** Directory of action manifests (spec §5). Generated for every target. */
   actions?: string;
+  /**
+   * Directory of entity manifests (spec §2.1): what several islands show, so actions can say what
+   * changed about it. Generated for the Go and TypeScript targets.
+   */
+  entities?: string;
   /** The app strings manifest (spec §4.7): the strings shown outside any island. */
   appStrings?: string;
   /**
@@ -98,6 +109,7 @@ function manifestsDirOf(configPath: string): {
   base: string;
   manifestsDir?: string;
   actionsDir?: string;
+  entitiesDir?: string;
   appStringsFile?: string;
   screenStringsFile?: string;
   catalogDir?: string;
@@ -122,6 +134,7 @@ function manifestsDirOf(configPath: string): {
     base,
     manifestsDir: dir(config.manifests),
     actionsDir: dir(config.actions),
+    entitiesDir: dir(config.entities),
     appStringsFile: dir(config.appStrings),
     screenStringsFile: dir(config.screenStrings),
     catalogDir: dir(config.catalog),
@@ -176,10 +189,12 @@ export function checkCompat(
 }
 
 export function generate(configPath: string): GeneratedFile[] {
-  const { config, base, manifestsDir, actionsDir, appStringsFile, screenStringsFile } =
+  const { config, base, manifestsDir, actionsDir, entitiesDir, appStringsFile, screenStringsFile } =
     manifestsDirOf(configPath);
   const islands = manifestsDir ? loadManifests(manifestsDir) : [];
   const actions = actionsDir ? loadActionManifests(actionsDir) : [];
+  const entities = entitiesDir ? loadEntities(entitiesDir) : [];
+  checkEntities(islands, entities);
   const app: AppStrings | undefined = appStringsFile ? loadAppStrings(appStringsFile) : undefined;
   const screens = screenStringsFile ? loadScreenStrings(screenStringsFile).screens : [];
   checkFlatNames(islands, actions);
@@ -190,6 +205,7 @@ export function generate(configPath: string): GeneratedFile[] {
     [
       manifestsDir && `Manifests: ${relative(base, manifestsDir) || "."}`,
       actionsDir && `actions: ${relative(base, actionsDir) || "."}`,
+      entitiesDir && `entities: ${relative(base, entitiesDir) || "."}`,
       appStringsFile && `app strings: ${relative(base, appStringsFile)}`,
       screenStringsFile && `screen strings: ${relative(base, screenStringsFile)}`,
       `config: ${basename(configPath)}`,
@@ -203,7 +219,14 @@ export function generate(configPath: string): GeneratedFile[] {
   for (const t of list(go)) {
     files.push({
       path: resolve(base, t.out),
-      contents: generateGo(islands, header, required(t, "package", "go"), actions, screens),
+      contents: generateGo(
+        islands,
+        header,
+        required(t, "package", "go"),
+        actions,
+        screens,
+        entities,
+      ),
     });
   }
   for (const t of list(swift)) {
@@ -221,7 +244,7 @@ export function generate(configPath: string): GeneratedFile[] {
   for (const t of list(typescript)) {
     files.push({
       path: resolve(base, t.out),
-      contents: generateTypeScript(islands, header, t, actions, app, screens),
+      contents: generateTypeScript(islands, header, t, actions, app, screens, entities),
     });
   }
   if (files.length === 0) {
@@ -292,6 +315,7 @@ function checkFlatNames(islands: Island[], actions: Action[]): void {
           path: e.path,
           fields: [],
           children: [],
+          schemas: {},
         },
         owner,
       );

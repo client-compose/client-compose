@@ -55,7 +55,11 @@ test("generated action descriptors work end to end with the composer and client"
   // The client's fetch goes straight to the composer's fetch-standard handler.
   const fetchImpl = ((url: string, init: RequestInit) =>
     composer.fetch(new Request(`https://composer.test${url}`, init))) as typeof fetch;
-  const options = { client: { platform: "test", appVersion: "1" }, fetch: fetchImpl };
+  const options = {
+    client: { platform: "test", appVersion: "1" },
+    islands: {},
+    fetch: fetchImpl,
+  };
 
   const ok = await callAction(
     "",

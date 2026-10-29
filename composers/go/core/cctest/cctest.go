@@ -31,8 +31,10 @@ import (
 type App struct {
 	t       testing.TB
 	handler http.Handler
-	islands map[string][]int
-	client  cc.ClientContext
+	// composer is the handler, when it's one: CheckEffects needs its islands' entities.
+	composer *cc.Composer
+	islands  map[string][]int
+	client   cc.ClientContext
 }
 
 // Option configures an App.
@@ -65,6 +67,7 @@ func New(t testing.TB, handler http.Handler, opts ...Option) *App {
 	a := &App{t: t, handler: handler, islands: map[string][]int{}, client: cc.ClientContext{Platform: "test", AppVersion: "1"}}
 	if c, ok := handler.(*cc.Composer); ok {
 		a.islands = c.Islands()
+		a.composer = c
 	}
 	for _, o := range opts {
 		o(a)
@@ -290,7 +293,11 @@ func Perform[I cc.ActionInput[R], R any](a *App, input I, opts ...RequestOption)
 	}
 	protocol := cc.ProtocolVersion
 	client := a.client
-	body := cc.ActionRequest{Protocol: &protocol, Action: input.ActionName(), Version: input.ActionVersion(), Input: raw, Client: &client}
+	islands := a.islands
+	if islands == nil {
+		islands = map[string][]int{}
+	}
+	body := cc.ActionRequest{Protocol: &protocol, Action: input.ActionName(), Version: input.ActionVersion(), Input: raw, Client: &client, Islands: islands}
 	r := &request{header: http.Header{}}
 	for _, o := range opts {
 		o(r)

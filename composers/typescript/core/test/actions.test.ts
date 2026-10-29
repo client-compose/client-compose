@@ -30,6 +30,7 @@ const request = (input: unknown) => ({
   version: 1,
   input,
   client: { platform: "web", appVersion: "1" },
+  islands: {},
 });
 
 test("handlers see validated input with null optionals removed", async () => {
@@ -153,6 +154,7 @@ test("an action reads screen strings in the client's language", async () => {
         appVersion: "1",
         locale: "pl-PL",
       },
+      islands: {},
     },
     undefined,
   );

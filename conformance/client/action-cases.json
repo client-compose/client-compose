@@ -13,6 +13,7 @@
         "version": 2,
         "input": { "thingId": "t1", "name": "New name" },
         "client": { "platform": "conformance", "appVersion": "0.0.0" },
+        "islands": {},
         "idempotencyKey": "6f1c0f7e-0d8e-4c55-9d1a-3f1f0b6d1c2a"
       }
     },
@@ -27,6 +28,7 @@
         "version": 2,
         "input": { "thingId": "t1", "name": "Ä \"quoted\" name", "tags": ["a", "b"], "meta": { "pinned": true, "rank": 2 } },
         "client": { "platform": "conformance", "appVersion": "0.0.0" },
+        "islands": {},
         "idempotencyKey": "k-2"
       }
     }

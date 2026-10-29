@@ -270,3 +270,22 @@ test("actions: removing a version warns", () => {
     ["warning action rename v1"],
   );
 });
+
+test("marking an object with an entity, or unmarking it, is a new version", () => {
+  const item = (entity?: string) => ({
+    type: "object",
+    ...(entity && { entity }),
+    required: ["id"],
+    properties: { id: str },
+  });
+  assert.deepEqual(breaking(island({ thing: item() }), island({ thing: item("thing") })), [
+    "props.thing: now shows entity thing",
+  ]);
+  assert.deepEqual(breaking(island({ thing: item("thing") }), island({ thing: item() })), [
+    "props.thing: no longer shows entity thing",
+  ]);
+  assert.deepEqual(
+    breaking(island({ thing: item("thing") }), island({ thing: item("thing") })),
+    [],
+  );
+});

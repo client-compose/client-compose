@@ -474,6 +474,7 @@ export function useAction<I, R, E extends DeclaredError>(
           action,
           input,
           config.client,
+          config.registry.capabilities(),
           options.idempotencyKey ?? newIdempotencyKey(),
         );
         const response = config.performAction

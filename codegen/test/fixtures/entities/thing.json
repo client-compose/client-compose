@@ -1,0 +1,16 @@
+{
+  "entity": "thing",
+  "description": "Something people name, and share or keep to themselves.",
+  "id": "id",
+  "properties": {
+    "id": { "type": "string" },
+    "name": { "type": "string" },
+    "visibility": { "type": "string", "enum": ["public", "private"] },
+    "owner": {
+      "type": "object",
+      "title": "Owner",
+      "required": ["name"],
+      "properties": { "name": { "type": "string" } }
+    }
+  }
+}

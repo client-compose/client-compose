@@ -32,6 +32,8 @@ type Island struct {
 	cache *islandCache
 	// paged islands resolve to a page: their props, and the cursor of the page after (DefinePaged).
 	paged bool
+	// entities are where its props hold entities (spec §2.1), from its generated props type.
+	entities []EntityPath
 }
 
 // page is what a paged island resolves to.
@@ -67,7 +69,9 @@ type Props interface {
 //	header := cc.Define(func(ctx context.Context, r cc.Request) (ProfileHeaderV2, error) { ... })
 func Define[P Props](resolve func(ctx context.Context, r Request) (P, error)) Island {
 	var zero P
-	return NewIsland(zero.IslandType(), zero.IslandVersion(), resolve)
+	island := NewIsland(zero.IslandType(), zero.IslandVersion(), resolve)
+	island.entities = entitiesOf[P]()
+	return island
 }
 
 // NewPagedIsland is NewIsland for an island with pages (spec §4.5). Prefer DefinePaged.
@@ -101,7 +105,9 @@ func NewPagedIsland[P any](typ string, version int, resolve func(ctx context.Con
 //	})
 func DefinePaged[P Props](resolve func(ctx context.Context, r Request) (P, string, error)) Island {
 	var zero P
-	return NewPagedIsland(zero.IslandType(), zero.IslandVersion(), resolve)
+	island := NewPagedIsland(zero.IslandType(), zero.IslandVersion(), resolve)
+	island.entities = entitiesOf[P]()
+	return island
 }
 
 // Versions lists the versions of an island a placement can resolve.

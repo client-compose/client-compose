@@ -136,7 +136,7 @@ export function isProxiedActionRequest(value: unknown): value is ProxiedActionRe
   if (typeof value.action !== "string" || typeof value.version !== "number") {
     return false;
   }
-  if (!("input" in value)) {
+  if (!("input" in value) || !isCapabilities(value.islands)) {
     return false;
   }
   return value.idempotencyKey === undefined || typeof value.idempotencyKey === "string";

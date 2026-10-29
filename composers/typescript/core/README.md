@@ -129,6 +129,37 @@ const followUser = action(
   code the action doesn't declare, is a failure: 500 `action_failed`, reported to plugins.
 - `load` and batch loaders work as in islands, scoped to the action request.
 
+### What an action changed
+
+An action says what it changed in the narrowest way that's true, so apps update without resolving
+more than they must (spec §5.3):
+
+```ts
+const toggleTodo = action(ToggleTodoV1, ({ id, done }) => {
+  todos.setDone(id, done);
+  return {
+    result: {},
+    effects: {
+      // Entities' properties: apps apply them to every island showing them. Nothing is resolved again.
+      changes: [changed(TodoEntity, id, { done }), changed(TodoCountsEntity, "me", { left: todos.left() })],
+    },
+  };
+});
+```
+
+- **`changes`** set an entity's properties (`changed`, with its generated descriptor) or say it's
+  gone (`deleted(TodoEntity, id)`). Apps apply them to every island showing that entity (spec
+  §2.1), on every screen they have. A value that depends on others, like a count, is an entity of
+  its own.
+- **`update`** names islands whose content changed beyond their entities, such as a new item in a
+  list: `{ screen: "todos", key: "list" }`. The composer resolves each again, as an island request
+  would, in a fresh request scope (so it doesn't read what the action loaded before its change), at
+  the versions the app knows, and sends its entry. If the island isn't on the screen any more, or
+  fails, it invalidates the screen instead.
+- **`invalidate`** reloads whole screens: for an action that changes a screen's layout.
+
+`app.checkEffects` checks an action's changes and updates against a fresh resolve (see Testing).
+
 ## Plugins
 
 A plugin hooks into the composer. Set the hooks you need:
@@ -393,6 +424,10 @@ assert.equal(followed.result?.followers, 8);
   with every island in place; `head` is its stream's head, to check what was pending. Errors come
   back as their protocol code (`"not_found"`, `"unauthenticated"`).
 - `perform` gives the typed `result`, `effects`, the declared `error`, or the protocol `failure`.
+- `await app.checkEffects("todos", {}, () => app.perform(ToggleTodoV1, input))` shows the screen,
+  performs the action, applies its changes and updates as an app would, and composes the screen
+  again: it throws if any island differs. A change the action forgot, such as a count it didn't
+  update, shows here rather than in an app.
 - For a composer whose `context` takes an Express or Fastify request, pass `request` to build one.
 
 ## Conformance
