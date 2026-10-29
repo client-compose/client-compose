@@ -110,7 +110,9 @@ treats marking or unmarking an object as a breaking change.
 | Go         | `TodoEntity`, every property but the id, each optional; `IslandEntities()` on islands that hold entities | `cc.Set("3", TodoEntity{Done: &done})`, `cc.Delete[TodoEntity]("3")` |
 | TypeScript | `TodoEntity` and its descriptor; `entities` on island descriptors | `changed(TodoEntity, "3", { done: true })`, `deleted(TodoEntity, "3")`; clients apply changes with the descriptors' `entities` |
 
-Swift and Kotlin don't generate entities yet.
+Swift and Kotlin don't generate entity types (only composers set them), but their islands carry
+their entity paths for clients: `static let islandEntities` in Swift, `override val entities` on the
+descriptor in Kotlin.
 
 ## Strings
 

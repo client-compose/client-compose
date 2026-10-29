@@ -83,7 +83,7 @@ class ComposeClientTest {
         client.screen("profile", mapOf("userId" to "u2"), islands)
 
         val outcome = client.perform(FollowV1, FollowV1.Input("u1"), idempotencyKey = "k1")
-        assertEquals(ActionOutcome.Ok(FollowV1.Result(8), ActionEffects(listOf(ScreenRef("profile", mapOf("userId" to "u1"))), ScreenRef("feed"))), outcome)
+        assertEquals(ActionOutcome.Ok(FollowV1.Result(8), ActionEffects(invalidate = listOf(ScreenRef("profile", mapOf("userId" to "u1"))), navigate = ScreenRef("feed"))), outcome)
         assertEquals("k1", composer.actionRequests.single().idempotencyKey)
         assertEquals(FollowV1.Input("u1"), composer.actionRequests.single().input(FollowV1.inputSerializer))
         assertEquals(listOf(ScreenRef("feed")), navigated)

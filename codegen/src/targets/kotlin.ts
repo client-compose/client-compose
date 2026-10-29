@@ -2,9 +2,11 @@ import {
   type Action,
   type AppStrings,
   camel,
+  type Entity,
   type EnumDef,
   type Field,
   type Island,
+  islandEntityPaths,
   type ObjectDef,
   type StringDef,
   type TypeRef,
@@ -36,8 +38,27 @@ export function generateKotlin(
   opts: KotlinOptions,
   actions: Action[] = [],
   app?: AppStrings,
+  entities: Entity[] = [],
 ): string {
   const body: string[] = [];
+
+  /** Where an island's props hold entities (spec §2.1), as its descriptor's `entities`. */
+  const entityLines = (island: Island, indent: string): string[] => {
+    const paths = islandEntityPaths(island, entities);
+    if (paths.length === 0) {
+      return [];
+    }
+    const list = (values: string[]) => `listOf(${values.map((v) => JSON.stringify(v)).join(", ")})`;
+
+    return [
+      `${indent}override val entities: List<EntityPath> = listOf(`,
+      ...paths.map(
+        (p) =>
+          `${indent}    EntityPath(${list(p.path)}, ${JSON.stringify(p.entity)}, ${JSON.stringify(p.id)}, ${list(p.properties)}),`,
+      ),
+      `${indent})`,
+    ];
+  };
   let usesSerialName = false;
 
   const doc = (indent: string, text?: string) => {
@@ -135,6 +156,7 @@ export function generateKotlin(
         `${inner}    override val type: String = ${JSON.stringify(island.type)}`,
         `${inner}    override val version: Int = ${island.version}`,
         `${inner}    override val propsSerializer: KSerializer<${name}> get() = serializer()`,
+        ...entityLines(island, `${inner}    `),
         ...(withStrings
           ? [`${inner}    override fun strings(table: StringsTable): Strings = Strings(table)`]
           : []),
@@ -288,6 +310,9 @@ export function generateKotlin(
   const imports = [
     ...(actions.length ? ["dev.clientcompose.ActionDescriptor"] : []),
     ...(actions.some((a) => a.errors.length) ? ["dev.clientcompose.DeclaredError"] : []),
+    ...(islands.some((i) => islandEntityPaths(i, entities).length)
+      ? ["dev.clientcompose.EntityPath"]
+      : []),
     ...(islands.some((i) => !i.strings.length) ? ["dev.clientcompose.IslandDescriptor"] : []),
     ...(islands.some((i) => i.strings.length)
       ? ["dev.clientcompose.IslandDescriptorWithStrings"]

@@ -60,6 +60,20 @@ public class ScreenState<R>(
         scope.launch(start = CoroutineStart.UNDISPATCHED) {
             client.invalidations.collect { refs -> if (refs.any { it.matches(screen, params) }) reload() }
         }
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            client.changes.collect { batch -> apply(batch) }
+        }
+    }
+
+    /** Shows the screen as an action left it, or reloads it when the changes can't be shown on it. */
+    private fun apply(batch: EffectsBatch) {
+        val response = _state.value.response ?: return
+        val changed = batch.apply(response, params)
+        if (changed == null) {
+            reload()
+            return
+        }
+        _state.update { it.copy(islands = registry.plan(changed, onSkipped = onSkipped), response = changed) }
     }
 
     /** Fetch the screen, from the client's cache if it's fresh. */

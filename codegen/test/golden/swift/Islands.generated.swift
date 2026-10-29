@@ -125,6 +125,11 @@ struct KitchenSinkV1: IslandPropsWithStrings, Codable, Equatable, Sendable {
 struct ThingListV1: IslandProps, Codable, Equatable, Sendable {
     static let islandType = "thing-list"
     static let islandVersion = 1
+    /// Where its props hold entities (spec §2.1), so an action's changes reach them.
+    static let islandEntities = [
+        EntityPath(path: ["things", "[]"], entity: "thing", id: "id", properties: ["id", "name"]),
+        EntityPath(path: ["bySection", "{}", "[]"], entity: "thing", id: "id", properties: ["id", "visibility"]),
+    ]
 
     let things: [Item]
     let bySection: [String: [SectionItem]]

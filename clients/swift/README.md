@@ -83,14 +83,23 @@ struct FollowButton: View {
 ```
 
 `run` never throws: it ends in `.ok(result, effects)`, `.error(declared)` or `.failed(error)`.
-When it succeeds, its effects are applied first. Screens it invalidates are dropped from the cache
-and reloaded where they're on show, and `navigate` goes to your `onNavigate`.
+When it succeeds, its effects are applied first, in this order (spec §5.3):
+
+- **Changes**: each entity it changed is changed in every island showing it (the generated types'
+  `islandEntities`), in cached screens and the ones on show, without fetching anything. A deleted
+  entity leaves the list holding it.
+- **Updates**: each island's new entry is swapped into its screen; the rest of the screen stays.
+- **Invalidations**: the screens are dropped from the cache and reloaded where they're on show. So is
+  a screen a change or update can't be applied to.
+- `navigate` goes to your `onNavigate`.
+
+Every action sends the island versions the app can draw, from the environment's registry.
 
 Outside SwiftUI, call the client directly. Declared errors are values, and anything else throws
 `ActionFailure`, including an error code this app version doesn't know (spec §5.1):
 
 ```swift
-switch try await client.perform(RenameThingV1.self, .init(thingId: id, name: name)) {
+switch try await client.perform(RenameThingV1.self, .init(thingId: id, name: name), islands: registry.catalog) {
 case .ok(let result, _): show(result.thing)
 case .error(.nameTaken(let details)): suggest(details.suggestions)
 case .error(.locked): showLocked()
@@ -122,7 +131,9 @@ let t = response.app(AppStrings.self) // t.retry
 
 Use an `IslandRegistry<UIView>` (or a view controller factory), fetch with
 `client.screen(_:params:islands:)` and lay out `registry.plan(response)` yourself. Call
-`client.watch(screen:params:)` to hear when an action invalidates the screen.
+`client.watch(screen:params:onEffects:onInvalidate:)` to hear when an action changes the screen
+(apply the batch with `batch.apply(to:params:)`, and reload if it returns nil) or invalidates it.
+Pass `registry.catalog` to `perform`.
 
 ## Testing
 

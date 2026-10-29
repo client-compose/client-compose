@@ -14,6 +14,12 @@ public enum SkipReason: Sendable, Equatable {
 public protocol IslandProps: Decodable {
     static var islandType: String { get }
     static var islandVersion: Int { get }
+    /// Where its props hold entities (spec §2.1), for the client to apply an action's changes.
+    static var islandEntities: [EntityPath] { get }
+}
+
+extension IslandProps {
+    public static var islandEntities: [EntityPath] { [] }
 }
 
 public struct PlannedIsland<Output>: Identifiable {
@@ -33,6 +39,7 @@ public final class IslandRegistry<Output>: @unchecked Sendable {
         return _renderers
     }
     private let decoder: JSONDecoder
+    private var _entities: [String: [EntityPath]] = [:]
 
     public init(decoder: JSONDecoder = JSONDecoder()) {
         self.decoder = decoder
@@ -70,6 +77,7 @@ public final class IslandRegistry<Output>: @unchecked Sendable {
         let decoder = self.decoder
         lock.lock()
         defer { lock.unlock() }
+        _entities["\(Props.islandType)@\(Props.islandVersion)"] = Props.islandEntities
         _renderers[Props.islandType, default: [:]][Props.islandVersion] = { json, entry, plurals in
             let t = Props.Strings(StringsTable(strings: entry.strings ?? [:], plurals: plurals))
             return render(try json.decode(Props.self, using: decoder), t, entry)
@@ -85,12 +93,23 @@ public final class IslandRegistry<Output>: @unchecked Sendable {
         _ props: Props.Type,
         render: @escaping (Props, IslandEntry) -> Output
     ) -> Self {
-        register(Props.islandType, version: Props.islandVersion, render: render)
+        lock.lock()
+        _entities["\(Props.islandType)@\(Props.islandVersion)"] = Props.islandEntities
+        lock.unlock()
+        return register(Props.islandType, version: Props.islandVersion, render: render)
     }
 
     /// What this client can render, sent with every request (spec §3).
     public var capabilities: [String: [Int]] {
         renderers.mapValues { $0.keys.sorted() }
+    }
+
+    /// What actions need to know about these islands: their versions, and where they hold entities.
+    public var catalog: IslandCatalog {
+        lock.lock()
+        let entities = _entities
+        lock.unlock()
+        return IslandCatalog(capabilities: capabilities, entityPaths: entities)
     }
 
     public func request(

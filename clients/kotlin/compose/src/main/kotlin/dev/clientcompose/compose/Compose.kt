@@ -140,7 +140,8 @@ private fun DefaultFailure(retry: () -> Unit, modifier: Modifier) {
 public fun <I, R, E : DeclaredError> rememberAction(action: ActionDescriptor<I, R, E>): ComposeAction<I, R, E> {
     val client = LocalComposeClient.current ?: error("rememberAction needs ProvideCompose above it")
     val scope = rememberCoroutineScope()
-    val state = remember(client, action) { ActionState(client, action) }
+    val registry = LocalIslandRegistry.current
+    val state = remember(client, action, registry) { ActionState(client, action, registry.catalog) }
     val inFlight by state.inFlight.collectAsState()
     val last by state.last.collectAsState()
     return ComposeAction(inFlight > 0, last, state, scope)

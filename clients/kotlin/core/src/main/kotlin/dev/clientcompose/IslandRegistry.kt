@@ -26,6 +26,9 @@ public interface IslandDescriptor<P> {
     public val type: String
     public val version: Int
     public val propsSerializer: KSerializer<P>
+
+    /** Where its props hold entities (spec §2.1), for the client to apply an action's changes. */
+    public val entities: List<EntityPath> get() = emptyList()
 }
 
 /**
@@ -34,6 +37,7 @@ public interface IslandDescriptor<P> {
  */
 public class IslandRegistry<R>(private val json: Json = ClientComposeJson) {
     private val renderers = mutableMapOf<String, MutableMap<Int, (JsonObject, IslandEntry, Map<String, String>) -> R>>()
+    private val entityPaths = mutableMapOf<String, List<EntityPath>>()
 
     public fun <P> register(
         type: String,
@@ -67,7 +71,10 @@ public class IslandRegistry<R>(private val json: Json = ClientComposeJson) {
     public fun <P> register(
         island: IslandDescriptor<P>,
         render: (props: P, entry: IslandEntry) -> R,
-    ): IslandRegistry<R> = register(island.type, island.version, island.propsSerializer, render)
+    ): IslandRegistry<R> {
+        entityPaths["${island.type}@${island.version}"] = island.entities
+        return register(island.type, island.version, island.propsSerializer, render)
+    }
 
     /**
      * Register a renderer for a generated props type whose island declares strings: it receives
@@ -79,6 +86,7 @@ public class IslandRegistry<R>(private val json: Json = ClientComposeJson) {
         island: IslandDescriptorWithStrings<P, S>,
         render: (props: P, t: S, entry: IslandEntry) -> R,
     ): IslandRegistry<R> {
+        entityPaths["${island.type}@${island.version}"] = island.entities
         renderers.getOrPut(island.type) { mutableMapOf() }[island.version] = { props, entry, plurals ->
             val t = island.strings(StringsTable(entry.strings ?: emptyMap(), plurals))
             render(json.decodeFromJsonElement(island.propsSerializer, props), t, entry)
@@ -89,6 +97,10 @@ public class IslandRegistry<R>(private val json: Json = ClientComposeJson) {
     /** What this client can render, sent with every request (spec §3). */
     public val capabilities: Map<String, List<Int>>
         get() = renderers.mapValues { (_, versions) -> versions.keys.sorted() }
+
+    /** What actions need to know about these islands: their versions, and where they hold entities. */
+    public val catalog: IslandCatalog
+        get() = IslandCatalog(capabilities, entityPaths.toMap())
 
     public fun request(
         screen: String,

@@ -3,6 +3,7 @@ package dev.clientcompose.testing
 import dev.clientcompose.ActionDescriptor
 import dev.clientcompose.ClientComposeJson
 import dev.clientcompose.DeclaredError
+import dev.clientcompose.EntityChange
 import dev.clientcompose.IslandDescriptor
 import dev.clientcompose.PROTOCOL_VERSION
 import dev.clientcompose.ScreenRef
@@ -52,6 +53,8 @@ public class FakeComposer : Transport {
         val version: Int,
         val input: JsonElement,
         val idempotencyKey: String?,
+        /** The island versions the app said it can render (spec §5.2). */
+        val islands: Map<String, List<Int>>,
         val headers: Map<String, String>,
     ) {
         /** The input, decoded with [serializer], e.g. `FollowUserV1.inputSerializer`. */
@@ -119,6 +122,7 @@ public class FakeComposer : Transport {
                 version = json["version"]?.jsonPrimitive?.intOrNull ?: 0,
                 input = json["input"] ?: JsonNull,
                 idempotencyKey = json["idempotencyKey"]?.jsonPrimitive?.contentOrNull,
+                islands = json["islands"]?.let { ClientComposeJson.decodeFromJsonElement(capabilities, it) } ?: emptyMap(),
                 headers = headers,
             )
             val handler = synchronized(this) {
@@ -182,17 +186,21 @@ public class FakeResponse(
                 put("error", buildJsonObject { put("code", code) })
             })
 
-        /** An action's result, and the screens it changed. */
+        /** An action's result, and what it changed (spec §5.3): entities, islands, and whole screens. */
         public fun <R> ok(
             action: ActionDescriptor<*, R, *>,
             result: R,
+            changes: List<EntityChange> = emptyList(),
+            update: List<FakeUpdate> = emptyList(),
             invalidate: List<ScreenRef> = emptyList(),
             navigate: ScreenRef? = null,
         ): FakeResponse = FakeResponse(200, buildJsonObject {
             outcome(action, "ok")
             put("result", ClientComposeJson.encodeToJsonElement(action.resultSerializer, result))
-            if (invalidate.isNotEmpty() || navigate != null) {
+            if (changes.isNotEmpty() || update.isNotEmpty() || invalidate.isNotEmpty() || navigate != null) {
                 put("effects", buildJsonObject {
+                    if (changes.isNotEmpty()) put("changes", ClientComposeJson.encodeToJsonElement(ListSerializer(EntityChange.serializer()), changes))
+                    if (update.isNotEmpty()) put("update", kotlinx.serialization.json.JsonArray(update.map { it.json }))
                     if (invalidate.isNotEmpty()) put("invalidate", ClientComposeJson.encodeToJsonElement(ListSerializer(ScreenRef.serializer()), invalidate))
                     navigate?.let { put("navigate", ClientComposeJson.encodeToJsonElement(ScreenRef.serializer(), it)) }
                 })
@@ -244,5 +252,18 @@ public class FakeIsland private constructor(internal val json: JsonObject) {
             put("status", "error")
             put("error", buildJsonObject { put("code", code) })
         })
+    }
+}
+
+/** An island's new entry in an action's `update` effects (spec §5.3). */
+public class FakeUpdate private constructor(internal val json: JsonObject) {
+    public companion object {
+        /** The island, for the screen with exactly these params. */
+        public fun island(screen: String, island: FakeIsland, params: Map<String, String> = emptyMap()): FakeUpdate =
+            FakeUpdate(buildJsonObject {
+                put("screen", screen)
+                put("params", buildJsonObject { params.forEach { (k, v) -> put(k, v) } })
+                put("island", island.json)
+            })
     }
 }
