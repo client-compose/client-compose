@@ -39,6 +39,9 @@ container.replaceChildren(...islands.map((island) => island.render()));
   never returns one it can't.
 - **`plan`** returns renderable islands in order. Errored islands are omitted unless you pass
   `onError`; islands with an unknown type, version or status are skipped and reported.
+- **`registry.declare(...)`** names islands the app renders somewhere else, such as on the server:
+  the registry can't render them, but actions say the app can draw them, and changes to their
+  entities apply to them (spec §5.3).
 - **`fetchScreen`** reads the screen's stream to its end, and returns it whole. It throws
   `ScreenFetchError` (with `status` and `body`) for non-2xx responses, and accepts a custom `fetch`
   as its fourth argument.
