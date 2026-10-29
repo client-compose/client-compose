@@ -1,5 +1,16 @@
 # @client-compose/client
 
+## 0.15.0
+
+### Minor Changes
+
+- [#53](https://github.com/client-compose/client-compose/pull/53) [`9845e52`](https://github.com/client-compose/client-compose/commit/9845e52531ae846004c9771db95774207f5adae0) Thanks [@LewisYearsley](https://github.com/LewisYearsley)! - `heldEntities(props, paths)`: the entities an island's props hold, at its descriptor's entity paths.
+
+### Patch Changes
+
+- Updated dependencies [[`9845e52`](https://github.com/client-compose/client-compose/commit/9845e52531ae846004c9771db95774207f5adae0)]:
+  - @client-compose/protocol@0.9.0
+
 ## 0.14.0
 
 ### Minor Changes

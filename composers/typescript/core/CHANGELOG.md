@@ -1,5 +1,12 @@
 # @client-compose/composer
 
+## 0.14.1
+
+### Patch Changes
+
+- Updated dependencies [[`9845e52`](https://github.com/client-compose/client-compose/commit/9845e52531ae846004c9771db95774207f5adae0)]:
+  - @client-compose/protocol@0.9.0
+
 ## 0.14.0
 
 ### Minor Changes
