@@ -114,12 +114,7 @@ const todosScreen = (todos: Todo[] = [milk, eggs], next?: string) =>
   ]);
 
 /** Shows `screens` with a fake composer whose toggle action answers with these effects. */
-async function render(
-  effects: ActionEffects,
-  handlers: FakeGatewayHandlers = {},
-  cache = false,
-  onChanges?: (effects: ActionEffects) => void,
-) {
+async function render(effects: ActionEffects, handlers: FakeGatewayHandlers = {}, cache = false) {
   const held: { toggle?: ActionState<Record<string, never>, Record<string, never>, never> } = {};
   function Harness(): ReactNode {
     const toggle = useAction(Toggle);
@@ -131,7 +126,6 @@ async function render(
   const { config, gateway } = createTestConfig({
     registry,
     cache,
-    onChanges,
     handlers: {
       screens: {
         todos: () => todosScreen(),
@@ -342,24 +336,5 @@ test("an action request says which islands the app can draw", async () => {
       detail: [1],
     },
   });
-  await app.unmount();
-});
-
-test("onChanges hears an action's changes and updates, for screens the browser can't change", async () => {
-  const heard: ActionEffects[] = [];
-  const changes = {
-    changes: [
-      {
-        entity: "todo",
-        id: "1",
-        set: { done: true },
-      },
-    ],
-  };
-  const app = await render(changes, {}, false, (effects) => heard.push(effects));
-
-  await app.run();
-
-  assert.deepEqual(heard, [changes]);
   await app.unmount();
 });

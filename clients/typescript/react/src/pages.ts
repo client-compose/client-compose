@@ -21,7 +21,7 @@ import { type IslandScopeValue, scopeOf } from "./scope.ts";
 
 // ---- Where an island is ----
 
-const IslandScopeContext = createContext<IslandScopeValue | null>(null);
+export const IslandScopeContext = createContext<IslandScopeValue | null>(null);
 
 export interface IslandScopeProps {
   value: IslandScopeValue;

@@ -17,7 +17,7 @@ const response = {
       type: "header",
       version: 1,
       status: "ok",
-      props: { name: "Ada" },
+      props: { id: "ada", name: "Ada" },
     },
     {
       key: "broken",
