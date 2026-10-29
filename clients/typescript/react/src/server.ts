@@ -32,6 +32,8 @@ export {
 } from "@client-compose/client";
 export type {
   AppStringsDescriptor,
+  EntityDescriptor,
+  EntityPath,
   IslandDescriptor,
   ScreenHead,
   ScreenMeta,

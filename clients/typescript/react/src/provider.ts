@@ -130,6 +130,7 @@ export function ClientComposeProvider(props: {
       );
       if (batch.touchesScreens) {
         screens.change(batch);
+        config.onChanges?.(effects);
       }
       const refs = effects.invalidate ?? [];
       if (refs.length) {
