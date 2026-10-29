@@ -1,5 +1,11 @@
 # @client-compose/react
 
+## 0.18.0
+
+### Minor Changes
+
+- [#70](https://github.com/client-compose/client-compose/pull/70) [`30c7bab`](https://github.com/client-compose/client-compose/commit/30c7bab5249bf16b4da04a4ad9fa10932e4e0e12) Thanks [@LewisYearsley](https://github.com/LewisYearsley)! - A page a router brings back from its cache (going back) catches up with the actions taken since it was shown. Its Client Component islands apply the changes and updates they missed, and `onStale` is called when one of them, or an island that's a Server Component, missed something only the server can show.
+
 ## 0.17.0
 
 ### Minor Changes
