@@ -1,5 +1,18 @@
 # @client-compose/react
 
+## 0.14.0
+
+### Minor Changes
+
+- [#56](https://github.com/client-compose/client-compose/pull/56) [`55523ae`](https://github.com/client-compose/client-compose/commit/55523ae95da521bc7bb787149857319a2a15b394) Thanks [@LewisYearsley](https://github.com/LewisYearsley)! - React applies an action's entity changes and island updates (spec §5.3): to every screen on show,
+  cached screens, and every page a paged island holds, without fetching; a screen that can't take
+  them reloads. The registry knows where each island holds entities, from its descriptor.
+
+### Patch Changes
+
+- Updated dependencies [[`55523ae`](https://github.com/client-compose/client-compose/commit/55523ae95da521bc7bb787149857319a2a15b394)]:
+  - @client-compose/client@0.13.0
+
 ## 0.13.0
 
 ### Minor Changes
