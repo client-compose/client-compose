@@ -1,6 +1,7 @@
 "use client";
 // Client Compose in the browser, for the islands' actions. The page is rendered on the server, so
-// when an action changes the screen, the server renders it again (router.refresh).
+// when an action changes the screen (changes, updates or invalidations), the server renders it
+// again (router.refresh): the browser can't change Server Components.
 import {
   AppStringsProvider,
   type ClientComposeConfig,
@@ -32,6 +33,7 @@ export function ClientCompose(props: ClientComposeProps) {
         appVersion: "1.0.0",
         locale,
       },
+      onChanges: () => router.refresh(),
       onInvalidate: () => router.refresh(),
     }),
     [locale, router],

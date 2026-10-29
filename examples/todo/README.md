@@ -6,6 +6,7 @@ the manifests.
 
 ```
 islands/, actions/            the contract: what the composer sends, and what apps can ask it to do
+entities/                     what islands show, so actions can say what changed: a todo, the counts
 app-strings.json              words outside any island ("Loading…")
 screen-strings.json           words the composer uses itself (the screen's title)
 strings/                      the words, in English and Polish
@@ -30,8 +31,23 @@ One screen, `todos`, with three islands:
 | `todo-list` v1 | the todos, oldest first | a checkbox (`toggle-todo`) and a Delete button (`delete-todo`) for each |
 | `todo-summary` v1 | how many are left, and done | "3 items left", and Clear completed (`clear-completed`) |
 
-The composer leaves the summary out while the list is empty. Every action says the screen changed,
-so the app showing it reloads it: no app decides for itself what to refresh.
+The composer leaves the summary out while the list is empty.
+
+Each action says what it changed, as narrowly as it can (spec §5.3), and the apps apply it: none
+decides for itself what to refresh.
+
+| Action | What it says changed | What the app does |
+| --- | --- | --- |
+| Tick a todo | `changes`: that todo, and the counts | changes them in place; nothing is fetched |
+| Delete, or clear completed | `changes`: the todos deleted, and the counts | takes them out of the list |
+| Add a todo | `update`: the list, since the composer decides where it goes; `changes`: the counts | swaps the list in |
+| The first todo, or deleting the last | `invalidate`: the summary appears or goes, so the screen's layout changed | reloads the screen |
+
+The list's todos and the summary are marked with the entities they show (`entities/`), so a change
+to a todo reaches whichever islands show it. Each composer's tests check every action with its test
+kit (`CheckEffects`, `checkEffects`): applied to the screen as an app would, its effects must match
+the screen composed again. The Next.js app renders the screen on the server, so it refreshes it
+(`onChanges`, `onInvalidate`) rather than changing it in the browser.
 
 `add-todo` declares two errors, `empty_title` and `title_too_long` (with the limit). The apps check
 the title before sending it too, in the same words, but the composer has the final say: an app can

@@ -1,5 +1,8 @@
 // The todos, kept in memory: a stand-in for your database or service.
 
+/** Identifies the list's counts (entity "todo-counts"): there's one list. */
+export const COUNTS_ID = "all";
+
 /** The longest title a todo can have, in characters. */
 export const MAX_TITLE_LENGTH = 100;
 
@@ -59,6 +62,13 @@ export class Todos {
   /** Deletes a todo. One that isn't there is left alone. */
   delete(id: string): void {
     this.todos = this.todos.filter((todo) => todo.id !== id);
+  }
+
+  /** How many todos are left, and done. */
+  counts(): { left: number; done: number } {
+    const done = this.todos.filter((todo) => todo.done).length;
+
+    return { left: this.todos.length - done, done };
   }
 
   /** Deletes every todo that's done, and returns how many it deleted. */

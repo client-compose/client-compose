@@ -7,7 +7,14 @@ import { loadCatalog } from "@client-compose/composer";
 import { testComposer } from "@client-compose/composer/testing";
 
 import { createTodoComposer } from "../src/composer.ts";
-import { AddTodoV1, TodoListV1, TodoSummaryV1 } from "../src/contract.generated.ts";
+import {
+  AddTodoV1,
+  ClearCompletedV1,
+  DeleteTodoV1,
+  TodoListV1,
+  TodoSummaryV1,
+  ToggleTodoV1,
+} from "../src/contract.generated.ts";
 import { MAX_TITLE_LENGTH, Todos } from "../src/todos.ts";
 
 const catalog = loadCatalog(new URL("../../strings", import.meta.url).pathname);
@@ -33,11 +40,14 @@ test("an empty list has no summary", async () => {
 test("adding todos counts what's left", async () => {
   const app = newApp();
 
-  for (const title of ["Buy milk", "  Walk the dog  "]) {
-    const added = await app.perform(AddTodoV1, { title });
-    assert.equal(added.status, "ok");
-    assert.deepEqual(added.effects, { invalidate: [{ screen: "todos" }] });
-  }
+  // The first brings the summary, so the screen reloads; the next joins the list.
+  const first = await app.perform(AddTodoV1, { title: "Buy milk" });
+  assert.deepEqual(first.effects, { invalidate: [{ screen: "todos" }] });
+  const second = await app.perform(AddTodoV1, { title: "  Walk the dog  " });
+  assert.deepEqual(
+    second.effects?.update?.map((u) => u.island.key),
+    ["list"],
+  );
 
   const screen = await app.screen("todos");
 
@@ -46,7 +56,11 @@ test("adding todos counts what's left", async () => {
     ["Buy milk", "Walk the dog"],
   );
 
-  assert.deepEqual(screen.props(TodoSummaryV1, "summary"), { left: 2, done: 0 });
+  assert.deepEqual(screen.props(TodoSummaryV1, "summary"), {
+    id: "all",
+    left: 2,
+    done: 0,
+  });
 });
 
 test("a title must say something, and not too much", async () => {
@@ -69,4 +83,21 @@ test("the screen is in the client's language", async () => {
   const screen = await app.screen("todos");
 
   assert.equal(screen.head?.meta?.title, "Zadania");
+});
+
+// Every action says what it changed, and nothing it forgot: applied to the screen as an app would,
+// its effects match the screen composed again.
+test("each action says everything it changed", async () => {
+  const app = newApp();
+
+  const milk = await app.checkEffects("todos", {}, () =>
+    app.perform(AddTodoV1, { title: "Buy milk" }),
+  );
+  await app.checkEffects("todos", {}, () => app.perform(AddTodoV1, { title: "Walk the dog" }));
+  await app.checkEffects("todos", {}, () =>
+    app.perform(ToggleTodoV1, { id: milk.result?.id ?? "", done: true }),
+  );
+  await app.checkEffects("todos", {}, () => app.perform(ClearCompletedV1, {}));
+  const [dog] = (await app.screen("todos")).props(TodoListV1, "list").todos;
+  await app.checkEffects("todos", {}, () => app.perform(DeleteTodoV1, { id: dog?.id ?? "" }));
 });

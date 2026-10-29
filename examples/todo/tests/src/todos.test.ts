@@ -66,8 +66,8 @@ function props<Props>(
   return island(screen, key).props as Props;
 }
 
-/** The options every action is performed with. */
-const asClient = { client: client() };
+/** The options every action is performed with: who's asking, and the islands it can draw. */
+const asClient = { client: client(), islands: registry.capabilities() };
 
 beforeEach(async () => {
   const screen = await todosScreen();
@@ -90,14 +90,39 @@ test("an empty list has no summary", async () => {
   assert.equal(screen.meta?.title, "Todos");
 });
 
-test("todos are added, done, cleared and deleted, and each change reloads the screen", async () => {
+test("todos are added, done, cleared and deleted, each saying what it changed", async () => {
   const milk = await callAction(COMPOSER_URL, AddTodoV1, { title: "Buy milk" }, asClient);
   const dog = await callAction(COMPOSER_URL, AddTodoV1, { title: "  Walk the dog  " }, asClient);
   assert.ok(milk.status === "ok" && dog.status === "ok");
+  // The first todo brings the summary, so the screen reloads; the next joins the list.
   assert.deepEqual(milk.effects, { invalidate: [{ screen: "todos" }] });
+  assert.deepEqual(
+    dog.effects?.update?.map((u) => [u.screen, u.island.key]),
+    [["todos", "list"]],
+  );
 
   const milkId = milk.result.id;
-  await callAction(COMPOSER_URL, ToggleTodoV1, { id: milkId, done: true }, asClient);
+  const toggled = await callAction(
+    COMPOSER_URL,
+    ToggleTodoV1,
+    { id: milkId, done: true },
+    asClient,
+  );
+  // Ticking one changes it and the counts, and nothing is resolved again.
+  assert.deepEqual(toggled.status === "ok" && toggled.effects, {
+    changes: [
+      {
+        entity: "todo",
+        id: milkId,
+        set: { done: true },
+      },
+      {
+        entity: "todo-counts",
+        id: "all",
+        set: { left: 1, done: 1 },
+      },
+    ],
+  });
 
   const screen = await todosScreen();
 
@@ -116,13 +141,21 @@ test("todos are added, done, cleared and deleted, and each change reloads the sc
     ],
   });
 
-  assert.deepEqual(props(screen, "summary", TodoSummaryV1), { left: 1, done: 1 });
+  assert.deepEqual(props(screen, "summary", TodoSummaryV1), {
+    id: "all",
+    left: 1,
+    done: 1,
+  });
 
   const cleared = await callAction(COMPOSER_URL, ClearCompletedV1, {}, asClient);
   assert.deepEqual(cleared.status === "ok" && cleared.result, { cleared: 1 });
 
   const after = await todosScreen();
-  assert.deepEqual(props(after, "summary", TodoSummaryV1), { left: 1, done: 0 });
+  assert.deepEqual(props(after, "summary", TodoSummaryV1), {
+    id: "all",
+    left: 1,
+    done: 0,
+  });
 });
 
 test("a new todo's title must say something, and not too much", async () => {

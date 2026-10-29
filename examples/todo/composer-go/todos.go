@@ -83,6 +83,19 @@ func (t *Todos) remove(match func(Todo) bool) int {
 	return removed
 }
 
+// Counts says how many todos are left, and done.
+func (t *Todos) Counts() (left, done int) {
+	for _, todo := range t.All() {
+		if todo.Done {
+			done++
+		} else {
+			left++
+		}
+	}
+
+	return left, done
+}
+
 // TitleProblem is what's wrong with a todo's title, if anything.
 type TitleProblem int
 

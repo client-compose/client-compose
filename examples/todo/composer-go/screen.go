@@ -19,16 +19,9 @@ func todosScreen(todos *Todos) cc.Screen {
 	})
 
 	summary := cc.Define(func(context.Context, cc.Request) (TodoSummaryV1, error) {
-		var out TodoSummaryV1
-		for _, todo := range todos.All() {
-			if todo.Done {
-				out.Done++
-			} else {
-				out.Left++
-			}
-		}
+		left, done := todos.Counts()
 
-		return out, nil
+		return TodoSummaryV1{ID: countsID, Left: left, Done: done}, nil
 	})
 
 	anyTodos := func(context.Context, cc.Request) (bool, error) {

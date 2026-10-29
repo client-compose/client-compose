@@ -1,7 +1,7 @@
 import { island, place, placeStatic, screen } from "@client-compose/composer";
 
 import { NewTodoV1, TodoListV1, TodosScreenStrings, TodoSummaryV1 } from "./contract.generated.ts";
-import { MAX_TITLE_LENGTH, type Todos } from "./todos.ts";
+import { COUNTS_ID, MAX_TITLE_LENGTH, type Todos } from "./todos.ts";
 
 /**
  * The one screen: a field for a new todo, the list, and a summary while there's anything in it.
@@ -9,11 +9,7 @@ import { MAX_TITLE_LENGTH, type Todos } from "./todos.ts";
 export function todosScreen(todos: Todos) {
   const list = island(TodoListV1, () => ({ todos: todos.all() }));
 
-  const summary = island(TodoSummaryV1, () => {
-    const done = todos.all().filter((todo) => todo.done).length;
-
-    return { left: todos.all().length - done, done };
-  });
+  const summary = island(TodoSummaryV1, () => ({ id: COUNTS_ID, ...todos.counts() }));
 
   return screen("todos", {
     islands: [

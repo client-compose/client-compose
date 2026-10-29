@@ -33,10 +33,12 @@ func TestAnEmptyListHasNoSummary(t *testing.T) {
 func TestAddingTodosCountsWhatsLeft(t *testing.T) {
 	app := newApp(t, "en")
 
-	for _, title := range []string{"Buy milk", "  Walk the dog  "} {
-		if out := cctest.Perform(app, AddTodoV1Input{Title: title}); out.Status != "ok" || len(out.Effects.Invalidate) != 1 {
-			t.Fatalf("add %q: %+v", title, out)
-		}
+	// The first brings the summary, so the screen reloads; the next joins the list.
+	if out := cctest.Perform(app, AddTodoV1Input{Title: "Buy milk"}); out.Status != "ok" || len(out.Effects.Invalidate) != 1 {
+		t.Fatalf("first: %+v", out)
+	}
+	if out := cctest.Perform(app, AddTodoV1Input{Title: "  Walk the dog  "}); len(out.Effects.Updated) != 1 || len(out.Effects.Changes) != 1 {
+		t.Fatalf("second: %+v", out)
 	}
 
 	screen := app.Screen("todos", nil)
@@ -46,7 +48,7 @@ func TestAddingTodosCountsWhatsLeft(t *testing.T) {
 	}
 
 	summary := cctest.Props[TodoSummaryV1](t, screen, "summary")
-	if summary.Left != 2 || summary.Done != 0 {
+	if summary.ID != "all" || summary.Left != 2 || summary.Done != 0 {
 		t.Fatalf("summary: %+v", summary)
 	}
 }
@@ -75,4 +77,28 @@ func TestTheScreenIsInTheClientsLanguage(t *testing.T) {
 	if screen.Head.Meta == nil || screen.Head.Meta.Title != "Zadania" {
 		t.Fatalf("meta: %+v", screen.Head.Meta)
 	}
+}
+
+// Every action says what it changed, and nothing it forgot: applied to the screen as an app would,
+// its effects match the screen composed again.
+func TestEachActionSaysEverythingItChanged(t *testing.T) {
+	app := newApp(t, "en")
+	add := func(title string) cctest.Outcome[AddTodoV1Result] {
+		return cctest.CheckEffects(app, "todos", nil, func() cctest.Outcome[AddTodoV1Result] {
+			return cctest.Perform(app, AddTodoV1Input{Title: title})
+		})
+	}
+
+	milk := add("Buy milk")
+	add("Walk the dog")
+	cctest.CheckEffects(app, "todos", nil, func() cctest.Outcome[ToggleTodoV1Result] {
+		return cctest.Perform(app, ToggleTodoV1Input{ID: milk.Result.ID, Done: true})
+	})
+	cctest.CheckEffects(app, "todos", nil, func() cctest.Outcome[ClearCompletedV1Result] {
+		return cctest.Perform(app, ClearCompletedV1Input{})
+	})
+	dog := cctest.Props[TodoListV1](t, app.Screen("todos", nil), "list").Todos[0]
+	cctest.CheckEffects(app, "todos", nil, func() cctest.Outcome[DeleteTodoV1Result] {
+		return cctest.Perform(app, DeleteTodoV1Input{ID: dog.ID})
+	})
 }
