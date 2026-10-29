@@ -13,7 +13,9 @@
     "effects": {
       "type": "object",
       "properties": {
+        "changes": { "type": "array", "items": { "$ref": "#/$defs/entityChange" } },
         "invalidate": { "type": "array", "items": { "$ref": "#/$defs/screenRef" } },
+        "update": { "type": "array", "items": { "$ref": "#/$defs/islandUpdate" } },
         "navigate": { "$ref": "#/$defs/screenRef" }
       }
     },
@@ -32,6 +34,30 @@
     { "properties": { "status": { "const": "error" } }, "required": ["error"] }
   ],
   "$defs": {
+    "entityChange": {
+      "type": "object",
+      "required": ["entity", "id"],
+      "properties": {
+        "entity": { "type": "string" },
+        "id": { "type": "string" },
+        "set": { "type": "object", "description": "Properties that changed, with their new values." },
+        "delete": { "const": true }
+      },
+      "oneOf": [{ "required": ["set"] }, { "required": ["delete"] }]
+    },
+    "islandUpdate": {
+      "type": "object",
+      "required": ["screen", "params", "island"],
+      "properties": {
+        "screen": { "type": "string" },
+        "params": {
+          "description": "The screen's exact params.",
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "island": { "$ref": "screen-response.json#/$defs/island" }
+      }
+    },
     "screenRef": {
       "type": "object",
       "required": ["screen"],
