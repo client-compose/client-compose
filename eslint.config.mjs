@@ -28,7 +28,7 @@ export default defineConfig([
     "build/",
     "**/*.generated.ts",
     "codegen/test/golden/",
-    "examples/profile/react-native/.expo/",
+    "examples/todo/react-native/.expo/",
   ]),
   js.configs.recommended,
   tseslint.configs.recommended,
@@ -86,7 +86,7 @@ export default defineConfig([
     rules: { "@typescript-eslint/consistent-type-assertions": "off" },
   },
   {
-    files: ["**/*.config.{js,cjs,mjs}", "examples/profile/react-native/*.js"],
+    files: ["**/*.config.{js,cjs,mjs}", "examples/todo/react-native/*.js"],
     rules: { "@typescript-eslint/no-require-imports": "off" },
   },
   prettier,

@@ -1,0 +1,37 @@
+{
+  "type": "todo-summary",
+  "version": 1,
+  "description": "How many todos are left, and a button that clears the done ones (clear-completed). Only shown while there are todos.",
+  "props": {
+    "type": "object",
+    "required": [
+      "id",
+      "left",
+      "done"
+    ],
+    "properties": {
+      "id": {
+        "type": "string",
+        "description": "The counts' id: \"all\"."
+      },
+      "left": {
+        "type": "integer",
+        "description": "Todos not done yet."
+      },
+      "done": {
+        "type": "integer",
+        "description": "Todos done, which clearing removes."
+      }
+    },
+    "entity": "todo-counts"
+  },
+  "strings": {
+    "left": {
+      "params": [
+        "count"
+      ],
+      "counted": true
+    },
+    "clearCompleted": {}
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "action": "add-todo",
+  "version": 1,
+  "description": "Adds a todo to the end of the list.",
+  "input": {
+    "type": "object",
+    "required": ["title"],
+    "properties": {
+      "title": { "type": "string" }
+    }
+  },
+  "result": {
+    "type": "object",
+    "required": ["id"],
+    "properties": {
+      "id": { "type": "string", "description": "The new todo's id." }
+    }
+  },
+  "errors": {
+    "empty_title": { "description": "The title is empty, or only spaces." },
+    "title_too_long": {
+      "description": "The title is longer than the composer accepts.",
+      "details": {
+        "type": "object",
+        "required": ["maxLength"],
+        "properties": { "maxLength": { "type": "integer" } }
+      }
+    }
+  }
+}

@@ -3,6 +3,7 @@
 
 import type { IslandRegistry, SkipReason } from "@client-compose/client";
 import type {
+  ActionEffects,
   ActionRequest,
   ActionResponse,
   ClientContext,
@@ -72,4 +73,12 @@ export interface ClientComposeConfig extends ScreenConfig {
    * Components.
    */
   onInvalidate?: (refs: ScreenRef[]) => void;
+  /**
+   * An action changed entities or islands (spec §5.3: its `changes` and `update`) that only the
+   * server can show: islands that are Server Components, or a Client Component island a Server
+   * Component rendered, when it can't take them. Re-render them, e.g. with `router.refresh()`.
+   * Everything else applies them by itself: screens shown with `useScreen`/`<ComposedScreen>`, and
+   * Client Component islands rendered by `@client-compose/react/server`.
+   */
+  onChanges?: (effects: ActionEffects) => void;
 }

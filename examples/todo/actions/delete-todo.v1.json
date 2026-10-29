@@ -1,0 +1,13 @@
+{
+  "action": "delete-todo",
+  "version": 1,
+  "description": "Deletes a todo. One that's already gone is left alone.",
+  "input": {
+    "type": "object",
+    "required": ["id"],
+    "properties": {
+      "id": { "type": "string" }
+    }
+  },
+  "result": { "type": "object", "properties": {} }
+}

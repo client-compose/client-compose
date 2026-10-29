@@ -164,4 +164,4 @@ Strings go through your server too: `proxy.loadStrings()`.
 ## Links
 
 - [Protocol spec](https://github.com/client-compose/client-compose/blob/main/spec/PROTOCOL.md)
-- [Examples](https://github.com/client-compose/client-compose/tree/main/examples/profile)
+- [Examples](https://github.com/client-compose/client-compose/tree/main/examples/todo)

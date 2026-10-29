@@ -1,0 +1,57 @@
+{
+  "type": "todo-list",
+  "version": 1,
+  "description": "The todos, oldest first. Each can be marked done (toggle-todo) or deleted (delete-todo).",
+  "props": {
+    "type": "object",
+    "required": [
+      "todos"
+    ],
+    "properties": {
+      "todos": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "title": "Todo",
+          "entity": "todo",
+          "required": [
+            "id",
+            "title",
+            "done"
+          ],
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "done": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    }
+  },
+  "strings": {
+    "empty": {
+      "description": "There are no todos."
+    },
+    "markDone": {
+      "params": [
+        "title"
+      ],
+      "description": "The checkbox's label."
+    },
+    "delete": {
+      "description": "The delete button."
+    },
+    "deleteLabel": {
+      "params": [
+        "title"
+      ],
+      "description": "The delete button, for screen readers."
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "action": "clear-completed",
+  "version": 1,
+  "description": "Deletes every todo that's done.",
+  "input": { "type": "object", "properties": {} },
+  "result": {
+    "type": "object",
+    "required": ["cleared"],
+    "properties": {
+      "cleared": { "type": "integer", "description": "How many were deleted." }
+    }
+  }
+}

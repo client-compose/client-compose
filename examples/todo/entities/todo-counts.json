@@ -1,0 +1,10 @@
+{
+  "entity": "todo-counts",
+  "description": "How many todos are left, and done: one for the list, with the id \"all\".",
+  "id": "id",
+  "properties": {
+    "id": { "type": "string" },
+    "left": { "type": "integer" },
+    "done": { "type": "integer" }
+  }
+}

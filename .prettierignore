@@ -15,6 +15,4 @@ CHANGELOG.md
 composers/go/
 clients/swift/
 clients/kotlin/
-examples/profile/android/
-examples/profile/ios/
-examples/profile/composer-go/
+examples/todo/composer-go/

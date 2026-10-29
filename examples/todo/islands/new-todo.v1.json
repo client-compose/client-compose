@@ -1,0 +1,22 @@
+{
+  "type": "new-todo",
+  "version": 1,
+  "description": "A field for a new todo, and a button that adds it (add-todo).",
+  "props": {
+    "type": "object",
+    "required": ["maxLength"],
+    "properties": {
+      "maxLength": {
+        "type": "integer",
+        "description": "The longest title the composer accepts, so the app can check it as it's typed."
+      }
+    }
+  },
+  "strings": {
+    "label": { "description": "The field's label." },
+    "placeholder": {},
+    "add": { "description": "The button." },
+    "emptyTitle": { "description": "The title is empty." },
+    "titleTooLong": { "params": ["maxLength"] }
+  }
+}

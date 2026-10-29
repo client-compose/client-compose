@@ -99,6 +99,10 @@ func (c *Composer) EntityPaths(typ string, version int) []EntityPath {
 // it made its change.
 func (c *Composer) resolveUpdates(ctx context.Context, effects Effects, client ClientContext, islands map[string][]int) Effects {
 	for _, ref := range effects.Update {
+		// An update names its screen's exact params: an object, even when there are none.
+		if ref.Params == nil {
+			ref.Params = map[string]string{}
+		}
 		entry, ok := c.resolveUpdate(ctx, ref, client, islands)
 		if !ok {
 			effects.Invalidate = append(effects.Invalidate, ScreenRef{Screen: ref.Screen, Params: ref.Params})
@@ -119,12 +123,8 @@ func (c *Composer) resolveUpdate(parent context.Context, ref IslandRef, client C
 	ctx, endRequest := withRequestScope(parent)
 	defer endRequest()
 
-	params := ref.Params
-	if params == nil {
-		params = map[string]string{}
-	}
 	words := c.words(client.Locale)
-	r := Request{Screen: screen.ID, Params: params, Client: client, words: words}
+	r := Request{Screen: screen.ID, Params: ref.Params, Client: client, words: words}
 	placements, err := c.placements(ctx, screen, r)
 	if err != nil {
 		return IslandEntry{}, false

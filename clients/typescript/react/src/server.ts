@@ -5,9 +5,9 @@
 // "use client"); they hydrate as usual. The screen streams (spec §4.6): islands still pending in its
 // head render as their placeholders, each in its own <Suspense>, and stream in as they arrive.
 
-import { collectScreen, plan, type ScreenStream } from "@client-compose/client";
+import { collectScreen, heldEntities, plan, type ScreenStream } from "@client-compose/client";
 import type { IslandEntry, ScreenHead, ScreenResponse } from "@client-compose/protocol";
-import { createElement, Fragment, type ReactNode, Suspense } from "react";
+import { createElement, Fragment, isValidElement, type ReactNode, Suspense } from "react";
 
 // Only components may be imported from the "use client" module here: from a Server Component,
 // they're client references that can be rendered, never called.
@@ -15,6 +15,7 @@ import { IslandBoundary } from "./client.ts";
 import type { ScreenConfig } from "./config.ts";
 import { streamScreen } from "./load.ts";
 import { IslandScope } from "./pages.ts";
+import { ClientIsland, ServerIsland } from "./rendered.ts";
 import { scopeOf } from "./scope.ts";
 
 export { type ServerComposer, serverComposer, type ServerComposerOptions } from "./composer.ts";
@@ -32,6 +33,8 @@ export {
 } from "@client-compose/client";
 export type {
   AppStringsDescriptor,
+  EntityDescriptor,
+  EntityPath,
   IslandDescriptor,
   ScreenHead,
   ScreenMeta,
@@ -227,7 +230,27 @@ function entryNode(
     return undefined;
   }
   const scope = scopeOf(head, params, island.key);
-  return scope ? createElement(IslandScope, { value: scope }, node) : node;
+  if (!scope) {
+    return node;
+  }
+
+  return createElement(IslandScope, { value: scope }, changeable(config, head, node));
+}
+
+/**
+ * An island as actions' changes and updates reach it in the browser (spec §5.3): a Client Component
+ * island applies them itself; any other says when they touch what it holds, for the server to
+ * render it again.
+ */
+function changeable(config: ScreenConfig, head: ScreenHead, node: ReactNode): ReactNode {
+  const [entry] = head.islands;
+  if ((isValidElement(node) && node.type === ClientIsland) || entry?.status !== "ok") {
+    return node;
+  }
+
+  const holds = heldEntities(entry.props, config.registry.entities(entry.type, entry.version));
+
+  return createElement(ServerIsland, { holds }, node);
 }
 
 /**

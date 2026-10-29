@@ -1,0 +1,10 @@
+{
+  "entity": "todo",
+  "description": "Something to do.",
+  "id": "id",
+  "properties": {
+    "id": { "type": "string" },
+    "title": { "type": "string" },
+    "done": { "type": "boolean" }
+  }
+}

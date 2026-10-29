@@ -1,0 +1,14 @@
+{
+  "action": "toggle-todo",
+  "version": 1,
+  "description": "Marks a todo done, or not done. A todo that's gone is left alone.",
+  "input": {
+    "type": "object",
+    "required": ["id", "done"],
+    "properties": {
+      "id": { "type": "string" },
+      "done": { "type": "boolean" }
+    }
+  },
+  "result": { "type": "object", "properties": {} }
+}

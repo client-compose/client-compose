@@ -128,7 +128,7 @@ jobs:
           bun-version: 1.4.2
       - run: BUN=bun scripts/build-codegen-binaries.sh build/codegen-binaries
       - name: Smoke test
-        run: build/codegen-binaries/client-compose-codegen-linux-x64 --check examples/profile/client-compose.codegen.json
+        run: build/codegen-binaries/client-compose-codegen-linux-x64 --check examples/todo/client-compose.codegen.json
       - name: Attach to the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}

@@ -7,6 +7,6 @@
     "resolveJsonModule": true,
     "types": ["node"]
   },
-  "include": ["shared/typescript", "composers/typescript", "clients/typescript", "conformance/runner", "codegen"],
+  "include": ["shared/typescript", "composers/typescript", "clients/typescript", "conformance/runner", "codegen", "examples/todo/composer-ts", "examples/todo/tests"],
   "exclude": ["**/node_modules", "**/dist"]
 }

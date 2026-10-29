@@ -38,6 +38,7 @@ class ScreenStore {
   private readonly cache = new Map<string, CacheEntry>();
   private readonly mounted = new Set<MountedScreen>();
   private readonly pages = new Set<(batch: EffectsBatch) => void>();
+  private readonly rendered = new Set<(batch: EffectsBatch) => boolean>();
 
   /** The cached response for a key, while it's fresh. */
   cached(key: string): ScreenResponse | undefined {
@@ -72,10 +73,20 @@ class ScreenStore {
   }
 
   /**
-   * Apply an action's changes and updates (spec §5.3) to every screen there is: cached responses
-   * (dropped when they'd need a reload), the screens on show, and paged islands' pages.
+   * An island a Server Component rendered: it applies an action's changes and updates, saying
+   * whether it could (false: only the server can show them). Returns what stops it.
    */
-  change(batch: EffectsBatch) {
+  watchRendered(apply: (batch: EffectsBatch) => boolean): () => void {
+    this.rendered.add(apply);
+    return () => void this.rendered.delete(apply);
+  }
+
+  /**
+   * Apply an action's changes and updates (spec §5.3) to every screen there is: cached responses
+   * (dropped when they'd need a reload), the screens on show, paged islands' pages, and islands
+   * Server Components rendered. Returns whether any of those need the server to render them again.
+   */
+  change(batch: EffectsBatch): boolean {
     for (const [key, entry] of this.cache) {
       const changed = batch.response(entry.response, entry.params);
       if (changed === undefined) {
@@ -90,6 +101,13 @@ class ScreenStore {
     for (const m of this.mounted) {
       m.apply(batch);
     }
+
+    let server = false;
+    for (const apply of this.rendered) {
+      server = !apply(batch) || server;
+    }
+
+    return server;
   }
 
   /** Drop cached responses the refs match, and reload the screens on show that they match. */
@@ -128,8 +146,8 @@ export function ClientComposeProvider(props: {
       const batch = new EffectsBatch(effects, (type, version) =>
         config.registry.entities(type, version),
       );
-      if (batch.touchesScreens) {
-        screens.change(batch);
+      if (batch.touchesScreens && screens.change(batch)) {
+        config.onChanges?.(effects);
       }
       const refs = effects.invalidate ?? [];
       if (refs.length) {

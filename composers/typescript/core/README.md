@@ -440,4 +440,4 @@ in-process, with no server: see [`@client-compose/conformance`](https://www.npmj
 
 - [Protocol spec](https://github.com/client-compose/client-compose/blob/main/spec/PROTOCOL.md)
 - [Capabilities](https://github.com/client-compose/client-compose/blob/main/spec/CAPABILITIES.md)
-- [Examples](https://github.com/client-compose/client-compose/tree/main/examples/profile)
+- [Examples](https://github.com/client-compose/client-compose/tree/main/examples/todo): [`composer-ts`](https://github.com/client-compose/client-compose/tree/main/examples/todo/composer-ts) serves the todo example

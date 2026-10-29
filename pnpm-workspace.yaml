@@ -4,7 +4,9 @@ packages:
   - "clients/typescript/*"
   - "conformance/runner"
   - "codegen"
-  - "examples/profile/next"
+  - "examples/todo/composer-ts"
+  - "examples/todo/tests"
+  - "examples/todo/next"
 
 # Supply-chain safety: never install a dependency version published in the last 14 days.
 minimumReleaseAge: 20160

@@ -163,7 +163,8 @@ Also: `.failure(401, "unauthenticated")`, `.error(FollowUserV1.self, .blocked)`,
   `reload()` always fetches. Pass `cache: false` to `ComposeClient` to turn it off.
 - Every type is safe to use from Swift 6's strict concurrency checking.
 
-See [`examples/profile/ios`](../../examples/profile/ios) for a full example.
+The [todo example](../../examples/todo) has a composer in Go and TypeScript for a SwiftUI app to
+use; a SwiftUI todo client is a welcome contribution.
 
 ## Tests
 
