@@ -11,7 +11,8 @@ import SwiftUI
 ///         .refreshable { await profile.reload() }
 ///         .task { await profile.load() }
 ///
-/// It reloads by itself when an action invalidates its screen (spec §5.3).
+/// It takes an action's changes and updates by itself, and reloads when an action invalidates its
+/// screen, or changes it in a way it can't show without reloading (spec §5.3).
 @MainActor
 public final class ScreenModel: ObservableObject {
     public let screen: String
@@ -62,9 +63,12 @@ public final class ScreenModel: ObservableObject {
     /// invalidate it. Call it from `.task`, so leaving the screen cancels it.
     public func load() async {
         if watch == nil {
-            watch = await client.watch(screen: screen, params: params) { [weak self] in
-                Task { await self?.reload() }
-            }
+            watch = await client.watch(
+                screen: screen,
+                params: params,
+                onEffects: { [weak self] batch in self?.apply(batch) },
+                onInvalidate: { [weak self] in Task { await self?.reload() } }
+            )
         }
         await fetch(reload: false)
     }
@@ -72,6 +76,17 @@ public final class ScreenModel: ObservableObject {
     /// Fetch the screen again, bypassing the cache. The current islands stay until the new ones arrive.
     public func reload() async {
         await fetch(reload: true)
+    }
+
+    /// Shows the screen as an action left it, or reloads it when the changes can't be shown on it.
+    private func apply(_ batch: EffectsBatch) {
+        guard let response else { return }
+        guard let changed = batch.apply(to: response, params: params) else {
+            Task { await reload() }
+            return
+        }
+        self.response = changed
+        islands = registry.plan(changed, onSkipped: onSkipped)
     }
 
     private func fetch(reload: Bool) async {

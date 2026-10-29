@@ -5,6 +5,7 @@ package dev.clientcompose.golden
 
 import dev.clientcompose.ActionDescriptor
 import dev.clientcompose.DeclaredError
+import dev.clientcompose.EntityPath
 import dev.clientcompose.IslandDescriptor
 import dev.clientcompose.IslandDescriptorWithStrings
 import dev.clientcompose.StringsTable
@@ -129,6 +130,10 @@ data class ThingListV1(
         override val type: String = "thing-list"
         override val version: Int = 1
         override val propsSerializer: KSerializer<ThingListV1> get() = serializer()
+        override val entities: List<EntityPath> = listOf(
+            EntityPath(listOf("things", "[]"), "thing", "id", listOf("id", "name")),
+            EntityPath(listOf("bySection", "{}", "[]"), "thing", "id", listOf("id", "visibility")),
+        )
     }
 }
 

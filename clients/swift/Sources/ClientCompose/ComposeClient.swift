@@ -73,14 +73,16 @@ public final class ComposeClient: Sendable {
         return decoded
     }
 
-    /// Calls `onInvalidate` on the main actor whenever an action invalidates this screen, until the
-    /// returned watch is cancelled or released. Screen models use it to reload.
+    /// Calls `onInvalidate` on the main actor whenever an action invalidates this screen, and
+    /// `onEffects` with every action's changes and updates, until the returned watch is cancelled or
+    /// released. Screen models use them to reload, or to apply the changes to what they show.
     public func watch(
         screen: String,
         params: [String: String],
+        onEffects: @escaping @MainActor @Sendable (EffectsBatch) -> Void = { _ in },
         onInvalidate: @escaping @MainActor @Sendable () -> Void
     ) async -> ScreenWatch {
-        let id = await store.watch(screen: screen, params: params, onInvalidate: onInvalidate)
+        let id = await store.watch(screen: screen, params: params, onEffects: onEffects, onInvalidate: onInvalidate)
         return ScreenWatch { [store] in Task { await store.unwatch(id) } }
     }
 
@@ -112,13 +114,14 @@ public final class ComposeClient: Sendable {
     ///     case .error(.locked): showLocked()
     ///     }
     ///
-    /// - Parameter islands: The app's capabilities, usually `registry.capabilities`: the composer
-    ///   resolves the islands an action updates at them (spec §5.2).
+    /// - Parameter islands: The app's islands, usually `registry.catalog`: the composer resolves the
+    ///   islands an action updates at their versions, and its changes reach the islands holding
+    ///   their entities (spec §5.2, §5.3).
     /// - Parameter idempotencyKey: One per user intent. Pass the same key again to retry it.
     public func perform<A: ActionDescriptor>(
         _ action: A.Type,
         _ input: A.Input,
-        islands: [String: [Int]] = [:],
+        islands: IslandCatalog = .empty,
         idempotencyKey: String = UUID().uuidString
     ) async throws -> ActionOutcome<A.Result, A.DeclaredError> {
         let request = ActionRequest(
@@ -127,12 +130,12 @@ public final class ComposeClient: Sendable {
             version: A.version,
             input: input,
             client: context,
-            islands: islands,
+            islands: islands.capabilities,
             idempotencyKey: idempotencyKey
         )
         let response = try await post(path: "actions/\(A.action)", body: JSONEncoder().encode(request))
         let outcome: ActionOutcome<A.Result, A.DeclaredError> = try Self.outcome(of: response)
-        if case .ok(_, let effects) = outcome { await apply(effects) }
+        if case .ok(_, let effects) = outcome { await apply(EffectsBatch(effects: effects, catalog: islands)) }
         return outcome
     }
 
@@ -158,7 +161,11 @@ public final class ComposeClient: Sendable {
         }
     }
 
-    private func apply(_ effects: ActionEffects) async {
+    /// Applies an action's effects in the spec's order: changes and updates, then invalidations,
+    /// then navigation (spec §5.3).
+    private func apply(_ batch: EffectsBatch) async {
+        let effects = batch.effects
+        if batch.touchesScreens { await store.change(batch) }
         if !effects.invalidate.isEmpty { await store.invalidate(effects.invalidate) }
         if let ref = effects.navigate, let onNavigate { await onNavigate(ref) }
     }
@@ -215,6 +222,7 @@ actor ScreenStore {
     private struct Watcher {
         let screen: String
         let params: [String: String]
+        let onEffects: @MainActor @Sendable (EffectsBatch) -> Void
         let onInvalidate: @MainActor @Sendable () -> Void
     }
 
@@ -242,10 +250,30 @@ actor ScreenStore {
         )
     }
 
-    func watch(screen: String, params: [String: String], onInvalidate: @escaping @MainActor @Sendable () -> Void) -> UUID {
+    func watch(
+        screen: String,
+        params: [String: String],
+        onEffects: @escaping @MainActor @Sendable (EffectsBatch) -> Void,
+        onInvalidate: @escaping @MainActor @Sendable () -> Void
+    ) -> UUID {
         let id = UUID()
-        watchers[id] = Watcher(screen: screen, params: params, onInvalidate: onInvalidate)
+        watchers[id] = Watcher(screen: screen, params: params, onEffects: onEffects, onInvalidate: onInvalidate)
         return id
+    }
+
+    /// Applies an action's changes and updates to cached screens (dropping those it can't apply to)
+    /// and hands them to the screens on show (spec §5.3).
+    func change(_ batch: EffectsBatch) async {
+        for (key, entry) in entries {
+            if let changed = batch.apply(to: entry.response, params: entry.params) {
+                entries[key] = Entry(screen: entry.screen, params: entry.params, response: changed, expires: entry.expires)
+            } else {
+                entries[key] = nil
+            }
+        }
+        for watcher in watchers.values {
+            await watcher.onEffects(batch)
+        }
     }
 
     func unwatch(_ id: UUID) {

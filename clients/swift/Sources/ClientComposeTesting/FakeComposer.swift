@@ -31,6 +31,8 @@ public final class FakeComposer: Transport, @unchecked Sendable {
         public let version: Int
         public let input: JSONValue
         public let idempotencyKey: String?
+        /// The island versions the app said it can render (spec §5.2).
+        public let islands: [String: [Int]]
         public let headers: [String: String]
 
         /// The input, decoded as `type`.
@@ -114,6 +116,7 @@ public final class FakeComposer: Transport, @unchecked Sendable {
                 version: (try? fields["version"]?.decode(Int.self)) ?? 0,
                 input: fields["input"] ?? .null,
                 idempotencyKey: fields["idempotencyKey"]?.string,
+                islands: (try? fields["islands"]?.decode([String: [Int]].self)) ?? [:],
                 headers: headers
             )
             guard let handler = locked({ () -> (@Sendable (ActionRequest) throws -> FakeResponse)? in
@@ -189,16 +192,20 @@ public struct FakeResponse: Sendable {
         FakeResponse(status: status, body: .object(["protocol": .int(ClientCompose.protocolVersion), "error": .object(["code": .string(code)])]))
     }
 
-    /// An action's result, and the screens it changed.
+    /// An action's result, and what it changed (spec §5.3): entities, islands, and whole screens.
     public static func ok<A: ActionDescriptor>(
         _ action: A.Type,
         _ result: A.Result,
+        changes: [EntityChange] = [],
+        update: [FakeUpdate] = [],
         invalidate: [ScreenRef] = [],
         navigate: ScreenRef? = nil
     ) -> FakeResponse where A.Result: Encodable {
         var body = outcome(action, "ok")
         body["result"] = (try? JSONValue(encoding: result)) ?? .object([:])
         var effects: [String: JSONValue] = [:]
+        if !changes.isEmpty { effects["changes"] = .array(changes.map(\.json)) }
+        if !update.isEmpty { effects["update"] = .array(update.map(\.json)) }
         if !invalidate.isEmpty { effects["invalidate"] = try? JSONValue(encoding: invalidate) }
         if let navigate { effects["navigate"] = try? JSONValue(encoding: navigate) }
         if !effects.isEmpty { body["effects"] = .object(effects) }
@@ -256,5 +263,31 @@ private extension JSONValue {
     var string: String? {
         if case .string(let value) = self { return value }
         return nil
+    }
+}
+
+/// An island's new entry in an action's `update` effects (spec §5.3).
+public struct FakeUpdate: Sendable {
+    let json: JSONValue
+
+    /// The island, for the screen with exactly these params.
+    public static func island(screen: String, params: [String: String] = [:], _ island: FakeIsland) -> FakeUpdate {
+        FakeUpdate(json: .object([
+            "screen": .string(screen),
+            "params": .object(params.mapValues(JSONValue.string)),
+            "island": island.json,
+        ]))
+    }
+}
+
+extension EntityChange {
+    var json: JSONValue {
+        var out: [String: JSONValue] = ["entity": .string(entity), "id": .string(id)]
+        if delete {
+            out["delete"] = .bool(true)
+        } else {
+            out["set"] = .object(set)
+        }
+        return .object(out)
     }
 }

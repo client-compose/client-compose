@@ -107,6 +107,10 @@ public data class ScreenRef(
 /** What a successful action changed (spec §5.3). Unknown effects are ignored. */
 @Serializable
 public data class ActionEffects(
+    /** Entities the action changed: applied to every island showing them. */
+    val changes: List<EntityChange> = emptyList(),
+    /** Islands whose content changed, with their new entries: swapped in. */
+    val update: List<IslandUpdate> = emptyList(),
     /** Screens whose content may have changed: dropped from the cache, and reloaded where they're on show. */
     val invalidate: List<ScreenRef> = emptyList(),
     /** A screen to show next: passed to the client's `onNavigate`. */

@@ -232,13 +232,20 @@ export function generate(configPath: string): GeneratedFile[] {
   for (const t of list(swift)) {
     files.push({
       path: resolve(base, t.out),
-      contents: generateSwift(islands, header, t, actions, app),
+      contents: generateSwift(islands, header, t, actions, app, entities),
     });
   }
   for (const t of list(kotlin)) {
     files.push({
       path: resolve(base, t.out),
-      contents: generateKotlin(islands, header, required(t, "package", "kotlin"), actions, app),
+      contents: generateKotlin(
+        islands,
+        header,
+        required(t, "package", "kotlin"),
+        actions,
+        app,
+        entities,
+      ),
     });
   }
   for (const t of list(typescript)) {

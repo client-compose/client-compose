@@ -323,8 +323,8 @@ Names in *italics* don't exist yet; the parity work below adds them.
 | CLI-11 streams | ✅ `openScreen`, `fetchScreen` | ◐ read to the end | ◐ read to the end |
 | UI-11 progressive screens | ✅ placeholders, `progressive`, streamed Server Components | ✗ (all at once) | ✗ (all at once) |
 | CLI-12 strings | ✅ `t`, `fetchStrings`, `proxy.loadStrings` | ✅ `t`, `client.strings()` | ✅ `t`, `client.strings()` |
-| CLI-13 island updates | ✅ `useAction`, cached and shown screens | ✗ | ✗ |
-| CLI-14 entity changes | ✅ `applyChanges`, screens, cache and pages | ✗ | ✗ |
+| CLI-13 island updates | ✅ `useAction`, cached and shown screens | ✅ `perform(islands:)`, `ScreenModel` | ✅ `perform(islands)`, `ScreenState` |
+| CLI-14 entity changes | ✅ `applyChanges`, screens, cache and pages | ✅ `EffectsBatch`, cached and shown screens | ✅ `EffectsBatch`, cached and shown screens |
 | UI-12 app strings | ✅ `AppStringsProvider`, `useAppStrings` | ✗ (`client.strings()`, kept by the app) | ✗ (`client.strings()`, kept by the app) |
 
 SwiftUI and Compose can't catch a view that crashes while rendering the way React can, so UI-6
@@ -337,7 +337,7 @@ there means islands whose props don't decode are skipped.
 | TL-1 props | ✅ | ✅ | ✅ | ✅ |
 | TL-2 actions | ✅ | ✅ | ✅ | ✅ |
 | TL-6 strings | — (the composer serves the catalog) | ✅ | ✅ | ✅ |
-| TL-7 entities | ✅ | ✅ | ✗ | ✗ |
+| TL-7 entities | ✅ | ✅ | ✅ entity paths | ✅ entity paths |
 
 TL-3 to TL-5 are language-neutral and done.
 

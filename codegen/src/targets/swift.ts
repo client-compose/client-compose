@@ -2,9 +2,11 @@ import {
   type Action,
   type AppStrings,
   camel,
+  type Entity,
   type EnumDef,
   type Field,
   type Island,
+  islandEntityPaths,
   type ObjectDef,
   type StringDef,
   type TypeRef,
@@ -32,6 +34,7 @@ export function generateSwift(
   opts: SwiftOptions = {},
   actions: Action[] = [],
   app?: AppStrings,
+  entities: Entity[] = [],
 ): string {
   const access = opts.access === "public" ? "public " : "";
   const out: string[] = [
@@ -94,6 +97,19 @@ export function generateSwift(
     if (island) {
       out.push(`${inner}${access}static let islandType = ${JSON.stringify(island.type)}`);
       out.push(`${inner}${access}static let islandVersion = ${island.version}`);
+      const paths = islandEntityPaths(island, entities);
+      if (paths.length > 0) {
+        const list = (values: string[]) => `[${values.map((v) => JSON.stringify(v)).join(", ")}]`;
+        out.push(
+          `${inner}/// Where its props hold entities (spec §2.1), so an action's changes reach them.`,
+          `${inner}${access}static let islandEntities = [`,
+          ...paths.map(
+            (p) =>
+              `${inner}    EntityPath(path: ${list(p.path)}, entity: ${JSON.stringify(p.entity)}, id: ${JSON.stringify(p.id)}, properties: ${list(p.properties)}),`,
+          ),
+          `${inner}]`,
+        );
+      }
       out.push("");
     }
     for (const f of def.fields) {
