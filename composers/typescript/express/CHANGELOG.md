@@ -1,5 +1,12 @@
 # @client-compose/express
 
+## 0.3.4
+
+### Patch Changes
+
+- Updated dependencies [[`bb8e4b2`](https://github.com/client-compose/client-compose/commit/bb8e4b2b8565a833e4c40b6ef92a095b01916283)]:
+  - @client-compose/composer@0.14.0
+
 ## 0.3.3
 
 ### Patch Changes

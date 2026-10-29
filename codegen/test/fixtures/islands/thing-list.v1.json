@@ -1,0 +1,41 @@
+{
+  "type": "thing-list",
+  "version": 1,
+  "description": "Things, each showing part of a thing entity, by section.",
+  "props": {
+    "type": "object",
+    "required": ["things", "bySection"],
+    "properties": {
+      "things": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "title": "Item",
+          "entity": "thing",
+          "required": ["id", "name"],
+          "properties": {
+            "id": { "type": "string" },
+            "name": { "type": "string" },
+            "pinned": { "type": "boolean", "description": "The island's own: not part of the entity." }
+          }
+        }
+      },
+      "bySection": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "title": "SectionItem",
+            "entity": "thing",
+            "required": ["id"],
+            "properties": {
+              "id": { "type": "string" },
+              "visibility": { "type": "string", "enum": ["public", "private"] }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -7,8 +7,10 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
@@ -47,6 +49,11 @@ public class ComposeClient(
 
     /** Screens actions have invalidated. Screen states collect it to reload. */
     public val invalidations: SharedFlow<List<ScreenRef>> = invalidated.asSharedFlow()
+
+    private val changed = MutableSharedFlow<EffectsBatch>(extraBufferCapacity = 16)
+
+    /** Actions' changes and updates. Screen states collect it to apply them to what they show. */
+    public val changes: SharedFlow<EffectsBatch> = changed.asSharedFlow()
 
     // ---- Screens ----
 
@@ -112,11 +119,15 @@ public class ComposeClient(
      *         }
      *     }
      *
+     * @param islands the app's islands, usually `registry.catalog`: the composer resolves the
+     * islands an action updates at their versions, and its changes reach the islands holding their
+     * entities (spec §5.2, §5.3).
      * @param idempotencyKey one per user intent. Pass the same key again to retry it.
      */
     public suspend fun <I, R, E : DeclaredError> perform(
         action: ActionDescriptor<I, R, E>,
         input: I,
+        islands: IslandCatalog = IslandCatalog.EMPTY,
         idempotencyKey: String = UUID.randomUUID().toString(),
     ): ActionOutcome<R, E> {
         val request = buildJsonObject {
@@ -125,15 +136,27 @@ public class ComposeClient(
             put("version", action.version)
             put("input", ClientComposeJson.encodeToJsonElement(action.inputSerializer, input))
             put("client", context.toJson())
+            put("islands", buildJsonObject { islands.capabilities.forEach { (type, versions) -> put(type, JsonArray(versions.map { JsonPrimitive(it) })) } })
             put("idempotencyKey", idempotencyKey)
         }
         val response = post("actions/${segment(action.action)}", request.toString())
         val outcome = outcome(action, response)
-        if (outcome is ActionOutcome.Ok) apply(outcome.effects)
+        if (outcome is ActionOutcome.Ok) apply(EffectsBatch(outcome.effects, islands))
         return outcome
     }
 
-    private suspend fun apply(effects: ActionEffects) {
+    /** Applies an action's effects in the spec's order: changes and updates, then invalidations, then navigation. */
+    private suspend fun apply(batch: EffectsBatch) {
+        val effects = batch.effects
+        if (batch.touchesScreens) {
+            mutex.withLock {
+                for ((key, entry) in entries.toMap()) {
+                    val response = batch.apply(entry.response, entry.params)
+                    if (response == null) entries.remove(key) else entries[key] = Entry(entry.screen, entry.params, response, entry.expires)
+                }
+            }
+            changed.emit(batch)
+        }
         if (effects.invalidate.isNotEmpty()) {
             mutex.withLock { entries.values.removeAll { e -> effects.invalidate.any { it.matches(e.screen, e.params) } } }
             invalidated.emit(effects.invalidate)

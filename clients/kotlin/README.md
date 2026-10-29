@@ -74,14 +74,23 @@ fun FollowButton(props: FollowButtonV1) {
 ```
 
 A call ends in `ActionResult.Ok`, `ActionResult.Error` (a declared error) or `ActionResult.Failed`,
-and never throws. When it succeeds, its effects are applied first. Screens it invalidates are dropped
-from the cache and reloaded where they're on show, and `navigate` goes to your `onNavigate`.
+and never throws. When it succeeds, its effects are applied first, in this order (spec §5.3):
+
+- **Changes**: each entity it changed is changed in every island showing it (the generated
+  descriptors' `entities`), in cached screens and the ones on show, without fetching anything. A
+  deleted entity leaves the list holding it.
+- **Updates**: each island's new entry is swapped into its screen; the rest of the screen stays.
+- **Invalidations**: the screens are dropped from the cache and reloaded where they're on show. So is
+  a screen a change or update can't be applied to.
+- `navigate` goes to your `onNavigate`.
+
+Every action sends the island versions the app can draw, from the registry `ProvideCompose` gives.
 
 Outside Compose, call the client from a coroutine. Declared errors are values, and anything else
 throws `ActionFailure`, including an error code this app version doesn't know (spec §5.1):
 
 ```kotlin
-when (val outcome = client.perform(RenameThingV1, RenameThingV1.Input(thingId = id, name = name))) {
+when (val outcome = client.perform(RenameThingV1, RenameThingV1.Input(thingId = id, name = name), registry.catalog)) {
     is ActionOutcome.Ok -> show(outcome.result.thing)
     is ActionOutcome.Error -> when (val error = outcome.error) {
         is RenameThingV1.Error.NameTaken -> suggest(error.details.suggestions)

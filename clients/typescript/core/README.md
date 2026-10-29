@@ -76,9 +76,10 @@ import { FollowUserV1 } from "./actions.generated"; // from @client-compose/code
 
 const res = await callAction("https://api.example.com/compose", FollowUserV1, { userId }, {
   client: { platform: "web", appVersion: "1.4.0" },
+  islands: registry.capabilities(), // updates come at versions the app can render
   init: { headers: { Authorization: `Bearer ${token}` } },
 });
-if (res.status === "ok") showFollowers(res.result.followers); // and reload res.effects?.invalidate
+if (res.status === "ok") showFollowers(res.result.followers); // and apply res.effects (spec §5.3)
 else if (res.error.code === "blocked") showBlocked();
 else showGenericError(); // codes added after this app was built
 ```
@@ -140,7 +141,7 @@ import { actionError, createFakeGateway } from "@client-compose/client/testing";
 const gateway = createFakeGateway({
   actions: { follow: () => actionError(FollowUserV1, { code: "blocked" }) },
 });
-const res = await callAction(baseUrl, FollowUserV1, { userId }, { client, fetch: gateway.fetch });
+const res = await callAction(baseUrl, FollowUserV1, { userId }, { client, islands: {}, fetch: gateway.fetch });
 assert.equal(gateway.actionRequests()[0].input.userId, userId);
 ```
 

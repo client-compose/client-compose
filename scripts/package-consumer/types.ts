@@ -186,6 +186,7 @@ export const performed: Promise<PerformResult> = withActions.perform(
     version: 1,
     input: { name: "x" },
     client: { platform: "web", appVersion: "1" },
+    islands: {},
   },
   greeter,
 );
@@ -195,7 +196,7 @@ export const called = async (): Promise<string | undefined> => {
     "",
     RenameV1,
     { name: "x" },
-    { client: { platform: "web", appVersion: "1" } },
+    { client: { platform: "web", appVersion: "1" }, islands: {} },
   );
   return res.status === "ok" ? res.result.id : res.error.details.suggestion;
 };

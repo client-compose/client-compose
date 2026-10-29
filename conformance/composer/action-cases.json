@@ -533,6 +533,19 @@
       }
     },
     {
+      "name": "rejects a body without the client's islands",
+      "rawBody": "{\"protocol\":0,\"action\":\"conformance\",\"version\":1,\"input\":{\"outcome\":\"ok\",\"echo\":\"hi\"},\"client\":{\"platform\":\"conformance\",\"appVersion\":\"0.0.0\"}}",
+      "expect": {
+        "status": 400,
+        "body": {
+          "protocol": 0,
+          "error": {
+            "code": "bad_request"
+          }
+        }
+      }
+    },
+    {
       "name": "rejects a body with null input",
       "request": {
         "input": null

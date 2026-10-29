@@ -61,6 +61,8 @@ them to say what they add.
 | CMP-20 | **Island requests.** Define an island with pages by its generated props type; it resolves the page a cursor asks for, and the cursor of the next. One island of a screen can be resolved again on its own, laid out as its screen would be. | §4.5 |
 | CMP-22 | **Strings.** Load a catalog, one file per language. Each island's entry carries its strings in the language nearest the client's, string by string falling back to the default; the head says which language, with its plural rules. App strings are answered at `/strings` with no session. A screen's own strings (its meta's words) are read in the request's language. | §4.7 |
 | CMP-21 | **Streams.** Screens are answered as streams: the head once what can fail the screen is settled (requirements, layout and conditions, required islands, meta), then each other island as it's resolved, then the end. | §4.6 |
+| CMP-23 | **Island updates.** An action declares the islands it changes. The composer resolves them as island requests would, at the client's versions, and sends their entries as `update` effects, or invalidates their screen when the island isn't on it for the request any more, or it failed. | §5.3 |
+| CMP-24 | **Entity changes.** An action returns typed changes to entities (set, delete), sent as `changes`. The test kit checks an action's changes and updates against a fresh resolve. | §2.1, §5.3 |
 
 ## The composer as a platform
 
@@ -193,6 +195,8 @@ own: the composer *is* their backend.
 | CLI-10 | **Island requests.** Fetch an island's next page from its entry's `next`, or the island again; through a proxy too. | §4.5 |
 | CLI-12 | **Strings.** An island registered by a descriptor that declares strings gets them typed, as `t`. Counted strings pick their words by the language's plural rules, which the client evaluates itself and which pass CLDR's samples. Fetch the app strings, typed by their descriptor. | §4.7 |
 | CLI-11 | **Streams.** Read a screen's stream: its head, then each island as it arrives, or all of it at once; islands that never arrive are `incomplete`. | §4.6 |
+| CLI-13 | **Island updates.** Send the client's islands with each action, and apply `update` effects: swap each entry into every matching screen, shown or cached, and reload a screen that can't take it. | §5.3 |
+| CLI-14 | **Entity changes.** Apply `changes` to every island holding the entity, on every screen shown or cached and every page held, from the generated entity maps; reload a screen where a deleted one can't be removed. | §2.1, §5.3 |
 
 ## UI binding
 
@@ -223,6 +227,7 @@ proxy that keeps a session in an httpOnly cookie, are web-only.
 | TL-3 | **Compatibility lint.** Flags a change to a released version that breaks either side. |
 | TL-4 | **Standalone binaries.** Codegen without Node. |
 | TL-6 | **Codegen, strings.** Typed strings for each island and for the app, compatibility rules for them, and a check that the catalog has every string in the default language and nothing undeclared. |
+| TL-7 | **Codegen, entities.** Entity manifests to typed changes for every composer language, and for each island descriptor a map of where its entities sit in its props; a check that each marked object shows part of its entity, with the entity's schemas. |
 | TL-5 | **Conformance runner.** Runs the composer suite against any URL; client fixtures are plain JSON any language can load. |
 
 ## Ergonomics
@@ -288,6 +293,8 @@ Names in *italics* don't exist yet; the parity work below adds them.
 | CMP-20 island requests | ✅ `cc.DefinePaged`, `ComposeIsland` | ✅ `pagedIsland`, `composeIsland` |
 | CMP-21 streams | ✅ `cc.ScreenStream`, `cc.ReadScreen` | ✅ `ScreenStream`, `collect`, every adapter |
 | CMP-22 strings | ✅ `cc.LoadCatalog`, `Config.Strings`, `r.ScreenStrings` | ✅ `loadCatalog`, `strings`, `lc.strings` |
+| CMP-23 island updates | ✅ `Effects.Update` | ✅ `effects.update` |
+| CMP-24 entity changes | ✅ `cc.Set`, `cc.Delete`, `cctest.CheckEffects` | ✅ `changed`, `deleted`, `checkEffects` |
 
 ### Clients
 
@@ -316,6 +323,8 @@ Names in *italics* don't exist yet; the parity work below adds them.
 | CLI-11 streams | ✅ `openScreen`, `fetchScreen` | ◐ read to the end | ◐ read to the end |
 | UI-11 progressive screens | ✅ placeholders, `progressive`, streamed Server Components | ✗ (all at once) | ✗ (all at once) |
 | CLI-12 strings | ✅ `t`, `fetchStrings`, `proxy.loadStrings` | ✅ `t`, `client.strings()` | ✅ `t`, `client.strings()` |
+| CLI-13 island updates | ✅ `useAction`, cached and shown screens | ✅ `perform(islands:)`, `ScreenModel` | ✅ `perform(islands)`, `ScreenState` |
+| CLI-14 entity changes | ✅ `applyChanges`, screens, cache and pages | ✅ `EffectsBatch`, cached and shown screens | ✅ `EffectsBatch`, cached and shown screens |
 | UI-12 app strings | ✅ `AppStringsProvider`, `useAppStrings` | ✗ (`client.strings()`, kept by the app) | ✗ (`client.strings()`, kept by the app) |
 
 SwiftUI and Compose can't catch a view that crashes while rendering the way React can, so UI-6
@@ -328,6 +337,7 @@ there means islands whose props don't decode are skipped.
 | TL-1 props | ✅ | ✅ | ✅ | ✅ |
 | TL-2 actions | ✅ | ✅ | ✅ | ✅ |
 | TL-6 strings | — (the composer serves the catalog) | ✅ | ✅ | ✅ |
+| TL-7 entities | ✅ | ✅ | ✅ entity paths | ✅ entity paths |
 
 TL-3 to TL-5 are language-neutral and done.
 

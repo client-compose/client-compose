@@ -126,7 +126,7 @@ func (c *Composer) performHTTP(ctx context.Context, pathAction string, body io.R
 	if err := json.NewDecoder(io.LimitReader(body, maxBodyBytes)).Decode(&req); err != nil {
 		return fail(http.StatusBadRequest, "bad_request", "body is not valid JSON")
 	}
-	if req.Protocol == nil || req.Action == "" || req.Version == 0 || req.Client == nil || len(req.Input) == 0 || string(req.Input) == "null" {
+	if req.Protocol == nil || req.Action == "" || req.Version == 0 || req.Client == nil || req.Islands == nil || len(req.Input) == 0 || string(req.Input) == "null" {
 		return fail(http.StatusBadRequest, "bad_request", "body is not an action request")
 	}
 	if *req.Protocol != ProtocolVersion {

@@ -3,7 +3,7 @@
   "$id": "https://client-compose.dev/schema/v0/action-request.json",
   "title": "Action request",
   "type": "object",
-  "required": ["protocol", "action", "version", "input", "client"],
+  "required": ["protocol", "action", "version", "input", "client", "islands"],
   "properties": {
     "protocol": { "const": 0 },
     "action": { "type": "string" },
@@ -16,6 +16,16 @@
         "platform": { "type": "string" },
         "appVersion": { "type": "string" },
         "locale": { "type": "string" }
+      }
+    },
+    "islands": {
+      "description": "Capabilities, as for screens: island type -> supported versions, so island updates come at versions the client knows.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": { "type": "integer", "minimum": 1 },
+        "minItems": 1,
+        "uniqueItems": true
       }
     },
     "idempotencyKey": { "type": "string", "minLength": 1 }

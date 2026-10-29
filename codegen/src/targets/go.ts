@@ -2,8 +2,10 @@ import { spawnSync } from "node:child_process";
 
 import {
   type Action,
+  type Entity,
   type EnumDef,
   type Island,
+  islandEntityPaths,
   type ObjectDef,
   type ScreenStringsDef,
   type TypeRef,
@@ -46,9 +48,11 @@ export function generateGo(
   opts: GoOptions,
   actions: Action[] = [],
   screens: ScreenStringsDef[] = [],
+  entities: Entity[] = [],
 ): string {
   const out: string[] = [header.replace(/^/gm, "// "), "", `package ${opts.package}`];
-  if (screens.length > 0) {
+  const holdsEntities = islands.some((i) => islandEntityPaths(i, entities).length > 0);
+  if (screens.length > 0 || holdsEntities) {
     const counted = screens.some((s) => s.strings.some((d) => d.params.includes("count")));
     out.push(
       "",
@@ -130,6 +134,22 @@ export function generateGo(
         "",
         `func (${name}) IslandVersion() int { return ${island.version} }`,
       );
+      const paths = islandEntityPaths(island, entities);
+      if (paths.length > 0) {
+        const quoted = (list: string[]) => list.map((v) => JSON.stringify(v)).join(", ");
+        out.push(
+          "",
+          "// IslandEntities says where its props hold entities (spec §2.1), so changes reach them.",
+          `func (${name}) IslandEntities() []cc.EntityPath {`,
+          "\treturn []cc.EntityPath{",
+          ...paths.map(
+            (p) =>
+              `\t\t{Path: []string{${quoted(p.path)}}, Entity: ${JSON.stringify(p.entity)}, ID: ${JSON.stringify(p.id)}, Properties: []string{${quoted(p.properties)}}},`,
+          ),
+          "\t}",
+          "}",
+        );
+      }
     }
     for (const child of def.children) {
       if (child.kind === "enum") {
@@ -183,6 +203,7 @@ export function generateGo(
         path: e.path,
         fields: [],
         children: [],
+        schemas: {},
       };
       emitObject(
         { ...details, description: e.description },
@@ -236,6 +257,23 @@ export function generateGo(
         "}",
       );
     }
+  }
+  for (const entity of entities) {
+    const name = typeIdent(entity.def.path);
+    // What an action sets: every property but the id, which names the entity, and each absent
+    // unless it changed.
+    emitObject(
+      {
+        ...entity.def,
+        fields: entity.def.fields
+          .filter((f) => f.jsonName !== entity.id)
+          .map((f) => ({ ...f, required: false })),
+        description: entity.description,
+      },
+      undefined,
+      `is a change to entity ${JSON.stringify(entity.entity)} (spec §2.1): what an action sets, each property absent unless it changed.`,
+    );
+    out.push("", `func (${name}) EntityName() string { return ${JSON.stringify(entity.entity)} }`);
   }
   for (const island of islands) {
     emitObject(island.props, island);

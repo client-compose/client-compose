@@ -119,25 +119,38 @@ public struct ScreenRef: Codable, Sendable, Hashable {
 }
 
 /// What a successful action changed (spec §5.3). Unknown effects are ignored.
-public struct ActionEffects: Decodable, Sendable, Equatable {
+public struct ActionEffects: Decodable, Sendable {
+    /// Entities the action changed: the client applies them to every island showing them.
+    public let changes: [EntityChange]
+    /// Islands whose content changed, with their new entries: the client swaps them in.
+    public let update: [IslandUpdate]
     /// Screens whose content may have changed. The client drops them from its cache and reloads the
     /// ones on show.
     public let invalidate: [ScreenRef]
     /// A screen to show next. The client passes it to your navigation handler.
     public let navigate: ScreenRef?
 
-    public init(invalidate: [ScreenRef] = [], navigate: ScreenRef? = nil) {
+    public init(
+        changes: [EntityChange] = [],
+        update: [IslandUpdate] = [],
+        invalidate: [ScreenRef] = [],
+        navigate: ScreenRef? = nil
+    ) {
+        self.changes = changes
+        self.update = update
         self.invalidate = invalidate
         self.navigate = navigate
     }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
+        changes = try c.decodeIfPresent([EntityChange].self, forKey: .changes) ?? []
+        update = try c.decodeIfPresent([IslandUpdate].self, forKey: .update) ?? []
         invalidate = try c.decodeIfPresent([ScreenRef].self, forKey: .invalidate) ?? []
         navigate = try c.decodeIfPresent(ScreenRef.self, forKey: .navigate)
     }
 
-    private enum CodingKeys: String, CodingKey { case invalidate, navigate }
+    private enum CodingKeys: String, CodingKey { case changes, update, invalidate, navigate }
 }
 
 /// The body of a failed screen or action request (spec §4.3).

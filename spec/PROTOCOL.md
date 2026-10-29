@@ -87,6 +87,56 @@ it takes, never its words. The words are the composer's, in every language it su
 Strings are part of the version: adding one is fine; removing one, or changing its params or
 whether it's counted, is a new version (`codegen compat` checks this).
 
+### 2.1 Entities
+
+Several islands often show the same thing: a todo in a list and in its detail, a recipe's title on
+three screens. An **entity** names that thing, so an action can say what changed about it once
+(§5.3), and every island showing it follows. Each entity is described by a manifest
+(`schema/entity-manifest.schema.json`):
+
+```json
+{
+  "entity": "todo",
+  "description": "Something to do.",
+  "id": "id",
+  "properties": {
+    "id": { "type": "string" },
+    "title": { "type": "string" },
+    "done": { "type": "boolean" }
+  }
+}
+```
+
+An island's props mark each object that shows one with `entity`:
+
+```json
+"todos": {
+  "type": "array",
+  "items": {
+    "type": "object",
+    "title": "Todo",
+    "entity": "todo",
+    "required": ["id", "title", "done"],
+    "properties": {
+      "id": { "type": "string" },
+      "title": { "type": "string" },
+      "done": { "type": "boolean" }
+    }
+  }
+}
+```
+
+- `entity` is kebab-case, unique among entities, and never changes meaning. `id` names the
+  property that identifies one, a string, unique within the entity.
+- **An island shows part of an entity**: a marked object has the entity's `id` property, and any
+  of its other properties, each with the entity's schema for it. It MAY have properties of its
+  own, which are the island's alone. Codegen checks this.
+- **Entities aren't versioned.** Properties MAY be added. A property MAY be removed once no
+  island shows it. Anything else (retyping one, renaming the id) is a new entity.
+- Marking is part of the island's version: marking an object, or unmarking it, is a new version.
+
+Entities are optional. An island with none is updated as a whole (§5.3), or with its screen.
+
 ---
 
 ## 3. Request
@@ -489,6 +539,7 @@ The `codegen compat` command checks these rules.
   "version": 1,
   "input": { "userId": "u_123" },
   "client": { "platform": "ios", "appVersion": "4.2.0" },
+  "islands": { "profile-header": [1, 2], "follow-button": [1], "post-grid": [1] },
   "idempotencyKey": "6f1c0f7e-0d8e-4c55-9d1a-3f1f0b6d1c2a"
 }
 ```
@@ -500,6 +551,7 @@ The `codegen compat` command checks these rules.
 | `version`        | The action version the client was built against.                         |
 | `input`          | MUST validate against that version's `input` schema.                      |
 | `client`         | As for screens (§3).                                                      |
+| `islands`        | The client's capabilities, as for screens (§3), so that island updates come at versions it knows (§5.3). |
 | `idempotencyKey` | Optional. One per user intent, reused when retrying it.                    |
 
 Clients call exactly one version; there is no negotiation. Composers keep serving old action
@@ -558,12 +610,113 @@ that every platform reacts the same way without hard-coding it:
 
 | Field        | Meaning                                                                     |
 | ------------ | --------------------------------------------------------------------------- |
+| `changes`    | Entities the action changed (§2.1), and how: clients apply them to every island showing them. |
+| `update`     | Islands whose content changed, with their new entries: clients swap them in. |
 | `invalidate` | Screens whose content may have changed. Clients SHOULD drop cached responses for them and reload the ones currently shown. |
 | `navigate`   | A screen to show next. Clients map it to their own routes, and MAY ignore it. |
 
-Both use a **screen reference** `{ "screen": "...", "params": { ... } }`. A reference matches a
-screen with the same id whose params include every param in the reference. So
-`{ "screen": "feed" }` matches every `feed`, whatever its params.
+`invalidate` and `navigate` use a **screen reference** `{ "screen": "...", "params": { ... } }`. A
+reference matches a screen with the same id whose params include every param in the reference.
+So `{ "screen": "feed" }` matches every `feed`, whatever its params.
+
+From cheapest to dearest, an action says what it changed in the narrowest way that's true:
+
+| What changed                                      | Effect       | What it costs                       |
+| ------------------------------------------------- | ------------ | ----------------------------------- |
+| Fields of things islands show                     | `changes`    | Nothing: the action already knows. |
+| An island's content, beyond its entities (a new item in a list, whose place the composer decides) | `update` | Resolving that island again. |
+| A screen's layout: islands appearing, going or moving | `invalidate` | Resolving the whole screen again. |
+
+#### Entity changes
+
+An action knows what it changed, so it says so, and no island has to be resolved again to find
+out:
+
+```json
+"effects": {
+  "changes": [
+    { "entity": "todo", "id": "3", "set": { "done": true } },
+    { "entity": "todo-counts", "id": "me", "set": { "left": 2, "done": 1 } }
+  ]
+}
+```
+
+| Field    | Meaning                                                                       |
+| -------- | ----------------------------------------------------------------------------- |
+| `entity`, `id` | The entity, and which one.                                              |
+| `set`    | Properties that changed, with their new values. Each MUST validate against the entity's schema for it. |
+| `delete` | `true` when it's gone. Then there's no `set`.                                  |
+
+A value an island shows that depends on others (a count of what's left) is an entity of its own,
+which the action changes too: the composer decides what it is, and clients only apply it.
+
+A client applies each change to every island holding that entity (§2.1), on every screen it has,
+shown or cached, and to every page it holds of a paged island (§4.5):
+
+- **`set`** replaces those properties in each object showing that entity with that id. An object
+  without one of them (the island shows less of the entity) ignores it.
+- **`delete`** removes each such object from the array holding it. If one is held anywhere else,
+  the client reloads that screen, as for `invalidate`.
+- An island that doesn't hold that entity is left alone. So is one that holds it but not that id.
+- Islands re-render with their new props. Their strings don't change.
+
+#### Island updates
+
+When an island's content changes beyond its entities, such as a new item in a list, whose place in
+it the composer decides, the composer sends the island's new entry:
+
+```json
+"effects": {
+  "update": [
+    {
+      "screen": "todos",
+      "params": {},
+      "island": {
+        "key": "list",
+        "type": "todo-list",
+        "version": 1,
+        "status": "ok",
+        "props": { "todos": [ … ] },
+        "strings": { … }
+      }
+    }
+  ]
+}
+```
+
+Each update names a screen and its **exact** params, and carries one island entry (§4.1), resolved
+as an island request without a cursor would resolve it (§4.5), in the language of the action's
+`client.locale`. Its strings are counted by the plural rules the client already has from the
+screen, which is in the same language.
+
+- **The island is resolved at the highest version both sides know** (§4.2), from the action
+  request's `islands`.
+- **The screen is laid out as it would be** (§4.5): its requirements, layout and conditions run.
+  If the island isn't on the screen for this request (its condition is now false, say), the
+  screen's layout has changed, and the composer invalidates it instead. So it does when the island
+  fails to resolve, or the client knows no version of it.
+
+A client applies each update to every screen it has with that id and exactly those params, shown
+or cached. It swaps the entry in, by `key`, and the island renders it as it would a screen's: a
+paged island starts again from the page it brings. If the screen can't take it (it has no island
+with that key, the island is still on its way in a stream (§4.6), or it's a different type), the
+client reloads the screen, as for `invalidate`. That covers an island that's newly shown, too.
+
+#### Applying them
+
+A client applies an action's effects before the action's call resolves, in this order: `changes`,
+then `update` (whose entries already reflect the changes), then `invalidate`, then `navigate`. The
+app then sees every screen as the action left it.
+
+An island's own interactivity stays local (§5): an island MAY show the result of its own action at
+once, and the effects bring the composer's version of it.
+
+#### Checking them
+
+An action that changes or updates islands MUST leave them as resolving them again would. Composer
+test kits SHOULD check it: show a screen, perform the action, apply its effects, then compare
+every island on the screen with a fresh resolve. A change an action forgot (a count it didn't
+update) shows there, not in an app.
 
 ---
 

@@ -40,6 +40,7 @@ for (const c of suite.requests) {
     };
     await callAction(baseUrl, action, c.input, {
       client,
+      islands: {},
       idempotencyKey: c.idempotencyKey,
       fetch: fetchImpl as typeof fetch,
     });
@@ -56,7 +57,11 @@ const knownEffects = ({ invalidate, navigate }: ActionEffects) => ({
 
 for (const c of suite.outcomes) {
   test(`outcome: ${c.name}`, async () => {
-    const options = { client, fetch: respond(c.response) as typeof fetch };
+    const options = {
+      client,
+      islands: {},
+      fetch: respond(c.response) as typeof fetch,
+    };
     const outcome = await callAction(baseUrl, action, {}, options).then(
       (res) =>
         res.status === "ok"

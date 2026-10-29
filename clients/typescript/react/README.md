@@ -352,14 +352,22 @@ function FollowButton({ userId }: { userId: string }) {
 }
 ```
 
-When an action succeeds, its effects are applied before `run` resolves:
+When an action succeeds, its effects are applied before `run` resolves, in this order (spec §5.3):
 
+- **`changes`**: each entity the action changed is changed in every island showing it (from the
+  generated descriptors' `entities`), on every screen the app has: shown, cached, and every page a
+  paged island holds. Nothing is fetched. A deleted entity is removed from the list holding it; a
+  screen showing one anywhere else reloads.
+- **`update`**: each island's new entry is swapped into the screen with those exact params, shown or
+  cached; the rest of the screen stays. A screen that can't take it (no island with that key, or
+  one still streaming in) reloads.
 - **`invalidate`**: cached responses for matching screens are dropped. Screens shown with
   `useScreen` / `<ComposedScreen>` reload, and `onInvalidate(refs)` is called. In Next.js, call
   `router.refresh()` there to re-render Server Components.
 - **`navigate`**: `onNavigate(ref)` is called. Map the screen to a route in your router.
 
-Actions are POSTed to `${baseUrl}/actions/{action}` with your `headers()`. To send them another
+Every action request says which islands the app can draw (`registry.capabilities()`), so updates
+come at versions it knows. Actions are POSTed to `${baseUrl}/actions/{action}` with your `headers()`. To send them another
 way, set `performAction(request)` in the config.
 
 ### Through your server

@@ -30,6 +30,8 @@ public val ActionResult<*, *>?.failed: Boolean get() = this is ActionResult.Fail
 public class ActionState<I, R, E : DeclaredError>(
     private val client: ComposeClient,
     private val action: ActionDescriptor<I, R, E>,
+    /** The app's islands, usually `registry.catalog`: sent with each action, and used to apply its changes. */
+    private val islands: IslandCatalog = IslandCatalog.EMPTY,
 ) {
     private val _pending = MutableStateFlow(0)
     private val _last = MutableStateFlow<ActionResult<R, E>?>(null)
@@ -44,7 +46,7 @@ public class ActionState<I, R, E : DeclaredError>(
     public suspend fun run(input: I, idempotencyKey: String = UUID.randomUUID().toString()): ActionResult<R, E> {
         _pending.update { it + 1 }
         val result = try {
-            when (val outcome = client.perform(action, input, idempotencyKey)) {
+            when (val outcome = client.perform(action, input, islands, idempotencyKey)) {
                 is ActionOutcome.Ok -> ActionResult.Ok(outcome.result, outcome.effects)
                 is ActionOutcome.Error -> ActionResult.Error(outcome.error)
             }

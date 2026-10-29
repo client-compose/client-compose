@@ -30,6 +30,10 @@ export interface ObjectDef {
   /** Object and enum types defined by this object's fields, in field order. */
   children: (ObjectDef | EnumDef)[];
   description?: string;
+  /** The entity this object shows part of (spec §2.1), if it's marked with one. */
+  entity?: string;
+  /** Its properties' schemas without annotations, to check them against the entity's. */
+  schemas: Record<string, unknown>;
 }
 
 export interface EnumDef {
@@ -99,6 +103,28 @@ export interface Action {
   inputSchema: Record<string, unknown>;
 }
 
+/** A thing several islands may show (spec §2.1), so actions can say what changed about it. */
+export interface Entity {
+  entity: string;
+  description?: string;
+  source: string;
+  /** The property that identifies one: a string. */
+  id: string;
+  /** Its properties, lowered: what an action can set. */
+  def: ObjectDef;
+}
+
+/** Where an island's props hold an entity (spec §2.1), for clients to apply changes to. */
+export interface EntityPath {
+  /** From the props down: property names, "[]" for an array's items, "{}" for a map's values. */
+  path: string[];
+  entity: string;
+  /** The property that identifies one. */
+  id: string;
+  /** The entity's properties this object shows, the id among them. */
+  properties: string[];
+}
+
 export class ManifestError extends Error {}
 
 type Schema = Record<string, unknown>;
@@ -118,7 +144,7 @@ function isStringArray(value: unknown): value is string[] {
 
 const ANNOTATIONS = new Set(["description", "title", "$comment", "examples"]);
 const ALLOWED: Record<string, Set<string>> = {
-  object: new Set(["type", "properties", "required", "additionalProperties"]),
+  object: new Set(["type", "properties", "required", "additionalProperties", "entity"]),
   array: new Set(["type", "items"]),
   string: new Set(["type", "format", "enum"]),
   integer: new Set(["type", "format"]),
@@ -187,6 +213,136 @@ export function parseManifest(raw: unknown, source: string): Island {
     props: lowerObject(props, path, (p, msg) => at(`props${p}: ${msg}`), ""),
     strings: parseStrings(raw.strings, (msg) => at(`strings${msg}`)),
   };
+}
+
+export function loadEntities(dir: string): Entity[] {
+  const entities = readJsonFiles(dir, parseEntityManifest);
+  const seen = new Map<string, string>();
+  for (const e of entities) {
+    if (seen.has(e.entity)) {
+      throw new ManifestError(
+        `${e.source}: entity ${e.entity} is also defined in ${seen.get(e.entity)}`,
+      );
+    }
+    seen.set(e.entity, e.source);
+  }
+
+  return entities.sort((a, b) => a.entity.localeCompare(b.entity));
+}
+
+export function parseEntityManifest(raw: unknown, source: string): Entity {
+  const at = (msg: string) => new ManifestError(`${source}: ${msg}`);
+  if (!isSchema(raw)) {
+    throw at("manifest must be an object");
+  }
+  for (const key of Object.keys(raw)) {
+    if (!["entity", "description", "id", "properties", "$schema", "$comment"].includes(key)) {
+      throw at(`unknown field ${JSON.stringify(key)}`);
+    }
+  }
+  const { entity, id, properties } = raw;
+  if (typeof entity !== "string" || !ISLAND_TYPE.test(entity)) {
+    throw at(`"entity" must be kebab-case, got ${JSON.stringify(entity)}`);
+  }
+  if (!isSchema(properties)) {
+    throw at(`"properties" must map names to schemas`);
+  }
+  if (typeof id !== "string" || !isSchema(properties[id]) || properties[id].type !== "string") {
+    throw at(`"id" must name one of its properties, a string`);
+  }
+  const def = lowerObject(
+    { type: "object", properties },
+    [pascal(entity), "Entity"],
+    (p, msg) => at(`properties${p}: ${msg}`),
+    "",
+  );
+
+  return {
+    entity,
+    description: str(raw.description),
+    source,
+    id,
+    def,
+  };
+}
+
+/**
+ * Checks every object an island marks with an entity against the entity (spec §2.1): it has the
+ * entity's id, required, and each of the entity's properties it shows has the entity's schema.
+ */
+export function checkEntities(islands: Island[], entities: Entity[]): void {
+  const byName = new Map(entities.map((e) => [e.entity, e]));
+  for (const island of islands) {
+    for (const found of entityPaths(island.props)) {
+      const entity = byName.get(found.def.entity ?? "");
+      const where = `${island.source}: props${found.path.map((s) => (s.startsWith("[") || s.startsWith("{") ? s : `.${s}`)).join("")}`;
+      if (!entity) {
+        throw new ManifestError(
+          `${where}: no entity ${JSON.stringify(found.def.entity)} (add entities/${found.def.entity}.json)`,
+        );
+      }
+      const id = found.def.fields.find((f) => f.jsonName === entity.id);
+      if (!id?.required) {
+        throw new ManifestError(
+          `${where}: shows ${entity.entity}, so it needs its id, ${JSON.stringify(entity.id)}, required`,
+        );
+      }
+      const schemas = entity.def.schemas;
+      for (const [name, schema] of Object.entries(found.def.schemas)) {
+        if (name in schemas && JSON.stringify(schema) !== JSON.stringify(schemas[name])) {
+          throw new ManifestError(
+            `${where}.${name}: must have ${entity.entity}'s schema for it, ${JSON.stringify(schemas[name])}`,
+          );
+        }
+      }
+    }
+  }
+}
+
+/** Where an island's props hold entities, for its descriptor (spec §2.1). */
+export function islandEntityPaths(island: Island, entities: Entity[]): EntityPath[] {
+  const byName = new Map(entities.map((e) => [e.entity, e]));
+  return entityPaths(island.props).flatMap(({ path, def }) => {
+    const entity = byName.get(def.entity ?? "");
+    if (!entity) {
+      return [];
+    }
+    const properties = def.fields.map((f) => f.jsonName).filter((n) => n in entity.def.schemas);
+
+    return [
+      {
+        path,
+        entity: entity.entity,
+        id: entity.id,
+        properties,
+      },
+    ];
+  });
+}
+
+/** Each marked object in a props tree, with its path from the props down. */
+function entityPaths(root: ObjectDef): { path: string[]; def: ObjectDef }[] {
+  const out: { path: string[]; def: ObjectDef }[] = [];
+  const visitType = (type: TypeRef, path: string[]) => {
+    if (type.kind === "object") {
+      visitObject(type.def, path);
+    } else if (type.kind === "array") {
+      visitType(type.items, [...path, "[]"]);
+    } else if (type.kind === "map") {
+      visitType(type.values, [...path, "{}"]);
+    }
+  };
+  const visitObject = (def: ObjectDef, path: string[]) => {
+    if (def.entity) {
+      out.push({ path, def });
+    }
+    for (const field of def.fields) {
+      visitType(field.type, [...path, field.jsonName]);
+    }
+  };
+  visitObject(root, []);
+
+  return out;
 }
 
 /** The app strings manifest (spec §4.7): `{ "strings": { … } }`, in the island manifest's format. */
@@ -428,12 +584,22 @@ function lowerObject(
     }
   }
 
+  if (
+    schema.entity !== undefined &&
+    (typeof schema.entity !== "string" || !ISLAND_TYPE.test(schema.entity))
+  ) {
+    throw err(ptr, `"entity" must name an entity, in kebab-case`);
+  }
   const def: ObjectDef = {
     kind: "object",
     path,
     fields: [],
     children: [],
     description: str(schema.description),
+    entity: str(schema.entity),
+    schemas: Object.fromEntries(
+      Object.entries(properties).map(([name, s]) => [name, stripAnnotations(s)]),
+    ),
   };
   const childNames = new Set<string>();
   const nameChild = (name: string, p: string) => {

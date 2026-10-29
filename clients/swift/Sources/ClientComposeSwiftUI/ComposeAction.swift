@@ -31,6 +31,8 @@ public final class ActionModel<A: ActionDescriptor>: ObservableObject {
     @Published public private(set) var last: ActionResult<A.Result, A.DeclaredError>?
 
     var client: ComposeClient?
+    /// The app's islands, sent with each action and used to apply its changes.
+    var islands: IslandCatalog = .empty
 
     /// In views, use `@ComposeAction`, which supplies the client from the environment. Pass one
     /// here to use the model elsewhere, e.g. in tests or a UIKit controller.
@@ -48,7 +50,7 @@ public final class ActionModel<A: ActionDescriptor>: ObservableObject {
         let result: ActionResult<A.Result, A.DeclaredError>
         if let client {
             do {
-                switch try await client.perform(A.self, input, idempotencyKey: idempotencyKey) {
+                switch try await client.perform(A.self, input, islands: islands, idempotencyKey: idempotencyKey) {
                 case .ok(let value, let effects): result = .ok(value, effects)
                 case .error(let error): result = .error(error)
                 }
@@ -82,6 +84,7 @@ public final class ActionModel<A: ActionDescriptor>: ObservableObject {
 @propertyWrapper
 public struct ComposeAction<A: ActionDescriptor> {
     @Environment(\.composeClient) private var client
+    @Environment(\.islandRegistry) private var registry
     @StateObject private var model = ActionModel<A>()
 
     public init(_ action: A.Type) {}
@@ -90,6 +93,7 @@ public struct ComposeAction<A: ActionDescriptor> {
 
     public func update() {
         model.client = client
+        model.islands = registry.catalog
     }
 }
 

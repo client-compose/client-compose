@@ -23,6 +23,7 @@ const request = {
   version: 1,
   input: {},
   client: { platform: "web", appVersion: "1" },
+  islands: {},
 };
 
 test("performAction resolves with the server's response, and throws its failures", async () => {

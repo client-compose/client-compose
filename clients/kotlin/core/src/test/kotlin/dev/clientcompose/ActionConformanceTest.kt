@@ -73,7 +73,7 @@ class ActionConformanceTest {
                 sent = body
                 TransportResponse(200, """{"protocol":0,"status":"ok","result":{}}""")
             }, context)
-            client.perform(Fixture, c.input, c.idempotencyKey)
+            client.perform(Fixture, c.input, idempotencyKey = c.idempotencyKey)
             assertEquals(c.expectPath, path, c.name)
             assertEquals(c.expectBody, ClientComposeJson.parseToJsonElement(sent), c.name)
         }

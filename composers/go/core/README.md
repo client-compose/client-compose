@@ -144,11 +144,41 @@ followUser := cc.DefineAction(func(ctx context.Context, call cc.Call, in FollowU
   `invalid_input`), then your handler runs.
 - Declared errors are the generated error types, possibly wrapped. Only this action version's own
   errors count; anything else is a failure.
-- `cc.Effects` tells apps which screens to reload (`Invalidate`) and, optionally, which to show next
-  (`Navigate`).
+- `cc.Effects` tells apps what changed, as narrowly as it can (below), and optionally which screen
+  to show next (`Navigate`).
 - `call.IdempotencyKey` is the app's key for this intent. To have the composer honour it for every
   action, give it an idempotency store (below); otherwise store it with the change yourself if
   retries must not repeat it.
+
+### What an action changed
+
+An action says what it changed in the narrowest way that's true, so apps update without resolving
+more than they must (spec §5.3):
+
+```go
+done := true
+left := todos.Left()
+return ToggleTodoV1Result{}, cc.Effects{
+	// Entities' properties: apps apply them to every island showing them. Nothing is resolved again.
+	Changes: []cc.EntityChange{
+		cc.Set(in.ID, TodoEntity{Done: &done}),
+		cc.Set("me", TodoCountsEntity{Left: &left}),
+	},
+}, nil
+```
+
+- **`Changes`** set an entity's properties (`cc.Set`, with its generated type, each property
+  absent unless it changed) or say it's gone (`cc.Delete[TodoEntity](id)`). Apps apply them to
+  every island showing that entity (spec §2.1), on every screen they have. A value that depends on
+  others, like a count, is an entity of its own.
+- **`Update`** names islands whose content changed beyond their entities, such as a new item in a
+  list: `cc.IslandRef{Screen: "todos", Key: "list"}`. The composer resolves each again, as an island
+  request would, in a fresh request scope (so it doesn't read what the action loaded before its
+  change), at the versions the app knows, and sends its entry. If the island isn't on the screen
+  any more, or fails, it invalidates the screen instead.
+- **`Invalidate`** reloads whole screens: for an action that changes a screen's layout.
+
+`cctest.CheckEffects` checks an action's changes and updates against a fresh resolve (below).
 
 ## Plugins
 
@@ -394,6 +424,10 @@ func TestProfile(t *testing.T) {
   place; `Head` is its stream's head, to check what was pending. Errors come back as their protocol
   code (`"not_found"`, `"unauthenticated"`).
 - `Perform` returns the typed result, effects, and the declared or protocol error code.
+- `cctest.CheckEffects(app, "todos", nil, func() cctest.Outcome[R] { return cctest.Perform(app, in) })`
+  shows the screen, performs the action, applies its changes and updates as an app would, and
+  composes the screen again: any island that differs fails the test. A change the action forgot,
+  such as a count it didn't update, shows here rather than in an app.
 - Pass your own `http.Handler` instead of the composer if it wraps the composer in middleware.
 
 See [`examples/todo/composer-go`](../../../examples/todo/composer-go) for a full example with tests.

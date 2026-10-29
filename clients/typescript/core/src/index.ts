@@ -8,6 +8,7 @@ import {
   type Capabilities,
   type ClientContext,
   type DeclaredError,
+  type EntityPath,
   type IslandDescriptor,
   type IslandEntry,
   type IslandRequest,
@@ -23,6 +24,7 @@ import {
 import { buildStrings } from "./strings.ts";
 
 export { preferredLocale } from "./locale.ts";
+// Entity changes (spec §5.3), applied to islands the same way by every client.
 export {
   appStrings,
   buildStrings,
@@ -32,6 +34,7 @@ export {
   StringsFetchError,
   type StringValues,
 } from "./strings.ts";
+export { type AppliedChanges, applyChanges } from "@client-compose/protocol";
 
 type OkEntry<P = unknown> = IslandEntry<P> & { status: "ok" };
 type ErrorEntry = IslandEntry & { status: "error" };
@@ -62,6 +65,7 @@ export class IslandRegistry<R> {
   private renderers = new Map<string, Map<number, IslandRenderer<R>>>();
   private placeholders = new Map<string, IslandPlaceholder<R>>();
   private declaredStrings = new Map<string, StringParams>();
+  private entityPaths = new Map<string, readonly EntityPath[]>();
   // Each entry's props with its `t`, made once: a screen streaming in plans again with each island
   // that arrives, and the islands already shown keep the props they were rendered with.
   private propsMade = new WeakMap<object, { plurals?: PluralRules; props: unknown }>();
@@ -99,6 +103,7 @@ export class IslandRegistry<R> {
         throw new Error("register(descriptor, render): pass the renderer, not a version");
       }
       const id = `${islandOrType.type}@${islandOrType.version}`;
+      this.entityPaths.set(id, islandOrType.entities ?? []);
       if (islandOrType.strings) {
         this.declaredStrings.set(id, islandOrType.strings);
       } else {
@@ -110,6 +115,11 @@ export class IslandRegistry<R> {
       throw new Error("register(type, version, render): pass a version and a renderer");
     }
     return this.add(islandOrType, versionOrRender, maybeRender);
+  }
+
+  /** Where an island version's props hold entities (spec §2.1), from its registered descriptor. */
+  entities(type: string, version: number): readonly EntityPath[] {
+    return this.entityPaths.get(`${type}@${version}`) ?? [];
   }
 
   private add<P>(type: string, version: number, render: IslandRenderer<R, P>): this {
@@ -577,6 +587,7 @@ export function buildActionRequest<I>(
   action: ActionDescriptor<I, unknown, DeclaredError>,
   input: I,
   client: ClientContext,
+  islands: Capabilities,
   idempotencyKey?: string,
 ): ActionRequest<I> {
   return {
@@ -585,6 +596,7 @@ export function buildActionRequest<I>(
     version: action.version,
     input,
     client,
+    islands,
     ...(idempotencyKey !== undefined && { idempotencyKey }),
   };
 }
@@ -641,6 +653,11 @@ export function checkActionResponse<I, R, E extends DeclaredError>(
 
 export interface CallActionOptions {
   client: ClientContext;
+  /**
+   * The island versions the app can render (spec §5.2), e.g. `registry.capabilities()`: the
+   * composer resolves the islands an action updates at them.
+   */
+  islands: Capabilities;
   /** Default: a new key. Pass the same key again to retry the same user intent. */
   idempotencyKey?: string;
   init?: RequestInit;
@@ -665,6 +682,7 @@ export async function callAction<I, R, E extends DeclaredError>(
     action,
     input,
     options.client,
+    options.islands,
     options.idempotencyKey ?? newIdempotencyKey(),
   );
   return checkActionResponse(

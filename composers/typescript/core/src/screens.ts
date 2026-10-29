@@ -2,6 +2,7 @@
 
 import type {
   ClientContext,
+  EntityPath,
   IslandDescriptor,
   ScreenMeta,
   ScreenStringsDescriptor,
@@ -54,6 +55,8 @@ export interface Island<Ctx, P = unknown> {
   cache?: IslandCache<Ctx>;
   /** It has pages: it resolves to a `Page`, its props and where the next page starts. */
   paged?: boolean;
+  /** Where its props hold entities (spec §2.1), from its generated descriptor. */
+  entities?: readonly EntityPath[];
 }
 
 /** One page of a paged island: its props, and the cursor of the page after it, if there is one. */
@@ -89,6 +92,7 @@ export function island<P, Ctx = unknown>(
     type: descriptor.type,
     version: descriptor.version,
     resolve,
+    entities: descriptor.entities,
     ...options,
   };
 }
@@ -114,6 +118,7 @@ export function pagedIsland<P, Ctx = unknown>(
     version: descriptor.version,
     resolve,
     paged: true,
+    entities: descriptor.entities,
   };
 }
 

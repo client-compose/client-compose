@@ -1,8 +1,10 @@
 import {
   type Action,
   type AppStrings,
+  type Entity,
   type EnumDef,
   type Island,
+  islandEntityPaths,
   type ObjectDef,
   pascal,
   type ScreenStringsDef,
@@ -26,8 +28,10 @@ export function generateTypeScript(
   actions: Action[] = [],
   app?: AppStrings,
   screens: ScreenStringsDef[] = [],
+  entities: Entity[] = [],
 ): string {
   const imports = [
+    ...(entities.length ? ["EntityDescriptor"] : []),
     ...(app ? ["AppStringsDescriptor"] : []),
     ...(screens.length ? ["ScreenStringsDescriptor"] : []),
     ...(islands.length || (!actions.length && !app) ? ["IslandDescriptor"] : []),
@@ -92,9 +96,29 @@ export function generateTypeScript(
     if (def.fields.length) {
       out.push("}");
     }
-    if (island && island.strings.length === 0) {
+    const paths = island ? islandEntityPaths(island, entities) : [];
+    const entityLines = paths.length
+      ? [
+          `  entities: [`,
+          ...paths.map(
+            (p) =>
+              `    { path: ${JSON.stringify(p.path)}, entity: ${JSON.stringify(p.entity)}, id: ${JSON.stringify(p.id)}, properties: ${JSON.stringify(p.properties)} },`,
+          ),
+          `  ],`,
+        ]
+      : [];
+    if (island && island.strings.length === 0 && paths.length === 0) {
       out.push(
         `export const ${name}: IslandDescriptor<${name}> = { type: ${JSON.stringify(island.type)}, version: ${island.version} };`,
+      );
+    }
+    if (island && island.strings.length === 0 && paths.length > 0) {
+      out.push(
+        `export const ${name}: IslandDescriptor<${name}> = {`,
+        `  type: ${JSON.stringify(island.type)},`,
+        `  version: ${island.version},`,
+        ...entityLines,
+        `};`,
       );
     }
     if (island && island.strings.length > 0) {
@@ -109,6 +133,7 @@ export function generateTypeScript(
         `  type: ${JSON.stringify(island.type)},`,
         `  version: ${island.version},`,
         `  strings: ${paramsOf(island.strings)},`,
+        ...entityLines,
         `};`,
       );
     }
@@ -205,6 +230,20 @@ export function generateTypeScript(
     );
     out.push(
       `export const ${name}: ScreenStringsDescriptor<${name}> = { screen: ${JSON.stringify(s.screen)}, strings: ${paramsOf(s.strings)} };`,
+    );
+  }
+  for (const entity of entities) {
+    const name = flat(entity.def.path);
+    // What an action sets: every property but the id, which names the entity.
+    emitObject({
+      ...entity.def,
+      fields: entity.def.fields
+        .filter((f) => f.jsonName !== entity.id)
+        .map((f) => ({ ...f, required: false })),
+      description: entity.description,
+    });
+    out.push(
+      `export const ${name}: EntityDescriptor<${name}> = { entity: ${JSON.stringify(entity.entity)} };`,
     );
   }
   for (const island of islands) {

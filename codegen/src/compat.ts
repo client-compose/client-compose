@@ -166,6 +166,15 @@ export function compareActions(base: Action[], head: Action[]): CompatIssue[] {
 type Report = (path: string, message: string) => void;
 
 function compareObject(old: ObjectDef, current: ObjectDef, path: string, report: Report): void {
+  if (old.entity !== current.entity) {
+    // Released apps apply changes by where their islands hold entities (spec §2.1).
+    report(
+      path,
+      current.entity
+        ? `now shows entity ${current.entity}${old.entity ? ` instead of ${old.entity}` : ""}: released apps don't apply its changes there`
+        : `no longer shows entity ${old.entity}: released apps would apply its changes there`,
+    );
+  }
   const currentFields = new Map(current.fields.map((f) => [f.jsonName, f]));
   for (const before of old.fields) {
     const p = `${path}.${before.jsonName}`;
