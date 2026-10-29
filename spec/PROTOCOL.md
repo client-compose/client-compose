@@ -551,7 +551,7 @@ The `codegen compat` command checks these rules.
 | `version`        | The action version the client was built against.                         |
 | `input`          | MUST validate against that version's `input` schema.                      |
 | `client`         | As for screens (§3).                                                      |
-| `islands`        | Optional. The client's capabilities, as for screens (§3). Sending them says the client applies `changes` and `update` effects (§5.3). |
+| `islands`        | The client's capabilities, as for screens (§3), so that island updates come at versions it knows (§5.3). |
 | `idempotencyKey` | Optional. One per user intent, reused when retrying it.                    |
 
 Clients call exactly one version; there is no negotiation. Composers keep serving old action
@@ -689,8 +689,8 @@ as an island request without a cursor would resolve it (§4.5), in the language 
 `client.locale`. Its strings are counted by the plural rules the client already has from the
 screen, which is in the same language.
 
-- **The island is resolved at the highest version both sides know** (§4.2), from the request's
-  `islands`.
+- **The island is resolved at the highest version both sides know** (§4.2), from the action
+  request's `islands`.
 - **The screen is laid out as it would be** (§4.5): its requirements, layout and conditions run.
   If the island isn't on the screen for this request (its condition is now false, say), the
   screen's layout has changed, and the composer invalidates it instead. So it does when the island
@@ -701,16 +701,6 @@ or cached. It swaps the entry in, by `key`, and the island renders it as it woul
 paged island starts again from the page it brings. If the screen can't take it (it has no island
 with that key, the island is still on its way in a stream (§4.6), or it's a different type), the
 client reloads the screen, as for `invalidate`. That covers an island that's newly shown, too.
-
-#### Which clients get them
-
-Changes and updates are for clients that apply them, and a client says it does by sending its
-`islands` with the action (§5.2). A client that doesn't, such as one released before them, gets
-neither: for each, the composer invalidates the screens it concerns, and the client reloads them,
-as it always has. For that, an action gives each change the screens it may appear on (to the
-composer, not on the wire); an update's screen is its own.
-
-So an action never lists a screen twice: one it changes or updates, it doesn't also invalidate.
 
 #### Applying them
 

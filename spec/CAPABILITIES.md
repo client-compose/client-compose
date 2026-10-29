@@ -61,8 +61,8 @@ them to say what they add.
 | CMP-20 | **Island requests.** Define an island with pages by its generated props type; it resolves the page a cursor asks for, and the cursor of the next. One island of a screen can be resolved again on its own, laid out as its screen would be. | §4.5 |
 | CMP-22 | **Strings.** Load a catalog, one file per language. Each island's entry carries its strings in the language nearest the client's, string by string falling back to the default; the head says which language, with its plural rules. App strings are answered at `/strings` with no session. A screen's own strings (its meta's words) are read in the request's language. | §4.7 |
 | CMP-21 | **Streams.** Screens are answered as streams: the head once what can fail the screen is settled (requirements, layout and conditions, required islands, meta), then each other island as it's resolved, then the end. | §4.6 |
-| CMP-23 | **Island updates.** An action declares the islands it changes. The composer resolves them as island requests would, at the client's versions, and sends their entries as `update` effects, or invalidates their screen when the client didn't send its islands, the island isn't on the screen for the request, or it failed. | §5.3 |
-| CMP-24 | **Entity changes.** An action returns typed changes to entities (set, delete), each with the screens it may appear on; the composer sends them as `changes`, or invalidates those screens for clients that didn't send their islands. The test kit checks an action's changes and updates against a fresh resolve. | §2.1, §5.3 |
+| CMP-23 | **Island updates.** An action declares the islands it changes. The composer resolves them as island requests would, at the client's versions, and sends their entries as `update` effects, or invalidates their screen when the island isn't on it for the request any more, or it failed. | §5.3 |
+| CMP-24 | **Entity changes.** An action returns typed changes to entities (set, delete), sent as `changes`. The test kit checks an action's changes and updates against a fresh resolve. | §2.1, §5.3 |
 
 ## The composer as a platform
 
@@ -323,8 +323,8 @@ Names in *italics* don't exist yet; the parity work below adds them.
 | CLI-11 streams | ✅ `openScreen`, `fetchScreen` | ◐ read to the end | ◐ read to the end |
 | UI-11 progressive screens | ✅ placeholders, `progressive`, streamed Server Components | ✗ (all at once) | ✗ (all at once) |
 | CLI-12 strings | ✅ `t`, `fetchStrings`, `proxy.loadStrings` | ✅ `t`, `client.strings()` | ✅ `t`, `client.strings()` |
-| CLI-13 island updates | ✗ | ✗ (reloads, as before) | ✗ (reloads, as before) |
-| CLI-14 entity changes | ✗ | ✗ (reloads, as before) | ✗ (reloads, as before) |
+| CLI-13 island updates | ✗ | ✗ | ✗ |
+| CLI-14 entity changes | ✗ | ✗ | ✗ |
 | UI-12 app strings | ✅ `AppStringsProvider`, `useAppStrings` | ✗ (`client.strings()`, kept by the app) | ✗ (`client.strings()`, kept by the app) |
 
 SwiftUI and Compose can't catch a view that crashes while rendering the way React can, so UI-6
