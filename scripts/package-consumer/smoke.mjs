@@ -173,7 +173,11 @@ const tried = await callAction(
   tested.config.baseUrl,
   Greet,
   { name: "Ada" },
-  { client: tested.config.client, islands: {}, fetch: tested.config.fetch },
+  {
+    client: tested.config.client,
+    islands: {},
+    fetch: tested.config.fetch,
+  },
 );
 assert.deepEqual(declaredError(tried), { code: "nope" });
 assert.equal(isUnexpected(tried), true);
