@@ -24,6 +24,9 @@ type Call struct {
 	// IdempotencyKey is the client's key for this user intent, if it sent one (spec §5.2). Honouring
 	// it (returning the first outcome again instead of repeating the change) is up to the action.
 	IdempotencyKey string
+	// Islands are the island versions the client can render (spec §5.2), which updates are
+	// resolved at.
+	Islands map[string][]int
 	// words are the catalog's in the client's language, for ScreenStrings.
 	words *LocaleStrings
 }
@@ -38,15 +41,27 @@ type ScreenRef struct {
 	Params map[string]string `json:"params,omitempty"`
 }
 
-// Effects tells clients what a successful action changed (spec §5.3).
+// Effects tells clients what a successful action changed (spec §5.3), as narrowly as it can:
+// entities' properties (Changes), then islands' content (Update), then whole screens (Invalidate).
 type Effects struct {
+	// Changes are the entities the action changed: clients apply them to every island holding
+	// them, and nothing is resolved again. Build them with Set and Delete.
+	Changes []EntityChange `json:"changes,omitempty"`
+	// Update names islands whose content changed beyond their entities, such as a new item in a
+	// list. The composer resolves each again and sends its entry, or invalidates its screen if the
+	// island isn't on it any more, or fails.
+	Update []IslandRef `json:"-"`
+	// Updated are the islands Update named, resolved: what clients get. The composer sets them.
+	Updated []IslandUpdate `json:"update,omitempty"`
 	// Invalidate lists screens whose content may have changed. Clients reload the ones on show.
 	Invalidate []ScreenRef `json:"invalidate,omitempty"`
 	// Navigate suggests a screen to show next. Clients map it to their own routes.
 	Navigate *ScreenRef `json:"navigate,omitempty"`
 }
 
-func (e Effects) empty() bool { return len(e.Invalidate) == 0 && e.Navigate == nil }
+func (e Effects) empty() bool {
+	return len(e.Changes) == 0 && len(e.Updated) == 0 && len(e.Invalidate) == 0 && e.Navigate == nil
+}
 
 // ActionInput is implemented by generated action input types (see codegen/). It ties the input to
 // its action, version, schema, declared errors and result type R.
@@ -124,12 +139,13 @@ func DefineAction[I ActionInput[R], R any](handle func(ctx context.Context, call
 
 // ActionRequest is the body a client POSTs to /actions/{action}.
 type ActionRequest struct {
-	Protocol       *int            `json:"protocol"`
-	Action         string          `json:"action"`
-	Version        int             `json:"version"`
-	Input          json.RawMessage `json:"input"`
-	Client         *ClientContext  `json:"client"`
-	IdempotencyKey string          `json:"idempotencyKey,omitempty"`
+	Protocol       *int             `json:"protocol"`
+	Action         string           `json:"action"`
+	Version        int              `json:"version"`
+	Input          json.RawMessage  `json:"input"`
+	Client         *ClientContext   `json:"client"`
+	Islands        map[string][]int `json:"islands"`
+	IdempotencyKey string           `json:"idempotencyKey,omitempty"`
 }
 
 // ActionError is a declared error in an action response.
@@ -168,6 +184,7 @@ func (c *Composer) Perform(ctx context.Context, req ActionRequest) Result {
 
 func (c *Composer) performAction(ctx context.Context, req ActionRequest) Result {
 	action := c.actions[req.Action][req.Version]
+	outside := ctx
 	ctx, endRequest := withRequestScope(ctx)
 	defer endRequest()
 
@@ -185,7 +202,7 @@ func (c *Composer) performAction(ctx context.Context, req ActionRequest) Result 
 	if err := validateJSON(action.schema, req.Input); err != nil {
 		return fail(http.StatusBadRequest, "invalid_input", err.Error())
 	}
-	call := Call{IdempotencyKey: req.IdempotencyKey, Client: client, words: c.words(client.Locale)}
+	call := Call{IdempotencyKey: req.IdempotencyKey, Client: client, Islands: req.Islands, words: c.words(client.Locale)}
 
 	result, effects, err := runAction(ctx, action, call, req.Input)
 	respond := func(status string) ActionResponse {
@@ -197,6 +214,7 @@ func (c *Composer) performAction(ctx context.Context, req ActionRequest) Result 
 		if resp.Result == nil {
 			resp.Result = map[string]any{}
 		}
+		effects = c.resolveUpdates(outside, effects, client, req.Islands)
 		if !effects.empty() {
 			resp.Effects = &effects
 		}

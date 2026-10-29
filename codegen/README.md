@@ -55,6 +55,9 @@ downloaded through a browser needs `xattr -d com.apple.quarantine <file>` before
 `actions` is optional: a directory of action manifests (spec §5), generated for every target. A
 config may also have only `actions`.
 
+For entities (spec §2.1), add `"entities": "entities"`, a directory of entity manifests. See
+[Entities](#entities).
+
 For strings (spec §4.7), add `"appStrings": "app-strings.json"` (the app strings manifest),
 `"screenStrings": "screen-strings.json"` (each screen's own strings, for Go and TypeScript composers),
 `"catalog": "strings"` (the directory of `<locale>.json` files the composer serves) and, if it isn't
@@ -83,6 +86,31 @@ For action `follow-user` v1 (spec §5.1):
 | TypeScript | `FollowUserV1Input`, `FollowUserV1Result`, the `FollowUserV1Error` union, and the `FollowUserV1` descriptor | `action(FollowUserV1, perform)` in the composer, `callAction(…, FollowUserV1, input)` or `useAction(FollowUserV1)` in apps |
 | Kotlin     | `object FollowUserV1 : ActionDescriptor<…>` holding `Input`, `Result`, and a sealed `Error` with a subclass per declared error (`Error.Blocked`, or `Error.LimitReached(details)`) | `client.perform(FollowUserV1, FollowUserV1.Input(userId = id))` or `rememberAction(FollowUserV1)` |
 | Swift      | `enum FollowUserV1: ActionDescriptor` holding `Input`, `Result`, and a `DeclaredError` enum with a case per declared error (`.blocked`, or `.limitReached(LimitReached)` with its details) | `client.perform(FollowUserV1.self, .init(userId: id))` or `@ComposeAction(FollowUserV1.self)` |
+
+## Entities
+
+An entity names something several islands show, so an action can say what changed about it once
+(spec §2.1, §5.3). Each is a manifest in the `entities` directory, and island props mark the objects
+that show one with `entity`:
+
+```json
+// entities/todo.json
+{ "entity": "todo", "id": "id", "properties": { "id": { "type": "string" }, "title": { "type": "string" }, "done": { "type": "boolean" } } }
+
+// in an island's props
+"todos": { "type": "array", "items": { "type": "object", "entity": "todo", "required": ["id", "title"], "properties": { … } } }
+```
+
+Codegen checks each marked object: it has the entity's id, required, and each of the entity's
+properties it shows has the entity's schema for it. It may have properties of its own. `compat`
+treats marking or unmarking an object as a breaking change.
+
+| Stack      | Generated | Used as |
+| ---------- | --------- | ------- |
+| Go         | `TodoEntity`, every property but the id, each optional; `IslandEntities()` on islands that hold entities | `cc.Set("3", TodoEntity{Done: &done})`, `cc.Delete[TodoEntity]("3")` |
+| TypeScript | `TodoEntity` and its descriptor; `entities` on island descriptors | `changed(TodoEntity, "3", { done: true })`, `deleted(TodoEntity, "3")`; clients apply changes with the descriptors' `entities` |
+
+Swift and Kotlin don't generate entities yet.
 
 ## Strings
 

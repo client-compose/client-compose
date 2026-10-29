@@ -106,7 +106,7 @@ const greeted = await callAction(
   baseUrl,
   Greet,
   { name: "Ada" },
-  { client: { platform: "node", appVersion: "0" } },
+  { client: { platform: "node", appVersion: "0" }, islands: {} },
 );
 assert.deepEqual(greeted.result, { text: "Hi Ada" });
 
@@ -173,7 +173,7 @@ const tried = await callAction(
   tested.config.baseUrl,
   Greet,
   { name: "Ada" },
-  { client: tested.config.client, fetch: tested.config.fetch },
+  { client: tested.config.client, islands: {}, fetch: tested.config.fetch },
 );
 assert.deepEqual(declaredError(tried), { code: "nope" });
 assert.equal(isUnexpected(tried), true);
@@ -193,6 +193,7 @@ const proxied = await transport.performAction({
   version: 1,
   input: { name: "Grace" },
   client: { platform: "x", appVersion: "0" },
+  islands: {},
 });
 assert.deepEqual(declaredError(proxied), { code: "nope" });
 assert.deepEqual(tested.gateway.actionRequests()[1].client, tested.config.client);

@@ -23,6 +23,7 @@ import {
 import { buildStrings } from "./strings.ts";
 
 export { preferredLocale } from "./locale.ts";
+// Entity changes (spec §5.3), applied to islands the same way by every client.
 export {
   appStrings,
   buildStrings,
@@ -32,6 +33,7 @@ export {
   StringsFetchError,
   type StringValues,
 } from "./strings.ts";
+export { type AppliedChanges, applyChanges } from "@client-compose/protocol";
 
 type OkEntry<P = unknown> = IslandEntry<P> & { status: "ok" };
 type ErrorEntry = IslandEntry & { status: "error" };
@@ -577,6 +579,7 @@ export function buildActionRequest<I>(
   action: ActionDescriptor<I, unknown, DeclaredError>,
   input: I,
   client: ClientContext,
+  islands: Capabilities,
   idempotencyKey?: string,
 ): ActionRequest<I> {
   return {
@@ -585,6 +588,7 @@ export function buildActionRequest<I>(
     version: action.version,
     input,
     client,
+    islands,
     ...(idempotencyKey !== undefined && { idempotencyKey }),
   };
 }
@@ -641,6 +645,11 @@ export function checkActionResponse<I, R, E extends DeclaredError>(
 
 export interface CallActionOptions {
   client: ClientContext;
+  /**
+   * The island versions the app can render (spec §5.2), e.g. `registry.capabilities()`: the
+   * composer resolves the islands an action updates at them.
+   */
+  islands: Capabilities;
   /** Default: a new key. Pass the same key again to retry the same user intent. */
   idempotencyKey?: string;
   init?: RequestInit;
@@ -665,6 +674,7 @@ export async function callAction<I, R, E extends DeclaredError>(
     action,
     input,
     options.client,
+    options.islands,
     options.idempotencyKey ?? newIdempotencyKey(),
   );
   return checkActionResponse(

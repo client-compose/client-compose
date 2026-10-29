@@ -14,7 +14,7 @@ import (
 
 func perform(t *testing.T, c *Composer, input string) (int, map[string]any) {
 	t.Helper()
-	body := `{"protocol":0,"action":"conformance","version":1,"client":{"platform":"web","appVersion":"1"},"input":` + input + `}`
+	body := `{"protocol":0,"action":"conformance","version":1,"client":{"platform":"web","appVersion":"1"},"islands":{},"input":` + input + `}`
 	rec := httptest.NewRecorder()
 	c.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/actions/conformance", strings.NewReader(body)))
 	var out map[string]any
@@ -135,7 +135,7 @@ func TestAnActionReadsScreenStringsInTheClientsLanguage(t *testing.T) {
 		})},
 		Strings: &StringsConfig{Catalog: catalog},
 	})
-	body := `{"protocol":0,"action":"conformance","version":1,"client":{"platform":"web","appVersion":"1","locale":"pl-PL"},"input":{"outcome":"ok","echo":"x"}}`
+	body := `{"protocol":0,"action":"conformance","version":1,"client":{"platform":"web","appVersion":"1","locale":"pl-PL"},"islands":{},"input":{"outcome":"ok","echo":"x"}}`
 	rec := httptest.NewRecorder()
 	c.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/actions/conformance", strings.NewReader(body)))
 	if !strings.Contains(rec.Body.String(), `"echo":"Twórcy"`) {

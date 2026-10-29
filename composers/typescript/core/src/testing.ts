@@ -12,15 +12,18 @@
 import {
   type ActionDescriptor,
   type ActionEffects,
+  applyChanges,
   type Capabilities,
   type ClientContext,
   type DeclaredError,
+  type EntityPath,
   type IslandDescriptor,
   type IslandEntry,
   type IslandResponse,
   PROTOCOL_VERSION,
   type ScreenErrorResponse,
   type ScreenHead,
+  screenRefMatches,
   type ScreenResponse,
   type StringsResponse,
 } from "@client-compose/protocol";
@@ -131,6 +134,21 @@ export interface TestComposer {
   ): Promise<TestOutcome<R, E>>;
   /** The app strings, in the client's language, or `locale` instead. */
   strings(options?: { locale?: string }): Promise<TestStrings>;
+  /**
+   * Checks that an action leaves a screen as resolving it again would (spec §5.3). It shows the
+   * screen, performs the action, applies its changes and updates to what it showed, as a client
+   * would, and composes the screen again; it throws if any island differs. A change the action
+   * forgot, such as a count it didn't update, shows here rather than in an app.
+   *
+   *     await app.checkEffects("todos", {}, () => app.perform(ToggleTodoV1, { id: "3", done: true }));
+   *
+   * A screen the action invalidates is reloaded by clients, so there's nothing to check on it.
+   */
+  checkEffects<R, E extends DeclaredError>(
+    screen: string,
+    params: Record<string, string>,
+    perform: () => Promise<TestOutcome<R, E>>,
+  ): Promise<TestOutcome<R, E>>;
 }
 
 const base = "https://composer.test";
@@ -309,6 +327,7 @@ export function testComposer<Ctx, Req = Request>(
           version: descriptor.version,
           input,
           client,
+          islands,
           ...(requestOptions.idempotencyKey !== undefined && {
             idempotencyKey: requestOptions.idempotencyKey,
           }),
@@ -332,7 +351,101 @@ export function testComposer<Ctx, Req = Request>(
         error: body.error,
       };
     },
+    async checkEffects(screen, params, perform) {
+      const before = await this.screen(screen, params);
+      const outcome = await perform();
+      const effects = outcome.effects ?? {};
+      const invalidated = (effects.invalidate ?? []).some((ref) =>
+        screenRefMatches(ref, screen, params),
+      );
+      if (outcome.status !== "ok" || invalidated || !before.response) {
+        return outcome;
+      }
+
+      const shown = applyEffects(
+        before.response.islands,
+        effects,
+        screen,
+        params,
+        (type, version) => composer.entities(type, version),
+      );
+      if (!shown) {
+        return outcome;
+      }
+
+      const after = await this.screen(screen, params);
+      const keys = (islands: readonly IslandEntry[]) =>
+        islands.map((entry) => entry.key).join(", ");
+      if (keys(shown) !== keys(after.response?.islands ?? [])) {
+        throw new Error(
+          `checkEffects: after its effects, screen ${screen} shows ${keys(shown)}, but composed again it has ${keys(after.response?.islands ?? [])}: invalidate it`,
+        );
+      }
+      for (const [i, entry] of shown.entries()) {
+        const fresh = after.response?.islands[i];
+        const got = canonical(entry.status === "ok" ? entry.props : entry);
+        const want = canonical(fresh?.status === "ok" ? fresh.props : fresh);
+        if (got !== want) {
+          throw new Error(
+            `checkEffects: after its effects, island ${entry.key} shows ${got}, but composed again it's ${want}`,
+          );
+        }
+      }
+
+      return outcome;
+    },
   };
+}
+
+/** The screen's islands after an action's effects, as a client applies them, or undefined to reload it. */
+function applyEffects(
+  islands: readonly IslandEntry[],
+  effects: ActionEffects,
+  screen: string,
+  params: Record<string, string>,
+  entities: (type: string, version: number) => readonly EntityPath[],
+): IslandEntry[] | undefined {
+  const out: IslandEntry[] = [];
+  for (const entry of islands) {
+    if (entry.status !== "ok") {
+      out.push(entry);
+      continue;
+    }
+    const applied = applyChanges(
+      entry.props,
+      entities(entry.type, entry.version),
+      effects.changes ?? [],
+    );
+    if (applied.reload) {
+      return undefined;
+    }
+    out.push({ ...entry, props: applied.props });
+  }
+  for (const update of effects.update ?? []) {
+    if (update.screen !== screen || !sameParams(update.params, params)) {
+      continue;
+    }
+    const i = out.findIndex((entry) => entry.key === update.island.key);
+    if (i < 0 || out[i]?.type !== update.island.type) {
+      return undefined;
+    }
+    out[i] = update.island;
+  }
+
+  return out;
+}
+
+function sameParams(a: Record<string, string>, b: Record<string, string>): boolean {
+  const keys = Object.keys(a);
+
+  return keys.length === Object.keys(b).length && keys.every((k) => a[k] === b[k]);
+}
+
+/** JSON with each object's keys in order, so two values compare by what they hold. */
+function canonical(value: unknown): string {
+  return JSON.stringify(value, (_key, v: unknown) =>
+    isRecord(v) ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => a.localeCompare(b))) : v,
+  );
 }
 
 function declared(descriptors: IslandDescriptor<unknown>[]): Capabilities {

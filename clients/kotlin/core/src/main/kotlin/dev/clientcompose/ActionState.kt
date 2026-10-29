@@ -44,7 +44,7 @@ public class ActionState<I, R, E : DeclaredError>(
     public suspend fun run(input: I, idempotencyKey: String = UUID.randomUUID().toString()): ActionResult<R, E> {
         _pending.update { it + 1 }
         val result = try {
-            when (val outcome = client.perform(action, input, idempotencyKey)) {
+            when (val outcome = client.perform(action, input, idempotencyKey = idempotencyKey)) {
                 is ActionOutcome.Ok -> ActionResult.Ok(outcome.result, outcome.effects)
                 is ActionOutcome.Error -> ActionResult.Error(outcome.error)
             }

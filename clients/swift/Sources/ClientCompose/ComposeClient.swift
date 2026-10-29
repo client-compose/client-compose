@@ -112,10 +112,13 @@ public final class ComposeClient: Sendable {
     ///     case .error(.locked): showLocked()
     ///     }
     ///
+    /// - Parameter islands: The app's capabilities, usually `registry.capabilities`: the composer
+    ///   resolves the islands an action updates at them (spec §5.2).
     /// - Parameter idempotencyKey: One per user intent. Pass the same key again to retry it.
     public func perform<A: ActionDescriptor>(
         _ action: A.Type,
         _ input: A.Input,
+        islands: [String: [Int]] = [:],
         idempotencyKey: String = UUID().uuidString
     ) async throws -> ActionOutcome<A.Result, A.DeclaredError> {
         let request = ActionRequest(
@@ -124,6 +127,7 @@ public final class ComposeClient: Sendable {
             version: A.version,
             input: input,
             client: context,
+            islands: islands,
             idempotencyKey: idempotencyKey
         )
         let response = try await post(path: "actions/\(A.action)", body: JSONEncoder().encode(request))
@@ -183,6 +187,7 @@ struct ActionRequest<Input: Encodable>: Encodable {
     let version: Int
     let input: Input
     let client: ClientContext
+    let islands: [String: [Int]]
     let idempotencyKey: String
 }
 

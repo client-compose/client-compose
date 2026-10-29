@@ -409,6 +409,7 @@ export async function runActionCase(
     version: 1,
     input: c.input ?? { outcome: "ok", echo: "hi" },
     client: { platform: "conformance", appVersion: "0.0.0" },
+    islands: {},
     ...c.request,
   };
   const path = c.path ?? String(request.action);

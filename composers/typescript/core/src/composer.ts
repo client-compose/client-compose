@@ -3,6 +3,7 @@
 import {
   type ActionRequest,
   type Capabilities,
+  type EntityPath,
   type IslandEntry,
   type IslandRequest,
   PROTOCOL_VERSION,
@@ -13,7 +14,14 @@ import {
   type StringsRequest,
 } from "@client-compose/protocol";
 
-import { type Action, isActionRequestShape, performAction, protocolError } from "./actions.ts";
+import {
+  type Action,
+  isActionRequestShape,
+  type IslandRef,
+  performAction,
+  protocolError,
+  type ResolvedUpdates,
+} from "./actions.ts";
 import { type Cache, type Idempotency, performIdempotent, resolveCached } from "./adapters.ts";
 import { isRecord } from "./guards.ts";
 import { attachScope, InvalidCursorError, RequestScope } from "./loading.ts";
@@ -107,6 +115,11 @@ export interface Composer<Ctx, Req = Request> {
   appStrings(req: StringsRequest): StringsResult;
   /** The islands placed by screens with declared `islands`, as a client would declare them. */
   islands(): Capabilities;
+  /**
+   * Where an island version's props hold entities (spec §2.1), for test kits to apply changes the
+   * way clients do.
+   */
+  entities(type: string, version: number): readonly EntityPath[];
 }
 
 /**
@@ -175,7 +188,14 @@ export function createComposer<Ctx = undefined, Req = Request>(
   let resolveChain: ResolveFn<Ctx> = (call) => resolveCached(config.cache, call, report);
   let composeChain: ComposeFn<Ctx> = (req, ctx) => composeScreen(screenOf(req.screen), req, ctx);
   const performOnce = (req: ActionRequest, ctx: Ctx) =>
-    performAction(actionOf(req.action, req.version), req, ctx, report, wordsFor(req.client.locale));
+    performAction(
+      actionOf(req.action, req.version),
+      req,
+      ctx,
+      report,
+      wordsFor(req.client.locale),
+      (refs) => resolveUpdates(refs, req, ctx),
+    );
   let performChain: PerformFn<Ctx> = (req, ctx) =>
     performIdempotent(config.idempotency, req, ctx, performOnce, report);
   for (const p of [...plugins].reverse()) {
@@ -281,6 +301,77 @@ export function createComposer<Ctx = undefined, Req = Request>(
         ...(words && { locale: words.locale, plurals: words.plurals }),
       },
     };
+  }
+
+  /**
+   * The islands an action named in `update`, resolved as island requests would resolve them (spec
+   * §5.3), at the versions the client knows. One that isn't on its screen any more, fails, or has no
+   * version the client knows is its screen's to reload instead. Each is resolved in a request scope
+   * of its own, so it doesn't read what the action loaded before it made its change.
+   */
+  async function resolveUpdates(
+    refs: IslandRef[],
+    req: ActionRequest,
+    ctx: Ctx,
+  ): Promise<ResolvedUpdates> {
+    const out: ResolvedUpdates = { update: [], invalidate: [] };
+    for (const ref of refs) {
+      const params = ref.params ?? {};
+      const entry = await resolveUpdate(ref, params, req, ctx);
+      if (entry) {
+        out.update.push({
+          screen: ref.screen,
+          params,
+          island: entry,
+        });
+      } else {
+        out.invalidate.push({ screen: ref.screen, params });
+      }
+    }
+
+    return out;
+  }
+
+  async function resolveUpdate(
+    ref: IslandRef,
+    params: Record<string, string>,
+    req: ActionRequest,
+    ctx: Ctx,
+  ): Promise<IslandEntry | undefined> {
+    const screen = screens.get(ref.screen);
+    if (!screen) {
+      return undefined;
+    }
+
+    const request = new AbortController();
+    const scope = new RequestScope(request.signal);
+    const language = wordsFor(req.client.locale);
+    const fields = {
+      screen: screen.id,
+      params,
+      client: req.client,
+      ctx,
+      load: scope.load.bind(scope),
+      strings: <S>(d: ScreenStringsDescriptor<S>) => screenStrings(language, d),
+    };
+    const lc: LayoutContext<Ctx> = attachScope(fields, scope);
+    try {
+      const placements = await placementsFor(screen, lc);
+      const placement = placements.find((p) => p.key === ref.key);
+      const island =
+        placement && negotiate(placement.versions, req.islands[placement.versions[0]?.type ?? ""]);
+      if (!placement || !island) {
+        return undefined;
+      }
+
+      const { entry } = await resolveEntry(screen, placement, island, lc, scope, language);
+
+      return entry.status === "ok" ? entry : undefined;
+    } catch {
+      return undefined;
+    } finally {
+      request.abort();
+    }
   }
 
   async function perform(req: ActionRequest, ctx: Ctx): Promise<PerformResult> {
@@ -696,6 +787,19 @@ export function createComposer<Ctx = undefined, Req = Request>(
     return out;
   }
 
+  function entities(type: string, version: number): readonly EntityPath[] {
+    for (const s of screens.values()) {
+      for (const p of s.islands ?? []) {
+        const found = p.versions.find((v) => v.type === type && v.version === version);
+        if (found) {
+          return found.entities ?? [];
+        }
+      }
+    }
+
+    return [];
+  }
+
   return {
     // The same: Composer's fetch is `never` unless Req is a fetch Request.
     // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
@@ -706,6 +810,7 @@ export function createComposer<Ctx = undefined, Req = Request>(
     perform,
     appStrings,
     islands,
+    entities,
   };
 }
 

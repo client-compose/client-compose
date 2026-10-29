@@ -39,7 +39,11 @@ test("callAction posts a typed request with a fresh idempotency key", async () =
     "https://api.test",
     Rename,
     { name: "New" },
-    { client, fetch: fakeFetch(200, ok, seen) },
+    {
+      client,
+      islands: {},
+      fetch: fakeFetch(200, ok, seen),
+    },
   );
   assert.equal(seen.url, "https://api.test/actions/rename");
   assert.deepEqual(
@@ -50,6 +54,7 @@ test("callAction posts a typed request with a fresh idempotency key", async () =
       version: 2,
       input: { name: "New" },
       client,
+      islands: {},
       idempotencyKey: "string",
     },
   );
@@ -71,6 +76,7 @@ test("callAction reuses a given idempotency key, for retries", async () => {
     { name: "x" },
     {
       client,
+      islands: {},
       idempotencyKey: "k1",
       fetch: fakeFetch(200, ok, seen),
     },
@@ -86,7 +92,16 @@ test("declared errors are outcomes, not exceptions", async () => {
     status: "error",
     error: { code: "taken", details: { suggestion: "x2" } },
   };
-  const res = await callAction("", Rename, { name: "x" }, { client, fetch: fakeFetch(200, body) });
+  const res = await callAction(
+    "",
+    Rename,
+    { name: "x" },
+    {
+      client,
+      islands: {},
+      fetch: fakeFetch(200, body),
+    },
+  );
   assert.equal(
     res.status === "error" && res.error.code === "taken" && res.error.details.suggestion,
     "x2",
@@ -96,7 +111,16 @@ test("declared errors are outcomes, not exceptions", async () => {
 test("protocol errors throw ActionFetchError with their code", async () => {
   const body = { protocol: 0, error: { code: "unauthenticated" } };
   await assert.rejects(
-    callAction("", Rename, { name: "x" }, { client, fetch: fakeFetch(401, body) }),
+    callAction(
+      "",
+      Rename,
+      { name: "x" },
+      {
+        client,
+        islands: {},
+        fetch: fakeFetch(401, body),
+      },
+    ),
     (err: unknown) => {
       assert.ok(err instanceof ActionFetchError);
       assert.deepEqual([err.status, err.code], [401, "unauthenticated"]);
@@ -104,7 +128,16 @@ test("protocol errors throw ActionFetchError with their code", async () => {
     },
   );
   await assert.rejects(
-    callAction("", Rename, { name: "x" }, { client, fetch: fakeFetch(502, "Bad Gateway") }),
+    callAction(
+      "",
+      Rename,
+      { name: "x" },
+      {
+        client,
+        islands: {},
+        fetch: fakeFetch(502, "Bad Gateway"),
+      },
+    ),
     (err: unknown) => {
       assert.ok(err instanceof ActionFetchError && err.code === undefined);
       return true;

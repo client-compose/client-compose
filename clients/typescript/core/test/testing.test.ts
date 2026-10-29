@@ -88,7 +88,11 @@ test("answers action requests with typed outcomes", async () => {
     "https://composer.test",
     Rename,
     { name: "New" },
-    { client, fetch: gateway.fetch },
+    {
+      client,
+      islands: {},
+      fetch: gateway.fetch,
+    },
   );
   assert.deepEqual(ok, {
     protocol: 0,
@@ -102,7 +106,11 @@ test("answers action requests with typed outcomes", async () => {
     "https://composer.test",
     Rename,
     { name: "taken" },
-    { client, fetch: gateway.fetch },
+    {
+      client,
+      islands: {},
+      fetch: gateway.fetch,
+    },
   );
   assert.deepEqual(taken.status === "error" && taken.error, {
     code: "taken",
