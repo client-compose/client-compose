@@ -34,7 +34,6 @@ jobs:
       - name: Go golden output compiles and decodes
         working-directory: codegen/test/golden/go
         run: go vet ./... && go test ./...
-      # Swift and Kotlin golden output is exercised by swift.yml and kotlin.yml.
       - name: Island manifests have no breaking changes without a version bump
         if: github.event_name == 'pull_request'
         run: node codegen/cli.ts compat examples/todo/client-compose.codegen.json --base "origin/$GITHUB_BASE_REF"

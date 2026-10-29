@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 
 import { callAction, IslandRegistry } from "@client-compose/client";
@@ -257,4 +259,16 @@ test("the embedded input schema has no annotations, but keeps properties named l
     type: "object",
     properties: { title: { type: "string" } },
   });
+});
+
+test("a config with a Swift or Kotlin target says those clients were removed", () => {
+  const dir = mkdtempSync(join(tmpdir(), "codegen-"));
+  const file = join(dir, "client-compose.codegen.json");
+  mkdirSync(join(dir, "islands"));
+  writeFileSync(
+    file,
+    JSON.stringify({ manifests: "islands", targets: { swift: { out: "x.swift" } } }),
+  );
+
+  assert.throws(() => generate(file), /no swift target: the Swift and Kotlin clients were removed/);
 });

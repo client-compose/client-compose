@@ -10,13 +10,14 @@ of that protocol, one per stack, mostly contributed by people who use that stack
 | Protocol change              | `spec/`, `conformance/`            | RFC-style issue first. See [Changing the protocol](#changing-the-protocol). |
 | New composer core            | `composers/<language>/core`        | Passes composer conformance. [Checklist](#adding-an-implementation). |
 | New composer framework adapter | `composers/<language>/<framework>` | Passes composer conformance through that framework.      |
-| New client core              | `clients/<platform>/core`*         | Passes client conformance fixtures.                       |
+| New client core              | `clients/<platform>/core`          | Passes client conformance fixtures.                       |
 | UI binding                   | `clients/<platform>/<ui-lib>`      | Example usage + a smoke test.                             |
 | New codegen target           | `codegen/src/targets/<language>.ts` | Golden output for `codegen/test/fixtures` that compiles and decodes the sample in that language's CI. |
 | Fix to an implementation     | anywhere                           | Its owner reviews (see `.github/CODEOWNERS`).            |
 
-\* Swift is the exception: it lives in `clients/swift` with `Package.swift` at the repo root,
-because SwiftPM only resolves packages from a repository root.
+Swift and Kotlin clients were here once, and were removed until someone can maintain them. They're
+welcome back: open an issue to take one on. A Swift package lives at the repository root
+(`Package.swift`), because SwiftPM only resolves packages from there.
 
 ## Layout
 
@@ -32,7 +33,7 @@ composers/<language>/
   <framework>/             thin adapter: HTTP in, core, HTTP out
 clients/<platform>/
   core/                    registry, request building, response planning, transport
-  <ui-lib>/                optional UI binding (SwiftUI, Compose, React, ...)
+  <ui-lib>/                optional UI binding (React, ...)
 codegen/                   manifests -> props types per language (Node CLI)
 examples/                  end-to-end examples across stacks
 ```
@@ -49,7 +50,7 @@ re-implementing negotiation or error codes in an adapter, it belongs in the core
    and say in your README which ones you cover.
 3. **Follow the layout above.** Use the existing implementations in the same role as a reference:
    - composers: `composers/go/core`, `composers/typescript/core`
-   - clients: `clients/swift`, `clients/kotlin/core`, `clients/typescript/core`
+   - clients: `clients/typescript/core`, with its React binding in `clients/typescript/react`
 4. **Provide request-scoped loading** (spec §9): a `load(key, fn)` shared by the layout and
    islands within one request, running under the request's lifetime rather than an island's, and
    ideally a batch loader. Follow the existing cores' APIs (`rc.load` / `cc.Load`).
@@ -118,5 +119,5 @@ Every protocol change multiplies across every implementation, so the bar is high
 
 - The **protocol** has an integer version (`protocol: 0`), changed only for breaking changes.
 - Each **package** is versioned and released independently, tagged by path, e.g.
-  `composers/go/core/v0.3.1` (which is also the form Go modules require) or `clients/kotlin/v0.2.0`.
+  `composers/go/core/v0.3.1` (which is also the form Go modules require).
 - Each implementation's README states which protocol versions it supports.
