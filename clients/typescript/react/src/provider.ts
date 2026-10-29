@@ -12,6 +12,7 @@ import {
 import { createContext, createElement, type ReactNode, useContext, useMemo, useState } from "react";
 
 import type { ClientComposeConfig } from "./config.ts";
+import { EffectsBatch } from "./effects.ts";
 
 interface CacheEntry {
   screen: string;
@@ -20,11 +21,13 @@ interface CacheEntry {
   expiresAt: number;
 }
 
-/** A screen currently shown with useScreen, so that actions can reload it. */
+/** A screen currently shown with useScreen, so that actions can change or reload it. */
 interface MountedScreen {
   screen: string;
   params: Record<string, string>;
   reload: () => void;
+  /** Applies an action's changes and updates to what's shown, or reloads it if it can't. */
+  apply: (batch: EffectsBatch) => void;
 }
 
 /**
@@ -34,6 +37,7 @@ interface MountedScreen {
 class ScreenStore {
   private readonly cache = new Map<string, CacheEntry>();
   private readonly mounted = new Set<MountedScreen>();
+  private readonly pages = new Set<(batch: EffectsBatch) => void>();
 
   /** The cached response for a key, while it's fresh. */
   cached(key: string): ScreenResponse | undefined {
@@ -59,6 +63,33 @@ class ScreenStore {
   mount(screen: MountedScreen): () => void {
     this.mounted.add(screen);
     return () => void this.mounted.delete(screen);
+  }
+
+  /** A paged island's pages, kept by usePages, to apply changes to. Returns what stops it. */
+  watchPages(apply: (batch: EffectsBatch) => void): () => void {
+    this.pages.add(apply);
+    return () => void this.pages.delete(apply);
+  }
+
+  /**
+   * Apply an action's changes and updates (spec §5.3) to every screen there is: cached responses
+   * (dropped when they'd need a reload), the screens on show, and paged islands' pages.
+   */
+  change(batch: EffectsBatch) {
+    for (const [key, entry] of this.cache) {
+      const changed = batch.response(entry.response, entry.params);
+      if (changed === undefined) {
+        this.cache.delete(key);
+      } else {
+        entry.response = changed;
+      }
+    }
+    for (const apply of this.pages) {
+      apply(batch);
+    }
+    for (const m of this.mounted) {
+      m.apply(batch);
+    }
   }
 
   /** Drop cached responses the refs match, and reload the screens on show that they match. */
@@ -94,6 +125,12 @@ export function ClientComposeProvider(props: {
   const value = useMemo((): ContextValue => {
     const config = props.config;
     const applyEffects = (effects: ActionEffects) => {
+      const batch = new EffectsBatch(effects, (type, version) =>
+        config.registry.entities(type, version),
+      );
+      if (batch.touchesScreens) {
+        screens.change(batch);
+      }
       const refs = effects.invalidate ?? [];
       if (refs.length) {
         screens.invalidate(refs);
