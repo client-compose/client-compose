@@ -396,7 +396,7 @@ func TestProfile(t *testing.T) {
 - `Perform` returns the typed result, effects, and the declared or protocol error code.
 - Pass your own `http.Handler` instead of the composer if it wraps the composer in middleware.
 
-See `examples/profile/composer-go` for a full example with tests.
+See [`examples/todo/composer-go`](../../../examples/todo/composer-go) for a full example with tests.
 
 ## Tests
 

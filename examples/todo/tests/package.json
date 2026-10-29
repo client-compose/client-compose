@@ -1,0 +1,13 @@
+{
+  "name": "todo-composer-tests",
+  "private": true,
+  "type": "module",
+  "description": "What every todo composer must do, checked over HTTP: run it against any of them.",
+  "scripts": {
+    "test": "node --test src/*.test.ts"
+  },
+  "dependencies": {
+    "@client-compose/client": "workspace:*",
+    "@client-compose/protocol": "workspace:*"
+  }
+}

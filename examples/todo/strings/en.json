@@ -1,0 +1,30 @@
+{
+  "app": {
+    "loading": "Loading…",
+    "couldNotLoad": "Couldn't load your todos.",
+    "retry": "Try again",
+    "somethingWentWrong": "Something went wrong. Try again."
+  },
+  "islands": {
+    "new-todo@1": {
+      "label": "New todo",
+      "placeholder": "What needs doing?",
+      "add": "Add",
+      "emptyTitle": "Write what needs doing first.",
+      "titleTooLong": "Keep it to {maxLength} characters."
+    },
+    "todo-list@1": {
+      "empty": "Nothing to do.",
+      "markDone": "Done: {title}",
+      "delete": "Delete",
+      "deleteLabel": "Delete {title}"
+    },
+    "todo-summary@1": {
+      "left": { "#0": "All done", "#1": "1 item left", "#*": "{count} items left" },
+      "clearCompleted": "Clear completed"
+    }
+  },
+  "screens": {
+    "todos": { "title": "Todos" }
+  }
+}

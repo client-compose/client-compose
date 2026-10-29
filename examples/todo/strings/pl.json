@@ -1,0 +1,35 @@
+{
+  "app": {
+    "loading": "Ładowanie…",
+    "couldNotLoad": "Nie udało się wczytać zadań.",
+    "retry": "Spróbuj ponownie",
+    "somethingWentWrong": "Coś poszło nie tak. Spróbuj ponownie."
+  },
+  "islands": {
+    "new-todo@1": {
+      "label": "Nowe zadanie",
+      "placeholder": "Co jest do zrobienia?",
+      "add": "Dodaj",
+      "emptyTitle": "Najpierw wpisz, co jest do zrobienia.",
+      "titleTooLong": "Maksymalnie {maxLength} znaków."
+    },
+    "todo-list@1": {
+      "empty": "Nic do zrobienia.",
+      "markDone": "Zrobione: {title}",
+      "delete": "Usuń",
+      "deleteLabel": "Usuń {title}"
+    },
+    "todo-summary@1": {
+      "left": {
+        "#0": "Wszystko zrobione",
+        "#1": "Zostało 1 zadanie",
+        "#few": "Zostały {count} zadania",
+        "#*": "Zostało {count} zadań"
+      },
+      "clearCompleted": "Usuń zrobione"
+    }
+  },
+  "screens": {
+    "todos": { "title": "Zadania" }
+  }
+}

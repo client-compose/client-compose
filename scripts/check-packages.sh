@@ -16,7 +16,7 @@ cd "$root"
 step "build"
 pnpm build
 
-# Publishable packages only: the workspace also has private apps (e.g. examples/profile/next).
+# Publishable packages only: the workspace also has private apps (e.g. examples/todo/next).
 packages=$(pnpm -r exec node -e 'const p = require("./package.json"); if (!p.private) console.log(process.cwd())')
 
 step "pack"
@@ -54,6 +54,6 @@ trap 'kill $server 2>/dev/null || true; rm -rf "$work"' EXIT
 for _ in $(seq 1 50); do (exec 3<>/dev/tcp/127.0.0.1/4199) 2>/dev/null && break; sleep 0.1; done
 npx client-compose-conformance composer http://127.0.0.1:4199
 npx client-compose-codegen --check "$root/codegen/test/fixtures/client-compose.codegen.json" \
-  "$root/conformance/composer/client-compose.codegen.json" "$root/examples/profile/client-compose.codegen.json"
+  "$root/conformance/composer/client-compose.codegen.json" "$root/examples/todo/client-compose.codegen.json"
 
 printf '\nAll package checks passed.\n'

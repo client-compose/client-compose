@@ -2,14 +2,11 @@
 
 Server-composed screens, made of components your app already owns.
 
-Your app knows how to draw a handful of **islands**: a profile header, a post grid, a follow button.
-Your server decides which islands make up each screen, in what order, and with what data. Change
-the server, and every app that's already installed picks it up, as long as it knows how to draw the
-islands you send.
-
-The protocol is language-neutral. This repo has composers in Go and TypeScript and clients for
-React, React Native, SwiftUI and Jetpack Compose, and new ones for other languages and UI frameworks
-are welcome.
+Client Compose is a **protocol** between an app and its backend-for-frontend, the **composer**.
+Your app knows how to draw a handful of **islands**: a profile header, a post grid, a follow
+button. The composer decides which islands make up each screen, in what order, and with what data.
+Change the composer, and every app that's already installed picks it up, as long as it knows how to
+draw the islands you send.
 
 ```
  app                              composer (your backend-for-frontend)         services
@@ -43,7 +40,66 @@ a versioned set of typed props. No layout trees, no styling, no logic sent over 
 because the app only ever talks to the composer, the code that knows about your services lives on
 the server, where you can change it.
 
-## What it looks like
+## The protocol
+
+The [spec](spec/PROTOCOL.md) is short, and nothing in it depends on a language or a UI framework.
+An app and its composer share only two things: the protocol, and your **manifests**, the JSON
+Schema files that describe your islands and actions.
+
+- **Islands** (§2–4) are versioned, typed sets of props. A screen is an ordered list of them. Each
+  request says which versions the app can draw, and the composer sends the newest both sides know.
+  An island that fails is reported on its own, and the rest of the screen still renders.
+- **Streams** (§4.6) send a screen's head as soon as it's settled, and slow islands after it.
+- **Island requests** (§4.5) fetch an island's next page, or refresh one island without its screen.
+- **Actions** (§5) change things. Their inputs, results and declared errors are typed, and their
+  **effects** tell apps which screens to reload, or where to go next.
+- **Strings** (§4.7) carry every word an app shows, in the person's language, with plurals by
+  CLDR's rules, so copy and new languages ship without an app release.
+
+[Conformance suites](conformance) pin the behaviour down: composers are tested over HTTP, clients
+against shared fixtures. Every implementation here passes them, and
+[`spec/CAPABILITIES.md`](spec/CAPABILITIES.md) says exactly what each one provides.
+
+## Mix and match
+
+Because a composer and an app share nothing but the protocol and the manifests, **any composer
+works with any client**. Write your composer in the language your backend team knows, and each app
+in whatever suits its platform:
+
+- a TypeScript composer on Node, serving a SwiftUI app;
+- a Go composer, serving a React web app and a React Native app;
+- a TypeScript composer, serving a Next.js site rendered with Server Components;
+- several apps on one composer, each drawing the islands it knows.
+
+[Codegen](codegen) turns the manifests into types for each side, so a composer in Go and an app in
+Swift agree on every prop at compile time.
+
+| | Implementation | Install |
+| --- | --- | --- |
+| Composer | [Go](composers/go/core): `net/http`, so chi, gin and echo too | `go get github.com/client-compose/client-compose/composers/go/core` |
+| Composer | [TypeScript](composers/typescript/core): Bun, Deno, Workers, Hono and Next.js through `fetch`; Node with [`node:http`](composers/typescript/node-http), [Express](composers/typescript/express) or [Fastify](composers/typescript/fastify) | `npm install @client-compose/composer` |
+| Client | [React and React Native](clients/typescript/react), with server rendering and Server Components | `npm install @client-compose/react` |
+| Client | [Swift and SwiftUI](clients/swift) | Swift Package Manager, from this repository |
+| Client | [Kotlin and Jetpack Compose](clients/kotlin) | from source, for now |
+| Client | [Plain TypeScript](clients/typescript/core), for anything else that renders | `npm install @client-compose/client` |
+| Codegen | [Types for every language](codegen), from your manifests | `npm install -D @client-compose/codegen`, or a [standalone binary](codegen#install) |
+
+Each README covers setup, testing and the full API.
+
+## Examples
+
+[`examples/todo`](examples/todo) is the classic todo app, built on one set of manifests: one
+composer per language, and one app per client. Run any composer and point any app at it.
+
+| Composers | Clients |
+| --- | --- |
+| [Go](examples/todo/composer-go) | [React web (Vite)](examples/todo/web) |
+| [TypeScript on Node](examples/todo/composer-ts) | [Next.js, with Server Components](examples/todo/next) |
+| | [React Native (Expo)](examples/todo/react-native) |
+
+Every composer passes [the same suite](examples/todo/tests), over HTTP.
+
+## What it looks like in code
 
 An island is described once, as JSON Schema:
 
@@ -108,8 +164,8 @@ ComposedScreen("profile", params: ["userId": userId])
 ComposedScreen("profile", mapOf("userId" to userId))
 ```
 
-[`examples/profile`](examples/profile) has the whole thing running: one Go composer serving an iOS
-app, an Android app, a React web app, a Next.js app and a React Native app.
+The same screen could come from the Go composer instead, and the same app could be SwiftUI: see
+[mix and match](#mix-and-match).
 
 ## What you get
 
@@ -169,39 +225,6 @@ so "supports Client Compose" means something specific.
   islands, and new islands still need an app release.
 - **You want pixel control from the server.** That's what this deliberately doesn't do.
 
-## Getting started
-
-Pick a composer and a client. Each has a README covering setup, testing and the full API.
-
-| | Stack | Install |
-| --- | --- | --- |
-| Composer | [Go](composers/go/core) (`net/http`, so chi, gin, echo too) | `go get github.com/client-compose/client-compose/composers/go/core` |
-| Composer | [TypeScript](composers/typescript/core): Bun, Deno, Workers, Hono and Next.js through `fetch`; Node with [`node:http`](composers/typescript/node-http), [Express](composers/typescript/express) or [Fastify](composers/typescript/fastify) | `npm install @client-compose/composer` |
-| Client | [React, React Native, server rendering and Server Components](clients/typescript/react) | `npm install @client-compose/react` |
-| Client | [Swift and SwiftUI](clients/swift) | Swift Package Manager, from this repository |
-| Client | [Kotlin and Jetpack Compose](clients/kotlin) | from source, for now |
-| Client | [Plain TypeScript](clients/typescript/core), for anything else that renders | `npm install @client-compose/client` |
-| Codegen | [Types for every language](codegen), from your manifests | `npm install -D @client-compose/codegen`, or a [standalone binary](codegen#install) |
-
-### Your stack isn't listed?
-
-Contribute it. The protocol is a short [spec](spec/PROTOCOL.md), and nothing in it depends on Go,
-TypeScript or any UI framework. Anything that can make an HTTP request and render a list can be a
-client, and anything that can serve one can be a composer. What a new implementation has to do is
-spelled out:
-
-- **A composer** in another language (Python, Ruby, Kotlin on the server, Rust, .NET…) passes the
-  [composer conformance suite](conformance), which runs over HTTP against your server, so it needs
-  nothing from your language.
-- **A client** for another platform loads the shared fixtures in its own tests: rendering, actions
-  and effects.
-- **A UI binding** for another framework (Vue, Svelte, Solid, UIKit, Flutter…) usually sits on an
-  existing client core. The React, SwiftUI and Compose bindings show the shape.
-- **A framework adapter** for an existing composer (Hono, Koa, Lambda, Gin…) is usually a few lines.
-
-[`spec/CAPABILITIES.md`](spec/CAPABILITIES.md) lists what each layer should provide, and
-[CONTRIBUTING.md](CONTRIBUTING.md) walks through adding one.
-
 ## Status
 
 Client Compose is young: everything is 0.x and the protocol is v0. Expect breaking changes while it
@@ -210,9 +233,27 @@ Native clients on the Go composer, and most of the design comes from what that a
 
 On the way:
 
-- Streaming slow islands after fast ones, and refreshing a single island ([protocol §7](spec/PROTOCOL.md#7-open-questions-v1-candidates))
+- Swift and Kotlin catching up with React: islands with pages, screens shown as they stream in,
+  and app strings kept between launches ([where each stands](spec/CAPABILITIES.md#where-each-stack-stands))
+- SwiftUI and Jetpack Compose todo examples
 - Kotlin on Maven Central, Swift releases tagged for SwiftPM, and Kotlin Multiplatform
 - An AWS Lambda adapter for the TypeScript composer
+
+## Adding an implementation
+
+Anything that can make an HTTP request and render a list can be a client, and anything that can
+serve one can be a composer. What a new implementation has to do is spelled out:
+
+- **A composer** in another language (Python, Ruby, Kotlin on the server, Rust, .NET…) passes the
+  [composer conformance suite](conformance), which runs over HTTP against your server, so it needs
+  nothing from your language. The todo example's [suite](examples/todo/tests) is a good next step.
+- **A client** for another platform loads the shared fixtures in its own tests: rendering, actions
+  and effects.
+- **A UI binding** for another framework (Vue, Svelte, Solid, UIKit, Flutter…) usually sits on an
+  existing client core. The React, SwiftUI and Compose bindings show the shape.
+- **A framework adapter** for an existing composer (Hono, Koa, Lambda, Gin…) is usually a few lines.
+
+[CONTRIBUTING.md](CONTRIBUTING.md) walks through adding one.
 
 ## This repository
 
@@ -223,7 +264,7 @@ On the way:
 | [`composers/`](composers) | Composers: Go, and TypeScript with its adapters |
 | [`clients/`](clients) | Clients: TypeScript and React, Swift and SwiftUI, Kotlin and Compose |
 | [`codegen/`](codegen) | Types from manifests, and the compatibility check |
-| [`examples/`](examples) | Working examples across stacks |
+| [`examples/`](examples) | A todo app: one composer per language, one app per client, all interchangeable |
 
 To work on it:
 

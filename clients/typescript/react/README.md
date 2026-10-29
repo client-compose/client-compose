@@ -481,7 +481,8 @@ The fake composer itself (no React) is `@client-compose/client/testing`.
 
 ## Examples
 
-- [`examples/profile/web`](https://github.com/client-compose/client-compose/tree/main/examples/profile/web): Vite + React DOM
-- [`examples/profile/next`](https://github.com/client-compose/client-compose/tree/main/examples/profile/next): Next.js App Router, with both a Server Components route and
-  a server-rendered `initialResponse` route
-- [`examples/profile/react-native`](https://github.com/client-compose/client-compose/tree/main/examples/profile/react-native): Expo + React Native
+The [todo example](https://github.com/client-compose/client-compose/tree/main/examples/todo) has one app per kind, each working with either of its composers:
+
+- [`web`](https://github.com/client-compose/client-compose/tree/main/examples/todo/web): Vite + React DOM
+- [`next`](https://github.com/client-compose/client-compose/tree/main/examples/todo/next): Next.js App Router, rendered with Server Components (`serverComposer`)
+- [`react-native`](https://github.com/client-compose/client-compose/tree/main/examples/todo/react-native): Expo + React Native

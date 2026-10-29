@@ -1,0 +1,58 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, sans-serif;
+  line-height: 1.4;
+}
+
+main {
+  max-width: 32rem;
+  margin: 3rem auto;
+  padding: 0 1rem;
+}
+
+.new-todo .row,
+.todo,
+.summary {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.new-todo input {
+  flex: 1;
+  padding: 0.5rem;
+}
+
+.todos {
+  list-style: none;
+  padding: 0;
+}
+
+.todo {
+  flex-wrap: wrap;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+}
+
+.todo .title {
+  flex: 1;
+}
+
+.todo.done .title {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+
+.summary {
+  justify-content: space-between;
+}
+
+.problem {
+  flex-basis: 100%;
+  color: #c0392b;
+}
+
+.empty,
+.status {
+  opacity: 0.7;
+}

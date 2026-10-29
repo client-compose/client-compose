@@ -1,0 +1,14 @@
+{
+  "name": "todo-composer-ts",
+  "private": true,
+  "type": "module",
+  "description": "The todo example's composer, in TypeScript on Node.",
+  "scripts": {
+    "start": "node src/main.ts",
+    "test": "node --test test/*.test.ts"
+  },
+  "dependencies": {
+    "@client-compose/composer": "workspace:*",
+    "@client-compose/node-http": "workspace:*"
+  }
+}

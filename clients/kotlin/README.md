@@ -112,7 +112,21 @@ val t = response.app(::AppStrings) // t.retry
 ## Transport
 
 `HttpUrlConnectionTransport` needs no dependencies. To use OkHttp (or Ktor), implement `Transport`
-in a few lines; see `examples/profile/android`.
+in a few lines:
+
+```kotlin
+class OkHttpTransport(private val http: OkHttpClient, private val baseUrl: HttpUrl) : Transport {
+    override suspend fun post(path: String, body: String, headers: Map<String, String>): TransportResponse =
+        withContext(Dispatchers.IO) {
+            val request = Request.Builder()
+                .url(baseUrl.resolve(path)!!)
+                .apply { headers.forEach { (name, value) -> header(name, value) } }
+                .post(body.toRequestBody("application/json".toMediaType()))
+                .build()
+            http.newCall(request).execute().use { TransportResponse(it.code, it.body?.string().orEmpty()) }
+        }
+}
+```
 
 ## Testing
 
@@ -139,7 +153,8 @@ and `FakeIsland.islandError("posts", PostGridV1, "timeout")`. A request with no 
 - Responses are kept for the composer's `cache.maxAge`, per client, keyed by screen and params.
   `reload()` always fetches. Pass `cache = false` to turn it off.
 
-See [`examples/profile/android`](../../examples/profile/android) for a full example.
+The [todo example](../../examples/todo) has a composer in Go and TypeScript for a Compose app to
+use; a Jetpack Compose todo client is a welcome contribution.
 
 **Planned:** Kotlin Multiplatform targets.
 

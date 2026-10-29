@@ -35,7 +35,7 @@ primitives. If you need those, the island is too small; make a new island.
 
 Each island type is described by a manifest (see `schema/island-manifest.schema.json`).
 Manifests live somewhere every team can see (e.g. a shared repo; see
-`examples/profile/islands/`) and are the input to codegen for every platform.
+`examples/todo/islands/`) and are the input to codegen for every platform.
 
 ```json
 {

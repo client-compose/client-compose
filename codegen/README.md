@@ -61,7 +61,7 @@ For strings (spec §4.7), add `"appStrings": "app-strings.json"` (the app string
 `en`, `"defaultLocale"`. See [Strings](#strings).
 
 In a Go project, a `//go:generate client-compose-codegen <config>` (or `npx @client-compose/codegen <config>`) line lets `go generate` run it
-(see [`examples/profile/composer-go/main.go`](https://github.com/client-compose/client-compose/blob/main/examples/profile/composer-go/main.go)).
+(see [`examples/todo/composer-go/main.go`](https://github.com/client-compose/client-compose/blob/main/examples/todo/composer-go/main.go)).
 
 ## What you get
 

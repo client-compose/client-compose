@@ -8,7 +8,7 @@ on:
       - "spec/**"
       - "conformance/**"
       - "composers/go/**"
-      - "examples/profile/composer-go/**"
+      - "examples/todo/composer-go/**"
       - ".golangci.yml"
       - "scripts/go-lint.sh"
       - ".github/workflows/go.yml"
@@ -41,6 +41,3 @@ jobs:
         run: |
           (cd composers/go/core && go build -o /tmp/conformance-server ./cmd/conformance-server)
           conformance/run-against.sh 4100 /tmp/conformance-server -addr :4100 -strings conformance/composer/strings
-      - name: Example
-        working-directory: examples/profile/composer-go
-        run: go vet ./... && go test ./...

@@ -1,0 +1,9 @@
+{
+  "description": "Words that belong to no island: what the apps show around a screen.",
+  "strings": {
+    "loading": {},
+    "couldNotLoad": { "description": "The screen didn't load." },
+    "retry": {},
+    "somethingWentWrong": { "description": "An action failed, for a reason the app wasn't told." }
+  }
+}

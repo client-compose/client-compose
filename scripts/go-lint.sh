@@ -9,7 +9,7 @@ version="v2.14.0"
 root="$(cd "$(dirname "$0")/.." && pwd)"
 lint=(go run "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${version}")
 # Every hand-written module. Codegen's golden output is checked by its own tests.
-modules=(composers/go/core examples/profile/composer-go)
+modules=(composers/go/core examples/todo/composer-go)
 
 for module in "${modules[@]}"; do
   echo "== ${module}"

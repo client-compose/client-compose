@@ -1,0 +1,7 @@
+{
+  "screens": {
+    "todos": {
+      "title": { "description": "The screen's title: the page title on the web." }
+    }
+  }
+}

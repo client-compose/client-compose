@@ -1,0 +1,19 @@
+{
+  "expo": {
+    "name": "Client Compose Todos",
+    "slug": "client-compose-todos",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "dev.clientcompose.todos"
+    },
+    "android": {
+      "package": "dev.clientcompose.todos"
+    },
+    "experiments": {
+      "tsconfigPaths": false
+    }
+  }
+}
