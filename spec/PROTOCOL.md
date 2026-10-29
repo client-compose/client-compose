@@ -489,6 +489,7 @@ The `codegen compat` command checks these rules.
   "version": 1,
   "input": { "userId": "u_123" },
   "client": { "platform": "ios", "appVersion": "4.2.0" },
+  "islands": { "profile-header": [1, 2], "follow-button": [1], "post-grid": [1] },
   "idempotencyKey": "6f1c0f7e-0d8e-4c55-9d1a-3f1f0b6d1c2a"
 }
 ```
@@ -500,6 +501,7 @@ The `codegen compat` command checks these rules.
 | `version`        | The action version the client was built against.                         |
 | `input`          | MUST validate against that version's `input` schema.                      |
 | `client`         | As for screens (§3).                                                      |
+| `islands`        | Optional. The client's capabilities, as for screens (§3). Sending them says the client applies `update` effects (§5.3). |
 | `idempotencyKey` | Optional. One per user intent, reused when retrying it.                    |
 
 Clients call exactly one version; there is no negotiation. Composers keep serving old action
@@ -559,11 +561,71 @@ that every platform reacts the same way without hard-coding it:
 | Field        | Meaning                                                                     |
 | ------------ | --------------------------------------------------------------------------- |
 | `invalidate` | Screens whose content may have changed. Clients SHOULD drop cached responses for them and reload the ones currently shown. |
+| `update`     | Islands whose content changed, with their new entries: the client swaps them in, without reloading their screens. |
 | `navigate`   | A screen to show next. Clients map it to their own routes, and MAY ignore it. |
 
-Both use a **screen reference** `{ "screen": "...", "params": { ... } }`. A reference matches a
-screen with the same id whose params include every param in the reference. So
-`{ "screen": "feed" }` matches every `feed`, whatever its params.
+`invalidate` and `navigate` use a **screen reference** `{ "screen": "...", "params": { ... } }`. A
+reference matches a screen with the same id whose params include every param in the reference.
+So `{ "screen": "feed" }` matches every `feed`, whatever its params.
+
+#### Updates
+
+An action often changes a few islands and leaves the rest of the screen as it was: marking a todo
+done changes the list and the count of what's left, but not the field for a new one. Reloading
+the whole screen works, but costs a round trip, and resolves every island again. Instead, the
+composer can send those islands' new entries with the result:
+
+```json
+"effects": {
+  "update": [
+    {
+      "screen": "todos",
+      "params": {},
+      "island": {
+        "key": "summary",
+        "type": "todo-summary",
+        "version": 1,
+        "status": "ok",
+        "props": { "left": 2, "done": 1 },
+        "strings": { "left": { "#1": "1 item left", "#*": "{count} items left" } }
+      }
+    }
+  ]
+}
+```
+
+Each update names a screen and its **exact** params, and carries one island entry (§4.1),
+resolved as an island request without a cursor would resolve it (§4.5), in the language of the
+action's `client.locale`. Its strings are counted by the plural rules the client already has from
+the screen, which is in the same language.
+
+An update says the island's content changed and **the screen's layout didn't**: the same islands,
+in the same order. An action that adds or removes an island, or moves one, invalidates the screen
+instead. Composers keep to that themselves:
+
+- **Only clients that apply updates get them.** A request without `islands` gets each update as
+  an `invalidate` of its screen. Released clients that predate updates keep working, and reload
+  the screen as they always have.
+- **The island is resolved at the highest version both sides know** (§4.2), from the request's
+  `islands`. If the client knows none, the composer invalidates the screen instead.
+- **The screen is laid out as it would be** (§4.5): its requirements, layout and conditions run
+  for the request. If the island isn't on the screen for this request (its condition is now false,
+  say), its layout has changed, and the composer invalidates the screen instead. So does an island
+  that fails to resolve: the client reloads, and gets the failure as the screen would show it.
+- An action MAY both update a screen's islands and invalidate other screens.
+
+A client that sent `islands` applies each update to every screen it has with that id and exactly
+those params, shown or cached:
+
+- **It swaps the entry in**, by `key`. The island renders the new entry as it would a screen's, so
+  a paged island starts again from the page it brings (§4.5), and strings and `next` come with it.
+- **If it can't**, because the screen has no island with that key, it's still on its way in a
+  stream (§4.6), or it's a different type, the client reloads the screen, as for `invalidate`.
+- **Updates are applied before the action's call resolves**, with `invalidate` and before
+  `navigate`, so the app sees the screen as the action left it.
+
+An island's own interactivity stays local (§5): an island MAY show the result of its own action
+at once, and the update brings the composer's version of it.
 
 ---
 

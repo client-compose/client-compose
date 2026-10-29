@@ -18,6 +18,16 @@
         "locale": { "type": "string" }
       }
     },
+    "islands": {
+      "description": "Capabilities, as for screens: island type -> supported versions. Sending them says the client applies update effects.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": { "type": "integer", "minimum": 1 },
+        "minItems": 1,
+        "uniqueItems": true
+      }
+    },
     "idempotencyKey": { "type": "string", "minLength": 1 }
   }
 }
