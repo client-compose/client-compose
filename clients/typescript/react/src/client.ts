@@ -35,6 +35,7 @@ import {
   useState,
 } from "react";
 
+import type { EffectsBatch } from "./effects.ts";
 import { streamScreen } from "./load.ts";
 import { scopeIslands } from "./pages.ts";
 import { ClientComposeContext, isContextValue, useClientCompose } from "./provider.ts";
@@ -95,7 +96,7 @@ export function useScreen(
   // The same object for as long as the params are the same, whatever object the caller passes.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const screenParams = useMemo(() => params, [key]);
-  const { current, reload } = useScreenResponse({
+  const { current, reload, apply } = useScreenResponse({
     screen,
     key,
     params: screenParams,
@@ -103,7 +104,7 @@ export function useScreen(
     progressive: options.progressive,
   });
   const islands = usePlannedIslands(current.response, screenParams);
-  useReloadWhenInvalidated(screen, screenParams, reload);
+  useMountedScreen(screen, screenParams, reload, apply);
 
   return {
     status: screenStatus(current.response, current.error),
@@ -132,6 +133,7 @@ interface ScreenResponseOptions {
 function useScreenResponse(options: ScreenResponseOptions): {
   current: FetchState;
   reload: () => void;
+  apply: (batch: EffectsBatch) => void;
 } {
   const { screen, key, params, initialResponse } = options;
   const { config, screens } = useClientCompose();
@@ -226,6 +228,35 @@ function useScreenResponse(options: ScreenResponseOptions): {
     setReloads((n) => n + 1);
   }, []);
 
+  // What's shown, for an action's effects to read outside render.
+  const shown = useRef(state);
+  useEffect(() => {
+    shown.current = state;
+  }, [state]);
+
+  /** Applies an action's changes and updates to what's shown, or reloads it if it can't (spec §5.3). */
+  const apply = useCallback(
+    (batch: EffectsBatch) => {
+      const before = shown.current;
+      if (before.key !== key || !before.response) {
+        return;
+      }
+
+      if (batch.screen(before.response, params) === undefined) {
+        reload();
+
+        return;
+      }
+
+      setState((prev) => {
+        const changed = prev.key === key && prev.response && batch.screen(prev.response, params);
+
+        return changed && changed !== prev.response ? { ...prev, response: changed } : prev;
+      });
+    },
+    [key, params, reload],
+  );
+
   // Until the effect for a new key runs, show the server's response for it if there is one, and
   // never the previous key's islands.
   const current: FetchState =
@@ -236,7 +267,11 @@ function useScreenResponse(options: ScreenResponseOptions): {
           response: fromServer ?? cached(),
           refreshing: fromServer === undefined,
         };
-  return { current, reload };
+  return {
+    current,
+    reload,
+    apply,
+  };
 }
 
 /**
@@ -306,10 +341,12 @@ function usePlannedIslands(
 }
 
 /** Lets actions that change this screen reload it (spec §5.3). */
-function useReloadWhenInvalidated(
+/** Puts the screen on show, so that actions can change it, or reload it. */
+function useMountedScreen(
   screen: string,
   params: Record<string, string>,
   reload: () => void,
+  apply: (batch: EffectsBatch) => void,
 ): void {
   const { screens } = useClientCompose();
   useEffect(
@@ -318,8 +355,9 @@ function useReloadWhenInvalidated(
         screen,
         params,
         reload,
+        apply,
       }),
-    [screen, params, screens, reload],
+    [screen, params, screens, reload, apply],
   );
 }
 

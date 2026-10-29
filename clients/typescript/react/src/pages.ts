@@ -5,9 +5,17 @@
 
 import { buildIslandRequest, fetchIsland, type PlannedIsland } from "@client-compose/client";
 import type { IslandEntry, IslandError, IslandRequest, ScreenHead } from "@client-compose/protocol";
-import { createContext, createElement, type ReactNode, useContext, useState } from "react";
+import {
+  createContext,
+  createElement,
+  type ReactNode,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
 
 import type { ClientComposeConfig } from "./config.ts";
+import type { EffectsBatch } from "./effects.ts";
 import { useClientCompose } from "./provider.ts";
 import { type IslandScopeValue, scopeOf } from "./scope.ts";
 
@@ -71,6 +79,11 @@ export interface PagesState<P> {
 interface Pages<P> {
   /** The props the pages follow. Rendered with others (another search, a reload), it starts again. */
   first: P;
+  /**
+   * What `first` became when an action changed it (spec §5.3): props that say the same are the
+   * changed screen's, so the pages carry on, changed too.
+   */
+  changed?: P;
   more: P[];
   next: string | undefined;
   loading: boolean;
@@ -83,6 +96,43 @@ function startingFrom<P>(first: P, next: string | undefined): Pages<P> {
     more: [],
     next,
     loading: false,
+  };
+}
+
+/** Whether the pages follow these props: the same ones, or what an action changed them to. */
+function follows<P>(pages: Pages<P>, props: P): boolean {
+  return pages.first === props || (pages.changed !== undefined && sameData(pages.changed, props));
+}
+
+/**
+ * Whether two props say the same, by their data. An island's `t` is made again with its props, so
+ * its functions differ: JSON leaves them out.
+ */
+function sameData(a: unknown, b: unknown): boolean {
+  return canonical(a) === canonical(b);
+}
+
+function canonical(value: unknown): string {
+  return JSON.stringify(value, (_key, v: unknown) =>
+    typeof v === "object" && v !== null && !Array.isArray(v)
+      ? Object.fromEntries(Object.entries(v).sort(([x], [y]) => x.localeCompare(y)))
+      : v,
+  );
+}
+
+/** Every page with an action's changes applied, so they change with the screen. */
+function changedBy<P>(pages: Pages<P>, batch: EffectsBatch, scope: IslandScopeValue): Pages<P> {
+  const change = (page: P) => batch.props(page, scope.type, scope.version).props;
+  const first = change(pages.first);
+  const more = pages.more.map(change);
+  if (first === pages.first && more.every((page, i) => page === pages.more[i])) {
+    return pages;
+  }
+
+  return {
+    ...pages,
+    more,
+    changed: first,
   };
 }
 
@@ -158,15 +208,40 @@ async function fetchPage(
  * them, and a page still on its way for the old ones is dropped.
  */
 export function usePages<P>(props: P): PagesState<Omit<P, "t">> {
-  const { config } = useClientCompose();
+  const { config, screens } = useClientCompose();
   const scope = useContext(IslandScopeContext);
   const [kept, setKept] = useState(() => startingFrom(props, scope?.next));
   // What's kept, if it follows these props; otherwise they start again.
-  const pages = kept.first === props ? kept : startingFrom(props, scope?.next);
+  const pages = follows(kept, props)
+    ? {
+        ...kept,
+        first: props,
+        changed: undefined,
+      }
+    : startingFrom(props, scope?.next);
+
+  // An action's changes reach every page held, not only the first (spec §5.3).
+  useEffect(() => {
+    if (!scope) {
+      return undefined;
+    }
+
+    return screens.watchPages((batch) => {
+      setKept((p) => changedBy(p, batch, scope));
+    });
+  }, [screens, scope]);
 
   /** Changes the pages that follow `first`, unless the island has moved on to other props. */
   const update = (first: P, change: (p: Pages<P>) => Pages<P>) =>
-    setKept((p) => (p.first === first ? change(p) : p));
+    setKept((p) =>
+      follows(p, first)
+        ? change({
+            ...p,
+            first,
+            changed: undefined,
+          })
+        : p,
+    );
 
   async function loadNextPage(current: Pages<P>, cursor: string, from: IslandScopeValue) {
     const first = current.first;

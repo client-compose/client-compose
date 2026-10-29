@@ -323,8 +323,8 @@ Names in *italics* don't exist yet; the parity work below adds them.
 | CLI-11 streams | ✅ `openScreen`, `fetchScreen` | ◐ read to the end | ◐ read to the end |
 | UI-11 progressive screens | ✅ placeholders, `progressive`, streamed Server Components | ✗ (all at once) | ✗ (all at once) |
 | CLI-12 strings | ✅ `t`, `fetchStrings`, `proxy.loadStrings` | ✅ `t`, `client.strings()` | ✅ `t`, `client.strings()` |
-| CLI-13 island updates | ✗ | ✗ | ✗ |
-| CLI-14 entity changes | ✗ | ✗ | ✗ |
+| CLI-13 island updates | ✅ `useAction`, cached and shown screens | ✗ | ✗ |
+| CLI-14 entity changes | ✅ `applyChanges`, screens, cache and pages | ✗ | ✗ |
 | UI-12 app strings | ✅ `AppStringsProvider`, `useAppStrings` | ✗ (`client.strings()`, kept by the app) | ✗ (`client.strings()`, kept by the app) |
 
 SwiftUI and Compose can't catch a view that crashes while rendering the way React can, so UI-6
