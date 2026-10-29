@@ -11,7 +11,7 @@ export interface CatalogIssue {
   severity: "error" | "warning";
   /** The catalog file, e.g. "strings/pl.json". */
   file: string;
-  /** Where in it, e.g. "islands.recipe-list@1.heading". */
+  /** Where in it, e.g. "islands.article-list@1.heading". */
   path: string;
   message: string;
 }

@@ -66,7 +66,7 @@ test("a change to another entity, or another id, changes nothing", () => {
     [todos],
     [
       {
-        entity: "recipe",
+        entity: "article",
         id: "1",
         set: { title: "Soup" },
       },

@@ -95,7 +95,7 @@ func Load[T any](ctx context.Context, key string, fn func(ctx context.Context) (
 
 // ErrNotFound means something doesn't exist. BatchLoader.Load returns it (wrapped) when the fetch
 // returned no value for a key, and a screen whose Layout returns an error wrapping it responds 404
-// not_found. Wrap it in your own lookups too: fmt.Errorf("recipe %s: %w", id, cc.ErrNotFound).
+// not_found. Wrap it in your own lookups too: fmt.Errorf("article %s: %w", id, cc.ErrNotFound).
 var ErrNotFound = errors.New("clientcompose: not found")
 
 // BatchLoader combines the keys requested by every island in a screen request into batched calls,

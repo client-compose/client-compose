@@ -4,6 +4,7 @@ packages:
   - "clients/typescript/*"
   - "conformance/runner"
   - "codegen"
+  - "release/*"
   - "examples/todo/composer-ts"
   - "examples/todo/tests"
   - "examples/todo/next"

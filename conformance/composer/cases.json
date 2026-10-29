@@ -829,7 +829,7 @@
       "request": {
         "params": {
           "placements": "[{\"key\":\"header\",\"type\":\"profile-header\",\"versions\":[1],\"outcome\":\"ok\"}]",
-          "meta": "{\"title\":\"Ada Lovelace\",\"description\":\"Recipes by Ada\",\"image\":\"https://example.com/ada.png\"}"
+          "meta": "{\"title\":\"Ada Lovelace\",\"description\":\"Articles by Ada\",\"image\":\"https://example.com/ada.png\"}"
         }
       },
       "expect": {
@@ -837,7 +837,7 @@
         "body": {
           "meta": {
             "title": "Ada Lovelace",
-            "description": "Recipes by Ada",
+            "description": "Articles by Ada",
             "image": "https://example.com/ada.png"
           },
           "islands": [

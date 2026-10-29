@@ -3,7 +3,9 @@ name: release
 # On every push to main:
 # - pending changesets: open or update a "Release packages" PR that bumps versions and changelogs;
 # - no pending changesets but unpublished versions (i.e. that PR was merged): check, pack and
-#   publish them to npm with trusted publishing (OIDC, no token) and provenance.
+#   publish them to npm with trusted publishing (OIDC, no token) and provenance;
+# - the Go composer at a version not yet tagged (release/go-composer): tag it and create its
+#   GitHub release.
 #
 # Jobs are split so that only `publish` can mint an npm identity token. See RELEASING.md.
 on:
@@ -135,3 +137,19 @@ jobs:
         run: |
           version="$(node -p 'require("./codegen/package.json").version')"
           gh release upload "@client-compose/codegen@$version" build/codegen-binaries/* --clobber --repo "$GITHUB_REPOSITORY"
+
+  # The Go composer: tagged at the version Changesets gave it, once that PR is merged.
+  go-module:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # push the tag and create the GitHub release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # its tags
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/tag-go-module.sh

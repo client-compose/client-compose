@@ -115,14 +115,14 @@ test("the catalog has every string in its default language, and nothing that isn
 
 test("screen strings are declared by screen id, in the same format", () => {
   const parsed = parseScreenStrings(
-    { screens: { creator: { title: { params: ["creator"] } }, "new-recipe": { title: {} } } },
+    { screens: { author: { title: { params: ["author"] } }, "new-article": { title: {} } } },
     "screen-strings.json",
   );
   assert.deepEqual(
     parsed.screens.map((s) => [s.screen, s.strings.map((d) => [d.key, d.params])]),
     [
-      ["creator", [["title", ["creator"]]]],
-      ["new-recipe", [["title", []]]],
+      ["author", [["title", ["author"]]]],
+      ["new-article", [["title", []]]],
     ],
   );
   assert.throws(() => parseScreenStrings({}, "s.json"), /"screens"/);
@@ -130,7 +130,7 @@ test("screen strings are declared by screen id, in the same format", () => {
   assert.throws(
     () =>
       parseScreenStrings(
-        { screens: { creator: { title: { params: ["x"], counted: true } } } },
+        { screens: { author: { title: { params: ["x"], counted: true } } } },
         "s.json",
       ),
     /count/,
@@ -142,22 +142,22 @@ test("the catalog's screens are checked like its islands", () => {
   writeFileSync(
     join(dir, "en.json"),
     JSON.stringify({
-      screens: { creator: { title: "{creator} on Flavor", extra: "x" }, other: {} },
+      screens: { author: { title: "{author} on Example", extra: "x" }, other: {} },
     }),
   );
   writeFileSync(join(dir, "pl.json"), JSON.stringify({ screens: {} }));
   const screens = parseScreenStrings(
-    { screens: { creator: { title: { params: ["creator"] }, subtitle: {} } } },
+    { screens: { author: { title: { params: ["author"] }, subtitle: {} } } },
     "s.json",
   ).screens;
   const issues = checkCatalog(dir, "en", [], undefined, screens).map(
     (i) => `${i.severity} ${i.file.endsWith("pl.json") ? "pl" : "en"} ${i.path}`,
   );
   assert.deepEqual(issues.sort(), [
-    "error en screens.creator.extra",
-    "error en screens.creator.subtitle",
+    "error en screens.author.extra",
+    "error en screens.author.subtitle",
     "error en screens.other",
-    "warning pl screens.creator.subtitle",
-    "warning pl screens.creator.title",
+    "warning pl screens.author.subtitle",
+    "warning pl screens.author.title",
   ]);
 });

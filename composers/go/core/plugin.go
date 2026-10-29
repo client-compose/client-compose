@@ -99,9 +99,9 @@ func ReportErrors(report func(ctx context.Context, f Failure)) Plugin {
 //		return nil
 //	}
 //
-//	// 404 for a recipe that doesn't exist, 403 unless the viewer may edit it.
-//	editsRecipe := func(ctx context.Context, r cc.Request) error {
-//		_, err := recipes.Editable(ctx, r.Params["recipeId"])
+//	// 404 for an article that doesn't exist, 403 unless the viewer may edit it.
+//	editsArticle := func(ctx context.Context, r cc.Request) error {
+//		_, err := articles.Editable(ctx, r.Params["articleId"])
 //		return err
 //	}
 //

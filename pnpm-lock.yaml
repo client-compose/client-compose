@@ -207,6 +207,8 @@ importers:
         specifier: workspace:*
         version: link:../../../shared/typescript/protocol
 
+  release/go-composer: {}
+
   shared/typescript/protocol: {}
 
 packages:

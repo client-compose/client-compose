@@ -11,6 +11,9 @@ on:
       - "examples/todo/composer-go/**"
       - ".golangci.yml"
       - "scripts/go-lint.sh"
+      - "scripts/check-go-changeset.sh"
+      - "release/go-composer/**"
+      - ".changeset/**"
       - ".github/workflows/go.yml"
 
 jobs:
@@ -41,3 +44,13 @@ jobs:
         run: |
           (cd composers/go/core && go build -o /tmp/conformance-server ./cmd/conformance-server)
           conformance/run-against.sh 4100 /tmp/conformance-server -addr :4100 -strings conformance/composer/strings
+
+  # A change to the Go composer comes with a changeset, so it's released (release/go-composer).
+  changeset:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: scripts/check-go-changeset.sh "origin/$GITHUB_BASE_REF"

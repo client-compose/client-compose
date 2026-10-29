@@ -126,20 +126,20 @@ test("defining an action version twice throws", () => {
 });
 
 test("an action reads screen strings in the client's language", async () => {
-  const SearchScreenStrings: ScreenStringsDescriptor<{ creators: string }> = {
+  const SearchScreenStrings: ScreenStringsDescriptor<{ authors: string }> = {
     screen: "search",
-    strings: { creators: [] },
+    strings: { authors: [] },
   };
   const composer = createComposer({
     actions: [
       action(ConformanceV1, (_, ac) => ({
-        result: { echo: ac.strings(SearchScreenStrings).creators, version: 1 },
+        result: { echo: ac.strings(SearchScreenStrings).authors, version: 1 },
       })),
     ],
     strings: {
       catalog: {
-        en: { screens: { search: { creators: "Creators" } } },
-        pl: { screens: { search: { creators: "Twórcy" } } },
+        en: { screens: { search: { authors: "Authors" } } },
+        pl: { screens: { search: { authors: "Autorzy" } } },
       },
     },
   });
@@ -159,7 +159,7 @@ test("an action reads screen strings in the client's language", async () => {
     undefined,
   );
   assert.deepEqual(res.status === 200 && res.body.status === "ok" && res.body.result, {
-    echo: "Twórcy",
+    echo: "Autorzy",
     version: 1,
   });
 });

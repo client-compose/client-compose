@@ -70,8 +70,8 @@ test("an island may show part of an entity, and properties of its own", () => {
 
 test("rejects an object that doesn't show its entity as the entity says", () => {
   assert.throws(
-    () => checkEntities([listOf({ id: { type: "string" } }, ["id"], "recipe")], [thing]),
-    /no entity "recipe"/,
+    () => checkEntities([listOf({ id: { type: "string" } }, ["id"], "article")], [thing]),
+    /no entity "article"/,
   );
   assert.throws(
     () => checkEntities([listOf({ name: { type: "string" } }, [])], [thing]),

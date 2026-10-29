@@ -575,7 +575,7 @@ export interface Catalog {
 
 /** A catalog's words, as a client gets them from the composer: for tests that read real copy. */
 export interface CatalogStrings {
-  /** An island's strings, as its component gets them: `<RecipeList t={english.t(RecipeListV1)} …>`. */
+  /** An island's strings, as its component gets them: `<ArticleList t={english.t(ArticleListV1)} …>`. */
   t<P, S>(descriptor: IslandDescriptor<P, S>): S;
   /** The app strings, typed by their generated descriptor: `english.app(AppStrings).retry`. */
   app<S>(descriptor: AppStringsDescriptor<S>): S;
@@ -601,7 +601,7 @@ const english: ScreenLanguage = { locale: "en", plurals: { one: "i = 1 and v = 0
  *
  *     import catalog from "../catalog/en.json" with { type: "json" };
  *     const english = catalogStrings(catalog);
- *     render(<RecipeList t={english.t(RecipeListV1)} {...props} />);
+ *     render(<ArticleList t={english.t(ArticleListV1)} {...props} />);
  */
 export function catalogStrings(
   catalog: Catalog,
