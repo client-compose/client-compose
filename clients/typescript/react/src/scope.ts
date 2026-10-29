@@ -3,11 +3,12 @@
 
 import type { ScreenHead } from "@client-compose/protocol";
 
-/** Where an island is: its screen and the screen's params, its key and version, and its `next`. */
+/** Where an island is: its screen and the screen's params, its key, type and version, and its `next`. */
 export interface IslandScopeValue {
   screen: string;
   params: Record<string, string>;
   key: string;
+  type: string;
   version: number;
   next?: string;
 }
@@ -26,6 +27,7 @@ export function scopeOf(
     screen: response.screen,
     params,
     key: entry.key,
+    type: entry.type,
     version: entry.version,
     ...(entry.next !== undefined && { next: entry.next }),
   };
