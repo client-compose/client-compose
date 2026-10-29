@@ -341,3 +341,52 @@ test("invalidating the screen the server rendered asks for the server; another s
   assert.deepEqual(elsewhere.heard, [], "nothing the server rendered is out of date");
   await elsewhere.unmount();
 });
+
+test("brought back as it was (going back), a Client Component island catches up with what it missed", async () => {
+  const toggled: ActionEffects = {
+    changes: [
+      {
+        entity: "todo",
+        id: "2",
+        set: { done: true },
+      },
+    ],
+  };
+  // The page as the server rendered it: a router keeps it, and shows it again on going back.
+  const page = todosIsland([milk, eggs]);
+  const app = await render(toggled, page);
+
+  await app.show(null);
+  await app.run();
+  await app.show(page);
+
+  assert.equal(app.container.textContent, "Milk,Eggs✓ (1 left)");
+  assert.deepEqual(app.heard, [], "the server isn't asked");
+
+  // Rendered again by the server, it has missed nothing.
+  await app.show(todosIsland([milk, eggs]));
+  assert.equal(app.container.textContent, "Milk,Eggs (2 left)");
+  await app.unmount();
+});
+
+test("brought back as it was, an island that missed what only the server can show asks for it", async () => {
+  const touching: ActionEffects = {
+    changes: [
+      {
+        entity: "todo",
+        id: "1",
+        set: { done: true },
+      },
+    ],
+  };
+  const page = serverIsland([{ entity: "todo", id: "1" }]);
+  const app = await render(touching, page);
+
+  await app.show(null);
+  await app.run();
+  assert.deepEqual(app.heard, [], "nothing on show was out of date");
+  await app.show(page);
+
+  assert.deepEqual(app.heard, [touching]);
+  await app.unmount();
+});
