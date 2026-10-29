@@ -1,5 +1,11 @@
 # go-composer
 
+## 0.12.1
+
+### Patch Changes
+
+- [#63](https://github.com/client-compose/client-compose/pull/63) [`3e242e6`](https://github.com/client-compose/client-compose/commit/3e242e635746aca7c0925b57806226f7ad2b5acb) Thanks [@LewisYearsley](https://github.com/LewisYearsley)! - Updated examples in the documentation.
+
 ## 0.12.0
 
 ### Minor Changes
