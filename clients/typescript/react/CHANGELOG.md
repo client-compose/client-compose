@@ -1,5 +1,11 @@
 # @client-compose/react
 
+## 0.17.0
+
+### Minor Changes
+
+- [#68](https://github.com/client-compose/client-compose/pull/68) [`3535853`](https://github.com/client-compose/client-compose/commit/35358532d64b86f580eba99bbec6948e46ff68a9) Thanks [@LewisYearsley](https://github.com/LewisYearsley)! - `onStale(effects)` replaces `onChanges`: it's called when what Server Components rendered is out of date after an action, and only the server can render it again: its screen was invalidated, or a change touched an island the browser can't change. An invalidation of any other screen no longer needs a refresh, so `onInvalidate` is no longer the place for `router.refresh()`.
+
 ## 0.16.1
 
 ### Patch Changes
