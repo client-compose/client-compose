@@ -1,4 +1,4 @@
-# Releasing the npm packages
+# Releasing
 
 The TypeScript packages are published to npm under the `@client-compose` scope:
 
@@ -55,6 +55,19 @@ publishes only from this repository's `release.yml`, authenticated with a short-
 there's no npm token to leak. Every version gets a [provenance](https://docs.npmjs.com/generating-provenance-statements)
 statement linking it to the commit and workflow run that built it. Only the `publish` job can
 request the OIDC token.
+
+## The Go composer
+
+The Go composer (`composers/go/core`) is a Go module, released by a tag of the form Go requires:
+`composers/go/core/v0.12.0`. Changesets versions it too, through a private workspace package that
+only holds its version and changelog: [`release/go-composer`](release/go-composer).
+
+- A change to its code comes with a changeset naming `go-composer`. CI fails a pull request
+  without one (`scripts/check-go-changeset.sh`); tests and docs alone don't need one.
+- The Release packages PR bumps `release/go-composer/package.json` and writes its `CHANGELOG.md`.
+- On every push to `main`, the `release` workflow's `go-module` job runs
+  `scripts/tag-go-module.sh`: if that version isn't tagged yet, it tags it and creates a GitHub
+  release with its changelog. It's never published to npm.
 
 ## One-time setup (already done)
 

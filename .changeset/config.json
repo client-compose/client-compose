@@ -8,5 +8,6 @@
   "format": "auto",
   "updateInternalDependencies": "patch",
   "commit": false,
-  "changelog": ["@changesets/changelog-github", { "repo": "client-compose/client-compose" }]
+  "changelog": ["@changesets/changelog-github", { "repo": "client-compose/client-compose" }],
+  "privatePackages": { "version": true, "tag": false }
 }

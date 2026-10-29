@@ -118,6 +118,8 @@ Every protocol change multiplies across every implementation, so the bar is high
 ## Versioning and releases
 
 - The **protocol** has an integer version (`protocol: 0`), changed only for breaking changes.
-- Each **package** is versioned and released independently, tagged by path, e.g.
-  `composers/go/core/v0.3.1` (which is also the form Go modules require).
+- Each **package** is versioned and released independently with Changesets: add a changeset
+  (`pnpm changeset`) to a PR that should be released, naming `go-composer` for the Go composer.
+  Go modules are tagged by path, e.g. `composers/go/core/v0.12.0`, the form Go requires
+  ([RELEASING.md](RELEASING.md)).
 - Each implementation's README states which protocol versions it supports.
