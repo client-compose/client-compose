@@ -35,8 +35,7 @@ export function ClientCompose(props: ClientComposeProps) {
         appVersion: "1.0.0",
         locale,
       },
-      onChanges: () => router.refresh(),
-      onInvalidate: () => router.refresh(),
+      onStale: () => router.refresh(),
     }),
     [locale, router],
   );

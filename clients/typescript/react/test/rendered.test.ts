@@ -1,5 +1,5 @@
 // Islands a Server Component rendered, in the browser (spec §5.3): a Client Component island takes
-// an action's changes and updates itself, and anything else asks for the server (`onChanges`).
+// an action's changes and updates itself, and anything else asks for the server (`onStale`).
 import "./setup.ts";
 
 import assert from "node:assert/strict";
@@ -153,7 +153,7 @@ async function render(effects: ActionEffects, page: ReactNode) {
   }
   const { config, gateway } = createTestConfig({
     registry: new ReactIslandRegistry().registerComponent(TodosV1, Todos),
-    onChanges: (changed) => heard.push(changed),
+    onStale: (stale) => heard.push(stale),
     handlers: { actions: { toggle: () => actionOk(Toggle, {}, effects) } },
   });
   const container = document.createElement("div");
@@ -323,4 +323,21 @@ test("a Server Component island asks for the server for its update", async () =>
 
   assert.deepEqual(app.heard, [update]);
   await app.unmount();
+});
+
+test("invalidating the screen the server rendered asks for the server; another screen doesn't", async () => {
+  const own: ActionEffects = { invalidate: [{ screen: "todos" }] };
+  const app = await render(own, todosIsland([milk, eggs]));
+
+  await app.run();
+
+  assert.deepEqual(app.heard, [own]);
+  await app.unmount();
+
+  const elsewhere = await render({ invalidate: [{ screen: "search" }] }, todosIsland([milk, eggs]));
+
+  await elsewhere.run();
+
+  assert.deepEqual(elsewhere.heard, [], "nothing the server rendered is out of date");
+  await elsewhere.unmount();
 });
