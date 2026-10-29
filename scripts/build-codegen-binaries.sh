@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds standalone client-compose-codegen executables, so Go, Swift and Kotlin teams can run codegen
+# Builds standalone client-compose-codegen executables, so Go teams can run codegen
 # without installing Node. Cross-compiles every target from one machine with Bun.
 #
 #   scripts/build-codegen-binaries.sh [out-dir]          # default: build/codegen-binaries

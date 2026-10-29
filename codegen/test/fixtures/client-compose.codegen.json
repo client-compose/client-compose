@@ -10,13 +10,6 @@
       "out": "../golden/go/islands_gen.go",
       "package": "golden"
     },
-    "swift": {
-      "out": "../golden/swift/Islands.generated.swift"
-    },
-    "kotlin": {
-      "out": "../golden/kotlin/Islands.generated.kt",
-      "package": "dev.clientcompose.golden"
-    },
     "typescript": {
       "out": "../golden/typescript/islands.generated.ts"
     }

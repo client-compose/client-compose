@@ -66,21 +66,20 @@ Because a composer and an app share nothing but the protocol and the manifests, 
 works with any client**. Write your composer in the language your backend team knows, and each app
 in whatever suits its platform:
 
-- a TypeScript composer on Node, serving a SwiftUI app;
 - a Go composer, serving a React web app and a React Native app;
+- a TypeScript composer on Node, serving the same apps;
 - a TypeScript composer, serving a Next.js site rendered with Server Components;
 - several apps on one composer, each drawing the islands it knows.
 
 [Codegen](codegen) turns the manifests into types for each side, so a composer in Go and an app in
-Swift agree on every prop at compile time.
+TypeScript agree on every prop at compile time. A client for any other platform only has to speak
+the protocol.
 
 | | Implementation | Install |
 | --- | --- | --- |
 | Composer | [Go](composers/go/core): `net/http`, so chi, gin and echo too | `go get github.com/client-compose/client-compose/composers/go/core` |
 | Composer | [TypeScript](composers/typescript/core): Bun, Deno, Workers, Hono and Next.js through `fetch`; Node with [`node:http`](composers/typescript/node-http), [Express](composers/typescript/express) or [Fastify](composers/typescript/fastify) | `npm install @client-compose/composer` |
 | Client | [React and React Native](clients/typescript/react), with server rendering and Server Components | `npm install @client-compose/react` |
-| Client | [Swift and SwiftUI](clients/swift) | Swift Package Manager, from this repository |
-| Client | [Kotlin and Jetpack Compose](clients/kotlin) | from source, for now |
 | Client | [Plain TypeScript](clients/typescript/core), for anything else that renders | `npm install @client-compose/client` |
 | Codegen | [Types for every language](codegen), from your manifests | `npm install -D @client-compose/codegen`, or a [standalone binary](codegen#install) |
 
@@ -119,8 +118,8 @@ An island is described once, as JSON Schema:
 }
 ```
 
-[Codegen](codegen) turns that into types for every language you use: a `ProfileHeaderV2` struct in Go
-and Swift, a data class in Kotlin, an interface in TypeScript.
+[Codegen](codegen) turns that into types for each side: a `ProfileHeaderV2` struct in Go, an
+interface in TypeScript.
 
 The **composer** declares the screen, and resolves each island from your services:
 
@@ -153,19 +152,8 @@ const registry = new ReactIslandRegistry()
 <ComposedScreen screen="profile" params={{ userId }} />
 ```
 
-Those are plain React components. In SwiftUI and Jetpack Compose it's the same idea, with the same
-generated types:
-
-```swift
-ComposedScreen("profile", params: ["userId": userId])
-```
-
-```kotlin
-ComposedScreen("profile", mapOf("userId" to userId))
-```
-
-The same screen could come from the Go composer instead, and the same app could be SwiftUI: see
-[mix and match](#mix-and-match).
+Those are plain React components, on the web or in React Native. The same screen could come from
+the Go composer instead: see [mix and match](#mix-and-match).
 
 ## What you get
 
@@ -233,11 +221,11 @@ Native clients on the Go composer, and most of the design comes from what that a
 
 On the way:
 
-- Swift and Kotlin catching up with React: islands with pages, screens shown as they stream in,
-  and app strings kept between launches ([where each stands](spec/CAPABILITIES.md#where-each-stack-stands))
-- SwiftUI and Jetpack Compose todo examples
-- Kotlin on Maven Central, Swift releases tagged for SwiftPM, and Kotlin Multiplatform
 - An AWS Lambda adapter for the TypeScript composer
+
+**Wanted: maintainers for Swift and Kotlin.** There were clients for SwiftUI and Jetpack Compose
+here. They were removed because nobody could look after them properly, and they're welcome back
+with someone who can: open an issue to take one on.
 
 ## Adding an implementation
 
@@ -249,8 +237,8 @@ serve one can be a composer. What a new implementation has to do is spelled out:
   nothing from your language. The todo example's [suite](examples/todo/tests) is a good next step.
 - **A client** for another platform loads the shared fixtures in its own tests: rendering, actions
   and effects.
-- **A UI binding** for another framework (Vue, Svelte, Solid, UIKit, Flutter…) usually sits on an
-  existing client core. The React, SwiftUI and Compose bindings show the shape.
+- **A UI binding** for another framework (Vue, Svelte, Solid, SwiftUI, Jetpack Compose, Flutter…)
+  sits on a client core. The React binding shows the shape.
 - **A framework adapter** for an existing composer (Hono, Koa, Lambda, Gin…) is usually a few lines.
 
 [CONTRIBUTING.md](CONTRIBUTING.md) walks through adding one.
@@ -262,7 +250,7 @@ serve one can be a composer. What a new implementation has to do is spelled out:
 | [`spec/`](spec) | The protocol, its JSON Schemas, and what every implementation provides |
 | [`conformance/`](conformance) | Test suites for composers (over HTTP) and clients (fixtures), in any language |
 | [`composers/`](composers) | Composers: Go, and TypeScript with its adapters |
-| [`clients/`](clients) | Clients: TypeScript and React, Swift and SwiftUI, Kotlin and Compose |
+| [`clients/`](clients) | Clients: TypeScript, and React |
 | [`codegen/`](codegen) | Types from manifests, and the compatibility check |
 | [`examples/`](examples) | A todo app: one composer per language, one app per client, all interchangeable |
 
@@ -272,8 +260,6 @@ To work on it:
 pnpm install
 pnpm typecheck && pnpm lint && pnpm test   # TypeScript
 pnpm check-packages                        # build, pack and install-test the npm packages
-swift test                                 # Swift, from the repo root
-(cd clients/kotlin && ./gradlew test)      # Kotlin
 (cd composers/go/core && go test ./...)    # Go
 ```
 

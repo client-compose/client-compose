@@ -11,8 +11,6 @@ CHANGELOG.md
 *.md
 # Fixtures, manifests and schemas are laid out for reading side by side.
 *.json
-# Other languages have their own formatters (gofmt, swift-format, ktlint).
+# Other languages have their own formatters (gofmt).
 composers/go/
-clients/swift/
-clients/kotlin/
 examples/todo/composer-go/

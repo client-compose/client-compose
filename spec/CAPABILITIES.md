@@ -237,11 +237,10 @@ What makes these feel like one toolkit rather than six libraries:
 1. **No strings in app code.** Islands and actions are always registered and called by their
    generated type. The island type, version and action name appear once, in the manifest.
 2. **The same nouns everywhere.** Screen, placement, island, action, effects, screen reference,
-   load, batch loader, registry, composed screen. A Go developer and a Swift developer can read
-   each other's code.
+   load, batch loader, registry, composed screen. A Go developer and a TypeScript developer can
+   read each other's code.
 3. **Each language's own shape.** Go takes a `context.Context` and functional options. TypeScript
-   takes objects. Swift uses `async`/`await` and `@Observable`. Kotlin uses `suspend` functions and
-   `StateFlow`. The nouns are shared; the grammar is native.
+   takes objects. The nouns are shared; the grammar is native.
 4. **Expected outcomes are values, faults are errors.** A declared action error or an errored
    island is something to handle, so it's in the return type. A dropped connection is a failure.
 5. **Testable without a server.** Both sides ship a test kit, so an island or a screen can be
@@ -251,22 +250,22 @@ What makes these feel like one toolkit rather than six libraries:
 
 ### Names across stacks
 
-| Concept | Go | TypeScript composer | TypeScript client / React | Swift / SwiftUI | Kotlin / Compose |
-| --- | --- | --- | --- | --- | --- |
-| Composer | `cc.New(cc.Config{Screens, Actions, Context, Use})` | `createComposer({ screens, actions, context, use })` | | | |
-| Screen | `cc.Screen{ID, Islands, Requires, Meta}` | `screen(id, { islands, requires, meta })` | | | |
-| Placement | `cc.Placement{Key, Versions, Required, When}` | `place(key, Island, { required, when })` | | | |
-| Plugin | `cc.Plugin` | `Plugin` | | | |
-| Adapters | `cc.Cache`, `cc.IdempotencyStore` | `Cache`, `IdempotencyStore` | | | |
-| Island version | `cc.Define(fn)` | `island(Props, fn)` | | | |
-| Action version | `cc.DefineAction(fn)` | `action(Action, fn)` | | | |
-| Shared load | `cc.Load(ctx, key, fn)` | `rc.load(key, fn)` | | | |
-| Client | | | `ClientComposeConfig` | `ComposeClient` | `ComposeClient` |
-| Register | | | `registry.registerComponent(Props, C)` | `registry.register(Props.self) { … }` | `registry.register(Props) { … }` |
-| Screen view | | | `<ComposedScreen>` | `ComposedScreen` | `ComposedScreen()` |
-| Screen state | | | `useScreen` | `ScreenModel` | `ScreenState` (`StateFlow`), `rememberScreenState` |
-| Action | | | `useAction(Action)` | `client.perform(Action.self, input)`, `@ComposeAction(Action.self)` | `client.perform(Action, input)`, `rememberAction(Action)` |
-| Test kit | `cctest` | `@client-compose/composer/testing` | `@client-compose/react/testing` | `ClientComposeTesting` | `testing` (`FakeComposer`) |
+| Concept | Go | TypeScript composer | TypeScript client / React |
+| --- | --- | --- | --- |
+| Composer | `cc.New(cc.Config{Screens, Actions, Context, Use})` | `createComposer({ screens, actions, context, use })` | |
+| Screen | `cc.Screen{ID, Islands, Requires, Meta}` | `screen(id, { islands, requires, meta })` | |
+| Placement | `cc.Placement{Key, Versions, Required, When}` | `place(key, Island, { required, when })` | |
+| Plugin | `cc.Plugin` | `Plugin` | |
+| Adapters | `cc.Cache`, `cc.IdempotencyStore` | `Cache`, `IdempotencyStore` | |
+| Island version | `cc.Define(fn)` | `island(Props, fn)` | |
+| Action version | `cc.DefineAction(fn)` | `action(Action, fn)` | |
+| Shared load | `cc.Load(ctx, key, fn)` | `rc.load(key, fn)` | |
+| Client | | | `ClientComposeConfig` |
+| Register | | | `registry.registerComponent(Props, C)` |
+| Screen view | | | `<ComposedScreen>` |
+| Screen state | | | `useScreen` |
+| Action | | | `useAction(Action)` |
+| Test kit | `cctest` | `@client-compose/composer/testing` | `@client-compose/react/testing` |
 
 Names in *italics* don't exist yet; the parity work below adds them.
 
@@ -298,46 +297,47 @@ Names in *italics* don't exist yet; the parity work below adds them.
 
 ### Clients
 
-| | TypeScript / React | Swift / SwiftUI | Kotlin / Compose |
-| --- | --- | --- | --- |
-| CLI-1 registry | ✅ | ✅ | ✅ |
-| CLI-2 transport | ✅ | ✅ async headers, pluggable `Transport` | ✅ pluggable |
-| CLI-3 planning | ✅ | ✅ | ✅ |
-| CLI-4 screen errors | ✅ `ScreenFetchError.code` | ✅ `ScreenError.code` | ✅ `ScreenException.code` |
-| CLI-5 actions | ✅ | ✅ | ✅ |
-| CLI-6 effects | ✅ | ✅ | ✅ |
-| CLI-7 cache | ✅ (in the binding) | ✅ | ✅ |
-| CLI-8 test kit | ✅ | ✅ `FakeComposer` | ✅ `FakeComposer` |
-| CLI-9 conformance | ✅ rendering, actions and effects | ✅ rendering, actions and effects | ✅ rendering, actions and effects |
-| UI-1 composed screen | ✅ | ✅ not found through `ScreenError` in the failure slot | ✅ `ComposedScreen`, not found through `ScreenException` |
-| UI-2 screen state | ✅ `useScreen` | ✅ `ScreenModel` | ✅ `ScreenState`, `rememberScreenState` |
-| UI-3 action state | ✅ `useAction` | ✅ `@ComposeAction` | ✅ `rememberAction` |
-| UI-4 invalidation | ✅ | ✅ | ✅ |
-| UI-5 navigation hook | ✅ | ✅ `onNavigate` | ✅ `onNavigate` |
-| UI-6 crash isolation | ✅ error boundaries | ◐ decode failures only | ◐ decode failures only |
-| UI-7 meta | ✅ | ✅ navigation title, `ScreenModel.meta` | ✅ `onMeta`, `Snapshot.meta` |
-| UI-8 cancellation | ✅ | ✅ `.task` | ✅ the composition's scope |
-| UI-9 testing | ✅ | ✅ `FakeComposer` with `ScreenModel` and `ActionModel` | ✅ `FakeComposer` with Robolectric |
-| CLI-10 island requests | ✅ `fetchIsland`, `proxy.loadIsland` | ✗ (ignores `next`) | ✗ (ignores `next`) |
-| UI-10 pages | ✅ `usePages` | ✗ | ✗ |
-| CLI-11 streams | ✅ `openScreen`, `fetchScreen` | ◐ read to the end | ◐ read to the end |
-| UI-11 progressive screens | ✅ placeholders, `progressive`, streamed Server Components | ✗ (all at once) | ✗ (all at once) |
-| CLI-12 strings | ✅ `t`, `fetchStrings`, `proxy.loadStrings` | ✅ `t`, `client.strings()` | ✅ `t`, `client.strings()` |
-| CLI-13 island updates | ✅ `useAction`, cached and shown screens | ✅ `perform(islands:)`, `ScreenModel` | ✅ `perform(islands)`, `ScreenState` |
-| CLI-14 entity changes | ✅ `applyChanges`, screens, cache and pages | ✅ `EffectsBatch`, cached and shown screens | ✅ `EffectsBatch`, cached and shown screens |
-| UI-12 app strings | ✅ `AppStringsProvider`, `useAppStrings` | ✗ (`client.strings()`, kept by the app) | ✗ (`client.strings()`, kept by the app) |
+| | TypeScript / React |
+| --- | --- |
+| CLI-1 registry | ✅ |
+| CLI-2 transport | ✅ |
+| CLI-3 planning | ✅ |
+| CLI-4 screen errors | ✅ `ScreenFetchError.code` |
+| CLI-5 actions | ✅ |
+| CLI-6 effects | ✅ |
+| CLI-7 cache | ✅ (in the binding) |
+| CLI-8 test kit | ✅ |
+| CLI-9 conformance | ✅ rendering, actions and effects |
+| UI-1 composed screen | ✅ |
+| UI-2 screen state | ✅ `useScreen` |
+| UI-3 action state | ✅ `useAction` |
+| UI-4 invalidation | ✅ |
+| UI-5 navigation hook | ✅ |
+| UI-6 crash isolation | ✅ error boundaries |
+| UI-7 meta | ✅ |
+| UI-8 cancellation | ✅ |
+| UI-9 testing | ✅ |
+| CLI-10 island requests | ✅ `fetchIsland`, `proxy.loadIsland` |
+| UI-10 pages | ✅ `usePages` |
+| CLI-11 streams | ✅ `openScreen`, `fetchScreen` |
+| UI-11 progressive screens | ✅ placeholders, `progressive`, streamed Server Components |
+| CLI-12 strings | ✅ `t`, `fetchStrings`, `proxy.loadStrings` |
+| CLI-13 island updates | ✅ `useAction`, cached and shown screens |
+| CLI-14 entity changes | ✅ `applyChanges`, screens, cache and pages |
+| UI-12 app strings | ✅ `AppStringsProvider`, `useAppStrings` |
 
-SwiftUI and Compose can't catch a view that crashes while rendering the way React can, so UI-6
-there means islands whose props don't decode are skipped.
+Swift and Kotlin clients (with SwiftUI and Jetpack Compose bindings) were here, and were removed
+until someone can maintain them. They're a welcome contribution: see
+[CONTRIBUTING.md](../CONTRIBUTING.md).
 
 ### Tooling
 
-| | Go | TypeScript | Swift | Kotlin |
-| --- | --- | --- | --- | --- |
-| TL-1 props | ✅ | ✅ | ✅ | ✅ |
-| TL-2 actions | ✅ | ✅ | ✅ | ✅ |
-| TL-6 strings | — (the composer serves the catalog) | ✅ | ✅ | ✅ |
-| TL-7 entities | ✅ | ✅ | ✅ entity paths | ✅ entity paths |
+| | Go | TypeScript |
+| --- | --- | --- |
+| TL-1 props | ✅ | ✅ |
+| TL-2 actions | ✅ | ✅ |
+| TL-6 strings | — (the composer serves the catalog) | ✅ |
+| TL-7 entities | ✅ | ✅ |
 
 TL-3 to TL-5 are language-neutral and done.
 
@@ -355,11 +355,5 @@ In order, each as its own pull request:
    in-memory implementations in the test kits. Your app supplies the real ones.
 4. **Conformance.** Client fixtures for actions and effects: outcomes, declared and unknown error
    codes, reference matching for `invalidate` (CLI-9).
-5. **Swift and SwiftUI.** CLI-2 and CLI-4 to CLI-8, UI-1 to UI-9, and TL-2.
-6. **Kotlin and Jetpack Compose.** The same, with a new `compose` binding on the JVM core. Kotlin
-   Multiplatform comes later.
-7. **Publishing.** Swift through SwiftPM tags, Kotlin on Maven Central.
-
-Not in this round: Kotlin Multiplatform. Island requests (§4.5) and streams (§4.6) came later, in
-Go, TypeScript and React first. Swift and Kotlin render paged islands' first pages, and read
-screens' streams to their end; they add CLI-10, UI-10 and progressive screens (UI-11) next.
+5. **Swift and Kotlin.** Clients for SwiftUI and Jetpack Compose were built, then removed until
+   someone can maintain them. Wanted: a maintainer for each.

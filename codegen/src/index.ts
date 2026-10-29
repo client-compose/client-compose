@@ -26,8 +26,6 @@ import {
   type ObjectDef,
 } from "./manifest.ts";
 import { generateGo, type GoOptions } from "./targets/go.ts";
-import { generateKotlin, type KotlinOptions } from "./targets/kotlin.ts";
-import { generateSwift, type SwiftOptions } from "./targets/swift.ts";
 import { generateTypeScript, type TypeScriptOptions } from "./targets/typescript.ts";
 
 export {
@@ -54,7 +52,7 @@ export {
   parseManifest,
   parseScreenStrings,
 } from "./manifest.ts";
-export { generateGo, generateKotlin, generateSwift, generateTypeScript };
+export { generateGo, generateTypeScript };
 export { type CatalogIssue, catalogLocales, checkCatalog } from "./catalog.ts";
 
 type OneOrMany<T> = T | T[];
@@ -86,8 +84,6 @@ export interface CodegenConfig {
   defaultLocale?: string;
   targets: {
     go?: OneOrMany<GoOptions & { out: string }>;
-    swift?: OneOrMany<SwiftOptions & { out: string }>;
-    kotlin?: OneOrMany<KotlinOptions & { out: string }>;
     typescript?: OneOrMany<TypeScriptOptions & { out: string }>;
   };
 }
@@ -214,7 +210,14 @@ export function generate(configPath: string): GeneratedFile[] {
       .join(", "),
   ].join("\n");
 
-  const { go, swift, kotlin, typescript } = config.targets;
+  const { go, typescript } = config.targets;
+  for (const removed of ["swift", "kotlin"]) {
+    if (removed in config.targets) {
+      throw new ManifestError(
+        `${configPath}: there's no ${removed} target: the Swift and Kotlin clients were removed, and need a maintainer to come back`,
+      );
+    }
+  }
   const files: GeneratedFile[] = [];
   for (const t of list(go)) {
     files.push({
@@ -225,25 +228,6 @@ export function generate(configPath: string): GeneratedFile[] {
         required(t, "package", "go"),
         actions,
         screens,
-        entities,
-      ),
-    });
-  }
-  for (const t of list(swift)) {
-    files.push({
-      path: resolve(base, t.out),
-      contents: generateSwift(islands, header, t, actions, app, entities),
-    });
-  }
-  for (const t of list(kotlin)) {
-    files.push({
-      path: resolve(base, t.out),
-      contents: generateKotlin(
-        islands,
-        header,
-        required(t, "package", "kotlin"),
-        actions,
-        app,
         entities,
       ),
     });

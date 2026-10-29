@@ -18,7 +18,7 @@ to use the source directly.)
 
 **With Node 20+:** `npx @client-compose/codegen …`, or add `@client-compose/codegen` as a dev dependency.
 
-**Without Node** (Go, Swift and Kotlin projects): download the standalone `client-compose-codegen`
+**Without Node** (Go projects): download the standalone `client-compose-codegen`
 executable for your platform from the
 [codegen releases](https://github.com/client-compose/client-compose/releases?q=%40client-compose%2Fcodegen&expanded=true): `linux-x64`,
 `linux-arm64`, `darwin-x64`, `darwin-arm64` or `windows-x64`, with a `SHA256SUMS` file to verify
@@ -45,8 +45,6 @@ downloaded through a browser needs `xattr -d com.apple.quarantine <file>` before
   "actions": "actions",
   "targets": {
     "go": { "out": "composer-go/islands_gen.go", "package": "main" },
-    "swift": { "out": "ios/Islands.generated.swift", "access": "internal" },
-    "kotlin": { "out": "android/Islands.generated.kt", "package": "com.example.profile" },
     "typescript": { "out": "web/islands.generated.ts", "protocolImport": "@client-compose/protocol" }
   }
 }
@@ -74,8 +72,6 @@ island type and version, so the registration can't name the wrong island:
 | Stack      | Generated                                                     | Used as                                                    |
 | ---------- | ------------------------------------------------------------- | ---------------------------------------------------------- |
 | Go         | `struct` + `IslandType()` / `IslandVersion()` methods         | `cc.Define(func(ctx, r) (ProfileHeaderV2, error) { … })`   |
-| Swift      | `struct … : IslandProps, Codable` with nested types and a memberwise `init` | `registry.register(ProfileHeaderV2.self) { props, _ in … }` |
-| Kotlin     | `@Serializable data class` + `IslandDescriptor` companion     | `registry.register(ProfileHeaderV2) { props, _ -> … }`     |
 | TypeScript | `interface` + descriptor `const` with the same name           | `registry.register(ProfileHeaderV2, (props) => …)`, `island(ProfileHeaderV2, resolve)` |
 
 For action `follow-user` v1 (spec §5.1):
@@ -84,8 +80,6 @@ For action `follow-user` v1 (spec §5.1):
 | ---------- | --------- | ------- |
 | Go         | `FollowUserV1Input` (tied to its action, version, input schema and result type), `FollowUserV1Result`, and one error type per declared error, e.g. `FollowUserV1Blocked` | `cc.DefineAction(func(ctx, call, in FollowUserV1Input) (FollowUserV1Result, cc.Effects, error) { … })`, returning `FollowUserV1Blocked{}` as the error |
 | TypeScript | `FollowUserV1Input`, `FollowUserV1Result`, the `FollowUserV1Error` union, and the `FollowUserV1` descriptor | `action(FollowUserV1, perform)` in the composer, `callAction(…, FollowUserV1, input)` or `useAction(FollowUserV1)` in apps |
-| Kotlin     | `object FollowUserV1 : ActionDescriptor<…>` holding `Input`, `Result`, and a sealed `Error` with a subclass per declared error (`Error.Blocked`, or `Error.LimitReached(details)`) | `client.perform(FollowUserV1, FollowUserV1.Input(userId = id))` or `rememberAction(FollowUserV1)` |
-| Swift      | `enum FollowUserV1: ActionDescriptor` holding `Input`, `Result`, and a `DeclaredError` enum with a case per declared error (`.blocked`, or `.limitReached(LimitReached)` with its details) | `client.perform(FollowUserV1.self, .init(userId: id))` or `@ComposeAction(FollowUserV1.self)` |
 
 ## Entities
 
@@ -110,9 +104,8 @@ treats marking or unmarking an object as a breaking change.
 | Go         | `TodoEntity`, every property but the id, each optional; `IslandEntities()` on islands that hold entities | `cc.Set("3", TodoEntity{Done: &done})`, `cc.Delete[TodoEntity]("3")` |
 | TypeScript | `TodoEntity` and its descriptor; `entities` on island descriptors | `changed(TodoEntity, "3", { done: true })`, `deleted(TodoEntity, "3")`; clients apply changes with the descriptors' `entities` |
 
-Swift and Kotlin don't generate entity types (only composers set them), but their islands carry
-their entity paths for clients: `static let islandEntities` in Swift, `override val entities` on the
-descriptor in Kotlin.
+Codegen generates Go and TypeScript. Swift and Kotlin targets were removed with their clients, and
+need a maintainer to come back.
 
 ## Strings
 
@@ -135,8 +128,6 @@ whose members are the strings: text for those without params, functions for thos
 | Stack      | Generated | Used as |
 | ---------- | --------- | ------- |
 | TypeScript | `RecipeListV1Strings`, and the descriptor's `strings`; `AppStrings` | `props.t.recipeCount({ count })` in a registered component; `useAppStrings(AppStrings).retry` |
-| Swift      | `RecipeListV1.Strings`; `struct AppStrings` | `registry.register(RecipeListV1.self) { props, t, _ in … t.recipeCount(count: n) }`; `response.app(AppStrings.self)` |
-| Kotlin     | `RecipeListV1.Strings`, built by the descriptor; `class AppStrings` | `registry.register(RecipeListV1) { props, t, _ -> … t.recipeCount(n) }`; `response.app(::AppStrings)` |
 
 The words are a catalog, one file per language, e.g. `strings/pl.json`:
 
@@ -170,19 +161,19 @@ that isn't counted, and `{slots}` that aren't params are errors.
 Manifests use a deliberately small subset of JSON Schema. Anything outside it is rejected with an
 error, so a manifest can never mean different things in different languages.
 
-| Schema                                   | Go                | Swift            | Kotlin           | TypeScript          |
-| ---------------------------------------- | ----------------- | ---------------- | ---------------- | ------------------- |
-| `string`                                 | `string`          | `String`         | `String`         | `string`            |
-| `string`, `format: uri`                  | `string`          | `URL`            | `String`         | `string`            |
-| `string`, `enum: [...]`                  | named `string` type + consts | `enum: String` | `enum class` | string union      |
-| `integer`                                | `int`             | `Int`            | `Int`            | `number`            |
-| `integer`, `format: int64`               | `int64`           | `Int64`          | `Long`           | `number`            |
-| `number`                                 | `float64`         | `Double`         | `Double`         | `number`            |
-| `boolean`                                | `bool`            | `Bool`           | `Boolean`        | `boolean`           |
-| `array` with `items`                     | `[]T`             | `[T]`            | `List<T>`        | `T[]`               |
-| `object` with `properties`               | named struct      | nested struct    | nested data class | named interface    |
-| `object` with `additionalProperties`     | `map[string]T`    | `[String: T]`    | `Map<String, T>` | `Record<string, T>` |
-| not in `required`                        | pointer, or nil slice/map; `omitempty` | `T?` | `T? = null` | `prop?:`   |
+| Schema                                   | Go                | TypeScript          |
+| ---------------------------------------- | ----------------- | ------------------- |
+| `string`                                 | `string`          | `string`            |
+| `string`, `format: uri`                  | `string`          | `string`            |
+| `string`, `enum: [...]`                  | named `string` type + consts | string union      |
+| `integer`                                | `int`             | `number`            |
+| `integer`, `format: int64`               | `int64`           | `number`            |
+| `number`                                 | `float64`         | `number`            |
+| `boolean`                                | `bool`            | `boolean`           |
+| `array` with `items`                     | `[]T`             | `T[]`               |
+| `object` with `properties`               | named struct      | named interface    |
+| `object` with `additionalProperties`     | `map[string]T`    | `Record<string, T>` |
+| not in `required`                        | pointer, or nil slice/map; `omitempty` | `prop?:`   |
 
 Also allowed: `description` (becomes doc comments), `title` (names a nested type), `$comment`,
 `examples`. Not supported: `$ref`, `oneOf`/`anyOf`/`allOf`, type unions, `null`, `pattern`,
@@ -190,8 +181,7 @@ Also allowed: `description` (becomes doc comments), `title` (names a nested type
 
 **Naming.** Nested types are named after their property (`author` → `Author`), or after
 `title` if set. Array items without a title get an `Item` suffix and map values a `Value` suffix.
-Swift and Kotlin nest them inside the island type (`PostGridV1.Post`); Go and TypeScript
-flatten them (`PostGridV1Post`). Property names are camelCased (Go: PascalCased with standard
+Go and TypeScript flatten them (`PostGridV1Post`). Property names are camelCased (Go: PascalCased with standard
 initialisms, e.g. `avatarUrl` → `AvatarURL`), with the original JSON key preserved.
 
 ## Compatibility rules for manifests
@@ -248,4 +238,4 @@ requests.
 ## Tests
 
 [`codegen/test/fixtures/islands`](https://github.com/client-compose/client-compose/tree/main/codegen/test/fixtures/islands) covers every supported
-feature. Its generated output is compiled and decoded by tests in Go, Swift, Kotlin and TypeScript.
+feature. Its generated output is compiled and decoded by tests in Go and TypeScript.
