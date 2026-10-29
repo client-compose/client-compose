@@ -1,5 +1,11 @@
 # go-composer
 
+## 0.13.0
+
+### Minor Changes
+
+- [#65](https://github.com/client-compose/client-compose/pull/65) [`18f247d`](https://github.com/client-compose/client-compose/commit/18f247d6c4f0bd170b23cfa254cd5930a27ce4e4) Thanks [@LewisYearsley](https://github.com/LewisYearsley)! - `cctest.Composer(c)` names the composer inside a handler that wraps it, and `CheckEffects` takes request options (such as a session header) for the screen it checks.
+
 ## 0.12.1
 
 ### Patch Changes
