@@ -1,5 +1,12 @@
 # @client-compose/codegen
 
+## 0.11.0
+
+### Minor Changes
+
+- [#61](https://github.com/client-compose/client-compose/pull/61) [`79f9fed`](https://github.com/client-compose/client-compose/commit/79f9fedb05eaf9a8b4072f0d77881370298215d7) Thanks [@LewisYearsley](https://github.com/LewisYearsley)! - The Swift and Kotlin targets are removed, with the Swift and Kotlin clients, until someone can
+  maintain them. A config that names one says so.
+
 ## 0.10.0
 
 ### Minor Changes

@@ -1,5 +1,12 @@
 # @client-compose/express
 
+## 0.3.5
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @client-compose/composer@0.14.1
+
 ## 0.3.4
 
 ### Patch Changes
