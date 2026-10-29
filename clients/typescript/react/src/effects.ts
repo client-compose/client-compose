@@ -5,6 +5,7 @@ import { applyChanges } from "@client-compose/client";
 import type {
   ActionEffects,
   EntityPath,
+  HeldEntity,
   IslandEntry,
   PendingIsland,
   ScreenHead,
@@ -58,36 +59,85 @@ export class EffectsBatch {
    * deleted entity held where it can't be removed, or an update the screen can't take (spec §5.3).
    */
   screen(head: ScreenHead, params: Record<string, string>): ScreenHead | undefined {
-    let reload = false;
-    const islands = head.islands.map((entry): IslandEntry | PendingIsland => {
-      if (entry.status !== "ok") {
-        return entry;
-      }
-
-      const changed = this.props(entry.props, entry.type, entry.version);
-      reload ||= changed.reload;
-
-      return changed.props === entry.props ? entry : { ...entry, props: changed.props };
-    });
-    if (reload) {
+    const keys = new Set(head.islands.map((entry) => entry.key));
+    const updates = this.effects.update ?? [];
+    const elsewhere = updates.some(
+      (u) => u.screen === head.screen && sameParams(u.params, params) && !keys.has(u.island.key),
+    );
+    if (elsewhere) {
+      // An update for an island the screen doesn't have: only a reload can show it.
       return undefined;
     }
 
-    for (const update of this.effects.update ?? []) {
-      if (update.screen !== head.screen || !sameParams(update.params, params)) {
+    const islands: (IslandEntry | PendingIsland)[] = [];
+    for (const entry of head.islands) {
+      if (entry.status === "pending") {
+        if (this.updateFor(head.screen, params, entry.key)) {
+          return undefined;
+        }
+
+        islands.push(entry);
         continue;
       }
 
-      const i = islands.findIndex((entry) => entry.key === update.island.key);
-      const current = islands[i];
-      if (!current || current.status === "pending" || current.type !== update.island.type) {
+      const changed = this.island(entry, head.screen, params);
+      if (changed === undefined) {
         return undefined;
       }
 
-      islands[i] = update.island;
+      islands.push(changed);
     }
 
     return islands.every((entry, i) => entry === head.islands[i]) ? head : { ...head, islands };
+  }
+
+  /**
+   * One island of a screen with the changes and its update applied (the same entry when neither
+   * touches it), or undefined when the client must load it again.
+   */
+  island(
+    entry: IslandEntry,
+    screen: string,
+    params: Record<string, string>,
+  ): IslandEntry | undefined {
+    const update = this.updateFor(screen, params, entry.key);
+    if (update) {
+      return update.island.type === entry.type ? update.island : undefined;
+    }
+
+    if (entry.status !== "ok") {
+      return entry;
+    }
+
+    const changed = this.props(entry.props, entry.type, entry.version);
+    if (changed.reload) {
+      return undefined;
+    }
+
+    return changed.props === entry.props ? entry : { ...entry, props: changed.props };
+  }
+
+  /**
+   * Whether the changes or an update touch an island holding these entities, for one the client
+   * can't change itself: a Server Component's.
+   */
+  touches(
+    held: readonly HeldEntity[],
+    screen: string,
+    params: Record<string, string>,
+    key: string,
+  ) {
+    const changes = this.effects.changes ?? [];
+    const changed = changes.some((c) => held.some((h) => h.entity === c.entity && h.id === c.id));
+
+    return changed || this.updateFor(screen, params, key) !== undefined;
+  }
+
+  /** The update for an island of a screen with these exact params, if there is one. */
+  private updateFor(screen: string, params: Record<string, string>, key: string) {
+    return this.effects.update?.find(
+      (u) => u.screen === screen && sameParams(u.params, params) && u.island.key === key,
+    );
   }
 
   /** A whole screen, such as a cached one, with the changes and updates applied, as `screen`. */

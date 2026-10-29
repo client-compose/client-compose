@@ -1,18 +1,10 @@
 "use client";
 
-// Strings (spec §4.7): the app strings, fetched when the app starts and kept, and the client half
-// of islands' strings for Client Components rendered by Server Components.
+// App strings (spec §4.7): fetched when the app starts, and kept.
 
-import { appStrings, buildStrings, fetchStrings } from "@client-compose/client";
-import type {
-  AppStringsDescriptor,
-  PluralRules,
-  StringParams,
-  Strings,
-  StringsResponse,
-} from "@client-compose/protocol";
+import { appStrings, fetchStrings } from "@client-compose/client";
+import type { AppStringsDescriptor, StringsResponse } from "@client-compose/protocol";
 import {
-  type ComponentType,
   createContext,
   createElement,
   type ReactNode,
@@ -24,8 +16,6 @@ import {
 
 import type { ClientComposeConfig } from "./config.ts";
 import { useClientCompose } from "./provider.ts";
-
-// ---- App strings ----
 
 /** Where the app strings are kept between launches: AsyncStorage, localStorage, a file. */
 export interface StringsCache {
@@ -146,25 +136,4 @@ export function useAppStrings<S>(descriptor: AppStringsDescriptor<S>): S {
  */
 export function useLocale(): string | undefined {
   return useClientCompose().config.client.locale;
-}
-
-// ---- Islands' strings, built in the browser ----
-
-export interface IslandWithStringsProps {
-  component: ComponentType<object>;
-  props: object;
-  declared: StringParams;
-  strings?: Strings;
-  plurals?: PluralRules;
-}
-
-/**
- * A Client Component island rendered by a Server Component: its `t` is made of functions, which
- * can't be sent to the browser, so it's built here from the strings that can.
- */
-export function IslandWithStrings(props: IslandWithStringsProps): ReactNode {
-  const { component, declared, strings, plurals } = props;
-  const t = useMemo(() => buildStrings(declared, strings, plurals), [declared, strings, plurals]);
-  const merged = useMemo(() => ({ ...props.props, t }), [props.props, t]);
-  return createElement(component, merged);
 }

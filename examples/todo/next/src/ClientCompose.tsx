@@ -1,16 +1,18 @@
 "use client";
-// Client Compose in the browser, for the islands' actions. The page is rendered on the server, so
-// when an action changes the screen (changes, updates or invalidations), the server renders it
-// again (router.refresh): the browser can't change Server Components.
+// Client Compose in the browser, for the islands' actions. The page is rendered on the server, and
+// its islands, Client Components, take an action's changes and updates in the browser. What only
+// the server can show (an invalidated screen, or a change an island can't take) it renders again
+// (router.refresh).
 import {
   AppStringsProvider,
   type ClientComposeConfig,
   ClientComposeProvider,
-  ReactIslandRegistry,
   type StringsResponse,
 } from "@client-compose/react";
 import { useRouter } from "next/navigation";
 import { type ReactNode, useMemo } from "react";
+
+import { registry } from "./registry";
 
 export interface ClientComposeProps {
   locale: string;
@@ -25,8 +27,8 @@ export function ClientCompose(props: ClientComposeProps) {
 
   const config = useMemo(
     (): ClientComposeConfig => ({
-      // The browser renders no screens itself: the server does.
-      registry: new ReactIslandRegistry(),
+      // The islands' entities, for their changes, and what actions ask the composer to update.
+      registry,
       baseUrl: "",
       client: {
         platform: "web",

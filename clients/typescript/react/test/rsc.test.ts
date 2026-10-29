@@ -62,6 +62,21 @@ test("renders a screen in React Server Components", async () => {
   assert.deepEqual(errors, ["broken island"]);
 });
 
+test("tells the browser what each island needs to take an action's changes", async () => {
+  execFileSync("pnpm", ["exec", "tsc", "-b", here("../tsconfig.build.json")], { stdio: "inherit" });
+  const payload = await run(process.execPath, [
+    "--conditions",
+    "react-server",
+    "--import",
+    here("rsc/register-loader.mjs"),
+    here("rsc/render-server.mjs"),
+  ]);
+  // A Server Component island: the entities it holds, so the browser knows when to ask for the
+  // server. A Client Component island: its props, which the browser changes itself.
+  assert.ok(payload.includes('"holds":[{"entity":"person","id":"ada"}]'), "the header's entities");
+  assert.ok(payload.includes('"props":{"start":1}'), "the counter's props");
+});
+
 test("renders a response passed in instead of fetching", async () => {
   execFileSync("pnpm", ["exec", "tsc", "-b", here("../tsconfig.build.json")], { stdio: "inherit" });
   const { html } = await renderRsc("preloaded");

@@ -1,5 +1,12 @@
 # @client-compose/codegen
 
+## 0.10.0
+
+### Minor Changes
+
+- [#59](https://github.com/client-compose/client-compose/pull/59) [`c0c1d6e`](https://github.com/client-compose/client-compose/commit/c0c1d6e58dcb6cb60ed964e0cf5e012dde990e64) Thanks [@LewisYearsley](https://github.com/LewisYearsley)! - Swift and Kotlin islands carry their entity paths (spec §2.1): `static let islandEntities` and the
+  descriptor's `entities`, so their clients apply an action's changes.
+
 ## 0.9.0
 
 ### Minor Changes

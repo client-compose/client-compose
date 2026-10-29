@@ -291,5 +291,5 @@ export function screenRefMatches(
   );
 }
 
-export { type AppliedChanges, applyChanges } from "./effects.ts";
+export { type AppliedChanges, applyChanges, heldEntities, type HeldEntity } from "./effects.ts";
 export { buildStrings, formatString, pluralCategory, type StringValues } from "./strings.ts";

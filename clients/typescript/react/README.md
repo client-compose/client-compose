@@ -177,6 +177,11 @@ export default async function Page({ params }: { params: Promise<{ userId: strin
 - `requestInit` is passed to every request, so framework fetch options such as
   `{ next: { revalidate: 30 } }` work too.
 - To refresh, use your framework's mechanism (e.g. `router.refresh()`).
+- Actions' changes and updates reach the screen in the browser: Client Component islands apply them
+  themselves. Give the browser's `<ClientComposeProvider>` the same registry, which says where
+  islands hold entities. What only the server can show calls `onChanges` (an island that's a
+  Server Component, or a change a Client Component island can't take); call `router.refresh()`
+  there.
 - The screen streams: islands still pending in its head render as their placeholders, each in its
   own `<Suspense>`, and stream into the page as they arrive. `progressive={false}` (or the
   config's `progressive: false`) waits for the whole screen instead.
@@ -357,10 +362,11 @@ When an action succeeds, its effects are applied before `run` resolves, in this 
 - **`changes`**: each entity the action changed is changed in every island showing it (from the
   generated descriptors' `entities`), on every screen the app has: shown, cached, and every page a
   paged island holds. Nothing is fetched. A deleted entity is removed from the list holding it; a
-  screen showing one anywhere else reloads.
+  screen showing one anywhere else reloads. On a screen rendered by Server Components, Client
+  Component islands change in the browser, and `onChanges(effects)` is called for the rest.
 - **`update`**: each island's new entry is swapped into the screen with those exact params, shown or
   cached; the rest of the screen stays. A screen that can't take it (no island with that key, or
-  one still streaming in) reloads.
+  one still streaming in) reloads. On a screen rendered by Server Components, as for `changes`.
 - **`invalidate`**: cached responses for matching screens are dropped. Screens shown with
   `useScreen` / `<ComposedScreen>` reload, and `onInvalidate(refs)` is called. In Next.js, call
   `router.refresh()` there to re-render Server Components.

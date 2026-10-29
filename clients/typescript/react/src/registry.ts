@@ -5,7 +5,7 @@ import type { IslandDescriptor } from "@client-compose/protocol";
 import { type ComponentType, createElement, type ReactNode } from "react";
 
 // From a Server Component, a client reference: rendered, never called.
-import { IslandWithStrings } from "./strings.ts";
+import { ClientIsland } from "./rendered.ts";
 
 export interface ComponentOptions {
   /**
@@ -36,14 +36,15 @@ export class ReactIslandRegistry extends IslandRegistry<ReactNode> {
     }
     const declared = island.strings;
     return this.register(island, (props, entry, plurals) => {
-      if (declared && isClientReference(component)) {
-        // A Server Component is rendering a Client Component: `t` is built in the browser.
-        return createElement(IslandWithStrings, {
+      if (isClientReference(component)) {
+        // A Server Component is rendering a Client Component: the browser builds its `t`, and
+        // applies actions' changes to it.
+        return createElement(ClientIsland, {
           component,
-          props: isObject(entry.props) ? entry.props : {},
-          declared,
-          strings: entry.strings,
-          plurals,
+          props: isRecord(entry.props) ? entry.props : {},
+          ...(declared && { declared }),
+          ...(entry.strings && { strings: entry.strings }),
+          ...(plurals && { plurals }),
         });
       }
       return createElement(component, props);
@@ -54,11 +55,11 @@ export class ReactIslandRegistry extends IslandRegistry<ReactNode> {
 /** A Client Component, as a Server Component sees it: a reference to a module in the browser. */
 function isClientReference(component: unknown): component is ComponentType<object> {
   return (
-    (typeof component === "function" || isObject(component)) &&
+    (typeof component === "function" || isRecord(component)) &&
     Reflect.get(component, "$$typeof") === Symbol.for("react.client.reference")
   );
 }
 
-function isObject(value: unknown): value is object {
+function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }

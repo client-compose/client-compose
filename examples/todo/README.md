@@ -46,8 +46,9 @@ decides for itself what to refresh.
 The list's todos and the summary are marked with the entities they show (`entities/`), so a change
 to a todo reaches whichever islands show it. Each composer's tests check every action with its test
 kit (`CheckEffects`, `checkEffects`): applied to the screen as an app would, its effects must match
-the screen composed again. The Next.js app renders the screen on the server, so it refreshes it
-(`onChanges`, `onInvalidate`) rather than changing it in the browser.
+the screen composed again. The Next.js app renders the screen on the server, and its islands, Client
+Components, take changes and updates in the browser all the same; it asks the server for the
+screen again (`router.refresh()`) only for an invalidation.
 
 `add-todo` declares two errors, `empty_title` and `title_too_long` (with the limit). The apps check
 the title before sending it too, in the same words, but the composer has the final say: an app can

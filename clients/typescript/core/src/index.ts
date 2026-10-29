@@ -34,7 +34,12 @@ export {
   StringsFetchError,
   type StringValues,
 } from "./strings.ts";
-export { type AppliedChanges, applyChanges } from "@client-compose/protocol";
+export {
+  type AppliedChanges,
+  applyChanges,
+  heldEntities,
+  type HeldEntity,
+} from "@client-compose/protocol";
 
 type OkEntry<P = unknown> = IslandEntry<P> & { status: "ok" };
 type ErrorEntry = IslandEntry & { status: "error" };
