@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"sync"
 	"testing"
@@ -267,5 +268,31 @@ func TestCheckEffectsCatchesWhatAnActionForgot(t *testing.T) {
 
 	if len(r.errors) != 1 {
 		t.Fatalf("errors: %q", r.errors)
+	}
+}
+
+// sessionsOnly wraps a handler in middleware that turns away requests without a session.
+func sessionsOnly(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer ada" {
+			http.Error(w, "unauthenticated", http.StatusUnauthorized)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func TestCheckEffectsThroughMiddlewareWithASession(t *testing.T) {
+	s := &items{list: []itemsV1Item{{ID: "1", Name: "Milk"}, {ID: "2", Name: "Eggs"}}}
+	composer := listComposer(s, func(id string) cc.Effects { return finished(id, s.left()) })
+	app := cctest.New(t, sessionsOnly(composer), cctest.Composer(composer))
+	session := cctest.Header("Authorization", "Bearer ada")
+
+	out := cctest.CheckEffects(app, "list", nil, func() cctest.Outcome[struct{}] {
+		return cctest.Perform(app, addInput{Name: "Bread"}, session)
+	}, session)
+
+	if out.Status != "ok" || len(out.Effects.Updated) != 2 {
+		t.Fatalf("outcome: %+v", out)
 	}
 }

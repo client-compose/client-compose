@@ -60,14 +60,24 @@ func Client(client cc.ClientContext) Option {
 	return func(a *App) { a.client = client }
 }
 
-// New returns an App calling handler: a *cc.Composer, or your HTTP handler with the composer in it.
-// When handler is a *cc.Composer, the app declares every island its declared screens place; for
-// screens with a Layout, use Declare.
+// Composer names the composer inside a handler that wraps it, such as one with middleware: the app
+// declares its islands, and CheckEffects can apply changes as clients do.
+//
+//	app := cctest.New(t, withMiddleware(composer), cctest.Composer(composer))
+func Composer(c *cc.Composer) Option {
+	return func(a *App) {
+		a.composer = c
+		a.islands = c.Islands()
+	}
+}
+
+// New returns an App calling handler: a *cc.Composer, or your HTTP handler with the composer in it
+// (then pass Composer too). Given the composer, the app declares every island its declared screens
+// place; for screens with a Layout, use Declare.
 func New(t testing.TB, handler http.Handler, opts ...Option) *App {
 	a := &App{t: t, handler: handler, islands: map[string][]int{}, client: cc.ClientContext{Platform: "test", AppVersion: "1"}}
 	if c, ok := handler.(*cc.Composer); ok {
-		a.islands = c.Islands()
-		a.composer = c
+		Composer(c)(a)
 	}
 	for _, o := range opts {
 		o(a)

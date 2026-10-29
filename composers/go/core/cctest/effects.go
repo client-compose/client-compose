@@ -16,13 +16,16 @@ import (
 //		return cctest.Perform(app, ToggleTodoV1Input{ID: "3", Done: true})
 //	})
 //
-// A screen the action invalidates is reloaded by clients, so there's nothing to check on it.
-func CheckEffects[R any](a *App, screen string, params Params, perform func() Outcome[R]) Outcome[R] {
+// A screen the action invalidates is reloaded by clients, so there's nothing to check on it. The
+// screen is requested with opts, such as the session of whoever's looking at it:
+//
+//	cctest.CheckEffects(app, "drafts", nil, perform, cctest.Header("Authorization", "Bearer "+token))
+func CheckEffects[R any](a *App, screen string, params Params, perform func() Outcome[R], opts ...RequestOption) Outcome[R] {
 	a.t.Helper()
 	if a.composer == nil {
-		a.t.Fatal("cctest: CheckEffects needs the composer itself, to apply changes as clients do")
+		a.t.Fatal("cctest: CheckEffects needs the composer: pass cctest.Composer when the handler wraps it")
 	}
-	before := a.Screen(screen, params)
+	before := a.Screen(screen, params, opts...)
 	out := perform()
 	if out.Status != "ok" || invalidates(out.Effects.Invalidate, screen, params) {
 		return out
@@ -32,7 +35,7 @@ func CheckEffects[R any](a *App, screen string, params Params, perform func() Ou
 	if reload {
 		return out
 	}
-	after := a.Screen(screen, params)
+	after := a.Screen(screen, params, opts...)
 	if !slices.Equal(keysOf(shown), after.Keys()) {
 		a.t.Errorf("cctest: after its effects, screen %q shows %v, but composed again it has %v: invalidate it", screen, keysOf(shown), after.Keys())
 		return out

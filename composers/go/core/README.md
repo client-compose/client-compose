@@ -428,7 +428,11 @@ func TestProfile(t *testing.T) {
   shows the screen, performs the action, applies its changes and updates as an app would, and
   composes the screen again: any island that differs fails the test. A change the action forgot,
   such as a count it didn't update, shows here rather than in an app.
-- Pass your own `http.Handler` instead of the composer if it wraps the composer in middleware.
+- Pass your own `http.Handler` instead of the composer if it wraps the composer in middleware, and
+  the composer with `cctest.Composer(composer)`, so the app declares its islands and
+  `CheckEffects` can apply changes.
+- `CheckEffects` takes request options after `perform`, for a screen behind a session:
+  `cctest.CheckEffects(app, "drafts", nil, perform, cctest.Header("Authorization", "Bearer "+token))`.
 
 See [`examples/todo/composer-go`](../../../examples/todo/composer-go) for a full example with tests.
 
