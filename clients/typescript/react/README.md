@@ -183,7 +183,10 @@ export default async function Page({ params }: { params: Promise<{ userId: strin
   Server Components can't be imported there, so declare them instead:
   `browserRegistry.declare(PageHeaderV1, TodoListV1)`. When what the server rendered is out of date (its screen was invalidated, or a
   change touched an island the browser can't change), `onStale` is called: call `router.refresh()`
-  there. Nothing else needs the server.
+  there. Nothing else needs the server. A page the router brings back from its cache (going back)
+  catches up with the actions taken since it was shown: its Client Component islands apply what
+  they missed, and `onStale` is called if one of them, or an island that's a Server Component,
+  missed something only the server can show.
 - The screen streams: islands still pending in its head render as their placeholders, each in its
   own `<Suspense>`, and stream into the page as they arrive. `progressive={false}` (or the
   config's `progressive: false`) waits for the whole screen instead.

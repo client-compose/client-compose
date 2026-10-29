@@ -43,11 +43,13 @@ interface RenderedIsland {
  * The provider's screens: cached responses, and the screens on show, which actions that change them
  * reload (spec §5.3).
  */
-class ScreenStore {
+export class ScreenStore {
   private readonly cache = new Map<string, CacheEntry>();
   private readonly mounted = new Set<MountedScreen>();
   private readonly pages = new Set<(batch: EffectsBatch) => void>();
   private readonly rendered = new Set<RenderedIsland>();
+  private readonly log: EffectsBatch[] = [];
+  private readonly seen = new WeakMap<object, number>();
 
   /** The cached response for a key, while it's fresh. */
   cached(key: string): ScreenResponse | undefined {
@@ -79,6 +81,27 @@ class ScreenStore {
   watchPages(apply: (batch: EffectsBatch) => void): () => void {
     this.pages.add(apply);
     return () => void this.pages.delete(apply);
+  }
+
+  /** Keep an action's effects, for the pages a router brings back later (`missed`). */
+  record(batch: EffectsBatch) {
+    this.log.push(batch);
+  }
+
+  /**
+   * The actions an island a Server Component rendered has missed, oldest first: every one since its
+   * props (`from`, as the server sent them) were first shown. Props shown for the first time have
+   * missed none. A page a router brings back from its cache (going back) shows the same props
+   * again, as they were, and catches up with these.
+   */
+  missed(from: object): EffectsBatch[] {
+    const since = this.seen.get(from);
+    if (since === undefined) {
+      this.seen.set(from, this.log.length);
+      return [];
+    }
+
+    return this.log.slice(since);
   }
 
   /** An island a Server Component rendered, which actions change. Returns what stops it. */
@@ -166,6 +189,7 @@ export function ClientComposeProvider(props: {
       if (changedOnServer || invalidatedOnServer) {
         config.onStale?.(effects);
       }
+      screens.record(batch);
       if (effects.navigate) {
         config.onNavigate?.(effects.navigate);
       }

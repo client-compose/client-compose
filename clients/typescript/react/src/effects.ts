@@ -2,14 +2,15 @@
 // props, and the pages a paged island holds.
 
 import { applyChanges } from "@client-compose/client";
-import type {
-  ActionEffects,
-  EntityPath,
-  HeldEntity,
-  IslandEntry,
-  PendingIsland,
-  ScreenHead,
-  ScreenResponse,
+import {
+  type ActionEffects,
+  type EntityPath,
+  type HeldEntity,
+  type IslandEntry,
+  type PendingIsland,
+  type ScreenHead,
+  screenRefMatches,
+  type ScreenResponse,
 } from "@client-compose/protocol";
 
 /** Where an island version's props hold entities: the registry knows, from its descriptors. */
@@ -131,6 +132,11 @@ export class EffectsBatch {
     const changed = changes.some((c) => held.some((h) => h.entity === c.entity && h.id === c.id));
 
     return changed || this.updateFor(screen, params, key) !== undefined;
+  }
+
+  /** Whether the action invalidated this screen. */
+  invalidates(screen: string, params: Record<string, string>): boolean {
+    return (this.effects.invalidate ?? []).some((ref) => screenRefMatches(ref, screen, params));
   }
 
   /** The update for an island of a screen with these exact params, if there is one. */
