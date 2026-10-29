@@ -121,3 +121,57 @@ export function applyChanges<Props>(
   // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
   return { props: current as Props, reload: out.reload };
 }
+
+/** An entity an island's props hold: which one, by its id. */
+export interface HeldEntity {
+  entity: string;
+  id: string;
+}
+
+/** Collects the entities along one path. */
+function collectAlong(
+  value: unknown,
+  path: EntityPath,
+  rest: readonly string[],
+  out: HeldEntity[],
+): void {
+  const [step, ...next] = rest;
+  if (step === undefined) {
+    const id = isObject(value) ? value[path.id] : undefined;
+    if (typeof id === "string") {
+      out.push({ entity: path.entity, id });
+    }
+
+    return;
+  }
+
+  if (step === "[]") {
+    for (const item of Array.isArray(value) ? value : []) {
+      collectAlong(item, path, next, out);
+    }
+
+    return;
+  }
+
+  if (!isObject(value)) {
+    return;
+  }
+
+  const keys = step === "{}" ? Object.keys(value) : [step];
+  for (const key of keys) {
+    collectAlong(value[key], path, next, out);
+  }
+}
+
+/**
+ * The entities an island's props hold, at the paths its descriptor says hold them: what an action's
+ * changes (spec §5.3) could change in it.
+ */
+export function heldEntities(props: unknown, paths: readonly EntityPath[]): HeldEntity[] {
+  const out: HeldEntity[] = [];
+  for (const path of paths) {
+    collectAlong(props, path, path.path, out);
+  }
+
+  return out;
+}

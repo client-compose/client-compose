@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { applyChanges, type EntityPath } from "@client-compose/protocol";
+import { applyChanges, type EntityPath, heldEntities } from "@client-compose/protocol";
 
 const todos: EntityPath = {
   path: ["todos", "[]"],
@@ -162,4 +162,21 @@ test("entities under maps, and props that are an entity themselves", () => {
     ],
   );
   assert.deepEqual(summary, { id: "me", left: 2 });
+});
+
+test("the entities an island holds, wherever its props hold them", () => {
+  const count: EntityPath = {
+    path: ["count"],
+    entity: "todo-count",
+    id: "id",
+    properties: ["id", "left"],
+  };
+  const held = heldEntities({ ...props(), count: { id: "me", left: 2 } }, [todos, count]);
+
+  assert.deepEqual(held, [
+    { entity: "todo", id: "1" },
+    { entity: "todo", id: "2" },
+    { entity: "todo-count", id: "me" },
+  ]);
+  assert.deepEqual(heldEntities({ heading: "Todos" }, [todos, count]), [], "none there");
 });
