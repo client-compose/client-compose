@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://client-compose.dev/schema/v0/entity-manifest.json",
+  "title": "Entity manifest",
+  "description": "A thing several islands may show, so actions can say what changed about it (spec §2.1, §5.3).",
+  "type": "object",
+  "required": ["entity", "id", "properties"],
+  "properties": {
+    "entity": { "type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$" },
+    "description": { "type": "string" },
+    "id": {
+      "description": "The property that identifies one: a string, unique within the entity.",
+      "type": "string"
+    },
+    "properties": {
+      "description": "Each property's JSON Schema, in the codegen subset. Islands show some of them.",
+      "type": "object",
+      "additionalProperties": { "type": "object" }
+    }
+  }
+}

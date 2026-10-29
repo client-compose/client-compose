@@ -225,6 +225,7 @@ proxy that keeps a session in an httpOnly cookie, are web-only.
 | TL-3 | **Compatibility lint.** Flags a change to a released version that breaks either side. |
 | TL-4 | **Standalone binaries.** Codegen without Node. |
 | TL-6 | **Codegen, strings.** Typed strings for each island and for the app, compatibility rules for them, and a check that the catalog has every string in the default language and nothing undeclared. |
+| TL-7 | **Codegen, entities.** Entity manifests to typed changes for every composer language, and for each island descriptor a map of where its entities sit in its props; a check that each marked object shows part of its entity, with the entity's schemas. |
 | TL-5 | **Conformance runner.** Runs the composer suite against any URL; client fixtures are plain JSON any language can load. |
 
 ## Ergonomics
@@ -332,6 +333,7 @@ there means islands whose props don't decode are skipped.
 | TL-1 props | ✅ | ✅ | ✅ | ✅ |
 | TL-2 actions | ✅ | ✅ | ✅ | ✅ |
 | TL-6 strings | — (the composer serves the catalog) | ✅ | ✅ | ✅ |
+| TL-7 entities | ✗ | ✗ | ✗ | ✗ |
 
 TL-3 to TL-5 are language-neutral and done.
 
