@@ -71,6 +71,7 @@ export class IslandRegistry<R> {
   private placeholders = new Map<string, IslandPlaceholder<R>>();
   private declaredStrings = new Map<string, StringParams>();
   private entityPaths = new Map<string, readonly EntityPath[]>();
+  private declared = new Map<string, Set<number>>();
   // Each entry's props with its `t`, made once: a screen streaming in plans again with each island
   // that arrives, and the islands already shown keep the props they were rendered with.
   private propsMade = new WeakMap<object, { plurals?: PluralRules; props: unknown }>();
@@ -122,6 +123,23 @@ export class IslandRegistry<R> {
     return this.add(islandOrType, versionOrRender, maybeRender);
   }
 
+  /**
+   * Declare islands the app renders somewhere else, such as on the server with React Server
+   * Components: the registry can't render them, but knows them. Actions say the app can draw them,
+   * so the composer sends their updates (spec §5.3), and their entities' changes apply to them.
+   * Declare only islands the app does render: a screen this registry renders skips them.
+   */
+  declare(...islands: IslandDescriptor<unknown, unknown>[]): this {
+    for (const island of islands) {
+      this.entityPaths.set(`${island.type}@${island.version}`, island.entities ?? []);
+      const versions = this.declared.get(island.type) ?? new Set<number>();
+      versions.add(island.version);
+      this.declared.set(island.type, versions);
+    }
+
+    return this;
+  }
+
   /** Where an island version's props hold entities (spec §2.1), from its registered descriptor. */
   entities(type: string, version: number): readonly EntityPath[] {
     return this.entityPaths.get(`${type}@${version}`) ?? [];
@@ -137,12 +155,15 @@ export class IslandRegistry<R> {
     return this;
   }
 
+  /** The islands the app can draw (spec §3): those registered here, and those declared. */
   capabilities(): Capabilities {
+    const all = new Map<string, Set<number>>();
+    for (const [type, versions] of [...this.renderers, ...this.declared]) {
+      all.set(type, new Set([...(all.get(type) ?? []), ...versions.keys()]));
+    }
+
     return Object.fromEntries(
-      [...this.renderers].map(([type, versions]) => [
-        type,
-        [...versions.keys()].sort((a, b) => a - b),
-      ]),
+      [...all].map(([type, versions]) => [type, [...versions].sort((a, b) => a - b)]),
     );
   }
 

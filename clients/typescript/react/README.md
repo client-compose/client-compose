@@ -178,8 +178,10 @@ export default async function Page({ params }: { params: Promise<{ userId: strin
   `{ next: { revalidate: 30 } }` work too.
 - To refresh, use your framework's mechanism (e.g. `router.refresh()`).
 - Actions' changes and updates reach the screen in the browser: Client Component islands apply them
-  themselves. Give the browser's `<ClientComposeProvider>` the same registry, which says where
-  islands hold entities. What only the server can show calls `onChanges` (an island that's a
+  themselves. The browser's `<ClientComposeProvider>` needs a registry that knows every
+  island, for where they hold entities and which islands actions can update. Islands that are
+  Server Components can't be imported there, so declare them instead:
+  `browserRegistry.declare(PageHeaderV1, TodoListV1)`. What only the server can show calls `onChanges` (an island that's a
   Server Component, or a change a Client Component island can't take); call `router.refresh()`
   there.
 - The screen streams: islands still pending in its head render as their placeholders, each in its
