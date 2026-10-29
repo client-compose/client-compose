@@ -108,9 +108,9 @@ var signedIn cc.Requirement = func(ctx context.Context, _ cc.Request) error {
 	return nil
 }
 
-// A screen for editing a recipe: 404 if there's no such recipe, 403 unless the viewer may edit it.
-editsRecipe := func(ctx context.Context, r cc.Request) error {
-	_, err := recipes.Editable(ctx, r.Params["recipeId"])
+// A screen for editing an article: 404 if there's no such article, 403 unless the viewer may edit it.
+editsArticle := func(ctx context.Context, r cc.Request) error {
+	_, err := articles.Editable(ctx, r.Params["articleId"])
 	return err
 }
 ```
@@ -246,9 +246,9 @@ own in an app strings manifest; the words are a catalog, one JSON file per langu
 {
   "app": { "loading": "Ładowanie" },
   "islands": {
-    "recipe-list@1": {
-      "heading": "Najnowsze przepisy",
-      "count": { "#1": "{count} przepis", "#few": "{count} przepisy", "#*": "{count} przepisów" }
+    "article-list@1": {
+      "heading": "Najnowsze artykuły",
+      "count": { "#1": "{count} artykuł", "#few": "{count} artykuły", "#*": "{count} artykułów" }
     }
   }
 }
@@ -278,7 +278,7 @@ the manifests.
 
 A screen's own words, such as its meta's title, are its screen strings: declared in a screen strings
 manifest, in the catalog under `screens`, and read in the request's language with the generated
-type: `CreatorScreenStringsFor(r).Title(name)` (or `r.ScreenStrings("creator")`). Actions whose
+type: `AuthorScreenStringsFor(r).Title(name)` (or `r.ScreenStrings("author")`). Actions whose
 results carry words read them the same way, from their `Call`: `SearchScreenStringsFor(call)`.
 
 In tests, `app.Strings("pl")` fetches the app strings, and an island's entry has its `Strings`.

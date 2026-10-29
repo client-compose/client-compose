@@ -190,16 +190,16 @@ export default async function Page({ params }: { params: Promise<{ userId: strin
   only needs the head, so the islands still stream:
 
   ```tsx
-  const openRecipe = cache((id: string) => streamScreen(config, "recipe", { recipeId: id }));
+  const openArticle = cache((id: string) => streamScreen(config, "article", { articleId: id }));
 
   export async function generateMetadata({ params }) {
-    const { head } = await openRecipe((await params).recipeId);
+    const { head } = await openArticle((await params).articleId);
     return { title: head.meta?.title, description: head.meta?.description };
   }
 
   export default async function Page({ params }) {
-    const { recipeId } = await params;
-    return <ComposedScreen config={config} screen="recipe" params={{ recipeId }} stream={openRecipe(recipeId)} />;
+    const { articleId } = await params;
+    return <ComposedScreen config={config} screen="article" params={{ articleId }} stream={openArticle(articleId)} />;
   }
   ```
 
@@ -217,13 +217,13 @@ export default async function Page({ params }: { params: Promise<{ userId: strin
   });
 
   export async function generateMetadata({ params }) {
-    const { head } = await composer.openScreen("recipe", await params);
+    const { head } = await composer.openScreen("article", await params);
     return { title: head.meta?.title };
   }
 
   export default async function Page({ params }) {
     const p = await params;
-    return <ComposedScreen config={config} screen="recipe" params={p} stream={composer.openScreen("recipe", p)} />;
+    return <ComposedScreen config={config} screen="article" params={p} stream={composer.openScreen("article", p)} />;
   }
   ```
 
@@ -237,13 +237,13 @@ Every word an app shows comes from the composer (spec §4.7), so copy changes, a
 ship, without a release. An island whose manifest declares strings gets them as `t`:
 
 ```tsx
-function RecipeList(props: IslandProps<typeof RecipeListV1>) {
-  return <h2>{props.t.heading}: {props.t.recipeCount({ count: props.total })}</h2>;
+function ArticleList(props: IslandProps<typeof ArticleListV1>) {
+  return <h2>{props.t.heading}: {props.t.articleCount({ count: props.total })}</h2>;
 }
-registry.registerComponent(RecipeListV1, RecipeList);
+registry.registerComponent(ArticleListV1, ArticleList);
 ```
 
-`IslandProps<typeof RecipeListV1>` is the island's props, with `t` when it declares strings.
+`IslandProps<typeof ArticleListV1>` is the island's props, with `t` when it declares strings.
 
 A sentence with a link in it stays whole for translators: fill the string's params with their own
 placeholders, and `richText` puts the nodes in (it has no hooks, so Server Components can use it):
@@ -470,8 +470,8 @@ expect(navigations).toEqual([{ screen: "feed" }]);
   ```
 
 To test with the words people will see, `catalogStrings(catalog)` reads a catalog file (codegen's
-`catalog`, e.g. `catalog/en.json`) as the composer would send it: `english.t(RecipeListV1)` for an
-island's `t`, `english.island(key, RecipeListV1, props)` for an island that carries its strings,
+`catalog`, e.g. `catalog/en.json`) as the composer would send it: `english.t(ArticleListV1)` for an
+island's `t`, `english.island(key, ArticleListV1, props)` for an island that carries its strings,
 `english.appStrings` for `<AppStringsProvider initial>`, and `english.stringsResponse` for the fake
 composer's `strings` handler. It's English, with English plural rules, unless you pass a language.
 

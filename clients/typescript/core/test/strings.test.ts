@@ -40,34 +40,34 @@ for (const c of stringCases()) {
 }
 
 test("an island's strings become its t: text, or functions of their params", () => {
-  type T = { heading: string; recipes: (values: { count: number }) => string; missing: string };
+  type T = { heading: string; articles: (values: { count: number }) => string; missing: string };
   const t = buildStrings<T>(
     {
       heading: [],
-      recipes: ["count"],
+      articles: ["count"],
       missing: [],
     },
-    { heading: "Latest recipes", recipes: { "#1": "{count} recipe", "#*": "{count} recipes" } },
+    { heading: "Latest articles", articles: { "#1": "{count} article", "#*": "{count} articles" } },
     rules.en,
   );
-  assert.equal(t.heading, "Latest recipes");
-  assert.equal(t.recipes({ count: 1 }), "1 recipe");
-  assert.equal(t.recipes({ count: 4 }), "4 recipes");
+  assert.equal(t.heading, "Latest articles");
+  assert.equal(t.articles({ count: 1 }), "1 article");
+  assert.equal(t.articles({ count: 4 }), "4 articles");
   assert.equal(t.missing, "", "a string the composer didn't send is empty");
 });
 
 test("plan gives an island that declares strings its t, and leaves others' props alone", () => {
-  const Recipes: IslandDescriptor<
+  const Articles: IslandDescriptor<
     { total: number },
     { heading: string; count: (v: { count: number }) => string }
   > = {
-    type: "recipes",
+    type: "articles",
     version: 1,
     strings: { heading: [], count: ["count"] },
   };
   const Plain: IslandDescriptor<{ name: string }> = { type: "plain", version: 1 };
   const registry = new IslandRegistry<string>()
-    .register(Recipes, (props) => `${props.t.heading}: ${props.t.count({ count: props.total })}`)
+    .register(Articles, (props) => `${props.t.heading}: ${props.t.count({ count: props.total })}`)
     .register(Plain, (props) => JSON.stringify(props));
   const response: ScreenResponse = {
     protocol: 0,
@@ -75,14 +75,14 @@ test("plan gives an island that declares strings its t, and leaves others' props
     plurals: { one: "i = 1 and v = 0", few: "v = 0 and i % 10 = 2..4 and i % 100 != 12..14" },
     islands: [
       {
-        key: "recipes",
-        type: "recipes",
+        key: "articles",
+        type: "articles",
         version: 1,
         status: "ok",
         props: { total: 3 },
         strings: {
-          heading: "Przepisy",
-          count: { "#few": "{count} przepisy", "#*": "{count} przepisów" },
+          heading: "Artykuły",
+          count: { "#few": "{count} artykuły", "#*": "{count} artykułów" },
         },
       },
       {
@@ -96,7 +96,7 @@ test("plan gives an island that declares strings its t, and leaves others' props
   };
   assert.deepEqual(
     plan(registry, response).map((island) => island.render()),
-    ["Przepisy: 3 przepisy", '{"name":"Ada"}'],
+    ["Artykuły: 3 artykuły", '{"name":"Ada"}'],
   );
 });
 

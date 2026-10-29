@@ -107,7 +107,7 @@ declares strings, and its renderer's props have them as `t`, in the screen's lan
 strings picking their words by its plural rules:
 
 ```ts
-registry.register(RecipeListV1, (props) => `${props.t.heading}: ${props.t.recipeCount({ count: props.total })}`);
+registry.register(ArticleListV1, (props) => `${props.t.heading}: ${props.t.articleCount({ count: props.total })}`);
 ```
 
 The app strings come from `POST {base}/strings`:

@@ -37,12 +37,12 @@ import {
 } from "../src/testing.ts";
 
 // As codegen generates them.
-interface RecipesStrings {
+interface ArticlesStrings {
   heading: string;
   count: (values: { count: number }) => string;
 }
-const RecipesV1: IslandDescriptor<{ total: number }, RecipesStrings> = {
-  type: "recipes",
+const ArticlesV1: IslandDescriptor<{ total: number }, ArticlesStrings> = {
+  type: "articles",
   version: 1,
   strings: { heading: [], count: ["count"] },
 };
@@ -64,21 +64,21 @@ const polish = {
     many: "v = 0 and i != 1 and i % 10 = 0..1 or v = 0 and i % 10 = 5..9 or v = 0 and i % 100 = 12..14",
   },
 };
-const recipeWords = {
-  heading: "Przepisy",
+const articleWords = {
+  heading: "Artykuły",
   count: {
-    "#1": "{count} przepis",
-    "#few": "{count} przepisy",
-    "#*": "{count} przepisów",
+    "#1": "{count} artykuł",
+    "#few": "{count} artykuły",
+    "#*": "{count} artykułów",
   },
 };
 
 /** Every props object each island was rendered with, in order. */
-const rendered = { recipes: [] as object[], header: [] as object[] };
+const rendered = { articles: [] as object[], header: [] as object[] };
 
 const registry = new ReactIslandRegistry()
-  .registerComponent(RecipesV1, (props) => {
-    rendered.recipes.push(props);
+  .registerComponent(ArticlesV1, (props) => {
+    rendered.articles.push(props);
     return createElement(
       "h2",
       null,
@@ -113,10 +113,10 @@ function screenOf(config: ClientComposeConfig) {
 
 test("an island's component gets its strings as t, counted by the screen's plural rules", async () => {
   for (const [total, text] of [
-    [1, "1 przepis"],
-    [3, "3 przepisy"],
-    [5, "5 przepisów"],
-    [22, "22 przepisy"],
+    [1, "1 artykuł"],
+    [3, "3 artykuły"],
+    [5, "5 artykułów"],
+    [22, "22 artykuły"],
   ] as const) {
     const { config } = createTestConfig({
       registry,
@@ -125,7 +125,7 @@ test("an island's component gets its strings as t, counted by the screen's plura
           home: () =>
             screen(
               "home",
-              [island("recipes", RecipesV1, { total }, { strings: recipeWords })],
+              [island("articles", ArticlesV1, { total }, { strings: articleWords })],
               {},
               polish,
             ),
@@ -133,7 +133,7 @@ test("an island's component gets its strings as t, counted by the screen's plura
       },
     });
     const view = await mount(screenOf(config));
-    assert.equal(view.html(), `<h2>Przepisy: ${text}</h2>`);
+    assert.equal(view.html(), `<h2>Artykuły: ${text}</h2>`);
     await view.unmount();
   }
 });
@@ -146,7 +146,7 @@ test("strings the composer didn't send are empty, and islands without strings ge
         home: () =>
           screen("home", [
             island("header", HeaderV1, { name: "Ada" }),
-            island("recipes", RecipesV1, { total: 2 }),
+            island("articles", ArticlesV1, { total: 2 }),
           ]),
       },
     },
@@ -162,21 +162,21 @@ test("an island shown while the screen streams keeps the t it was rendered with"
   const home = streamedScreen(
     "home",
     [
-      island("recipes", RecipesV1, { total: 2 }, { strings: recipeWords }),
+      island("articles", ArticlesV1, { total: 2 }, { strings: articleWords }),
       pending("header", HeaderV1),
     ],
     {},
     polish,
   );
   const { config } = createTestConfig({ registry, handlers: { screens: { home: () => home } } });
-  rendered.recipes.length = 0;
+  rendered.articles.length = 0;
   const view = await mount(screenOf(config));
   home.send(island("header", HeaderV1, { name: "Ada" }));
   home.end();
   await settle();
-  assert.equal(view.html(), "<h2>Przepisy: 2 przepisy</h2><h1>Ada</h1>");
+  assert.equal(view.html(), "<h2>Artykuły: 2 artykuły</h2><h1>Ada</h1>");
   // The same t every time, so hooks that depend on it don't run again.
-  const ts = rendered.recipes.map((props) => Reflect.get(props, "t"));
+  const ts = rendered.articles.map((props) => Reflect.get(props, "t"));
   assert.ok(ts.length >= 2);
   assert.ok(ts.every((t) => t === ts[0]));
   await view.unmount();

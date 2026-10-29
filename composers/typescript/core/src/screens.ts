@@ -35,7 +35,7 @@ export interface LayoutContext<Ctx> extends LoadContext {
   load: <T>(key: string, fn: (signal: AbortSignal) => Promise<T> | T) => Promise<T>;
   /**
    * A screen's own strings (spec §4.7), in the client's language, typed by their generated
-   * descriptor: `lc.strings(CreatorScreenStrings).title({ creator: name })`. Empty without a
+   * descriptor: `lc.strings(AuthorScreenStrings).title({ author: name })`. Empty without a
    * catalog.
    */
   strings: <S>(descriptor: ScreenStringsDescriptor<S>) => S;

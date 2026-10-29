@@ -74,7 +74,7 @@ it takes, never its words. The words are the composer's, in every language it su
 "strings": {
   "heading": {},
   "charactersLeft": { "params": ["count"] },
-  "recipes": { "params": ["count"], "counted": true }
+  "articles": { "params": ["count"], "counted": true }
 }
 ```
 
@@ -89,7 +89,7 @@ whether it's counted, is a new version (`codegen compat` checks this).
 
 ### 2.1 Entities
 
-Several islands often show the same thing: a todo in a list and in its detail, a recipe's title on
+Several islands often show the same thing: a todo in a list and in its detail, an article's title on
 three screens. An **entity** names that thing, so an action can say what changed about it once
 (§5.3), and every island showing it follows. Each entity is described by a manifest
 (`schema/entity-manifest.schema.json`):
@@ -201,7 +201,7 @@ together, the stream is the screen, in this shape (`schema/screen-response.schem
       "error": { "code": "upstream_timeout", "retryable": true }
     }
   ],
-  "meta": { "title": "Ada Lovelace", "description": "Recipes by Ada" },
+  "meta": { "title": "Ada Lovelace", "description": "Articles by Ada" },
   "cache": { "maxAge": 30 }
 }
 ```
@@ -246,7 +246,7 @@ For each island the composer wants to place:
 - A screen definition MAY mark an island `required`. If a required island cannot be
   placed or fails, the whole screen fails with a non-2xx response and body
   `{ "protocol": 0, "error": { "code": "...", "message": "..." } }`.
-- If the screen exists but what its params refer to doesn't (a deleted recipe, a mistyped
+- If the screen exists but what its params refer to doesn't (a deleted article, a mistyped
   id), the composer responds `404` with error code `not_found`, distinct from
   `unknown_screen`. Clients show their own not-found UI.
 - If the screen needs a signed-in user and there isn't one, the composer responds `401`
@@ -352,9 +352,9 @@ objects, one per line, each ending in a newline (`schema/screen-stream-line.sche
 line's `kind` says what it is:
 
 ```jsonl
-{"kind":"head","protocol":0,"screen":"recipe","meta":{"title":"Charred broccoli"},"islands":[{"key":"recipe","type":"recipe","version":1,"status":"ok","props":{…}},{"key":"more","type":"recipe-list","version":1,"status":"pending"},{"key":"comments","type":"comment-list","version":1,"status":"pending"}]}
+{"kind":"head","protocol":0,"screen":"article","meta":{"title":"Composing screens"},"islands":[{"key":"article","type":"article","version":1,"status":"ok","props":{…}},{"key":"more","type":"article-list","version":1,"status":"pending"},{"key":"comments","type":"comment-list","version":1,"status":"pending"}]}
 {"kind":"island","island":{"key":"comments","type":"comment-list","version":1,"status":"ok","props":{…},"next":"c2"}}
-{"kind":"island","island":{"key":"more","type":"recipe-list","version":1,"status":"error","error":{"code":"timeout","retryable":true}}}
+{"kind":"island","island":{"key":"more","type":"article-list","version":1,"status":"error","error":{"code":"timeout","retryable":true}}}
 {"kind":"end"}
 ```
 
@@ -397,7 +397,7 @@ can't reach the composer at all (e.g. "Couldn't connect", in a few languages).
 **Island strings.** An island entry carries the strings its manifest declares (§2) as `strings`,
 in the language the composer answered in: the client's `locale`, the nearest it has (`pl-PL`, then
 `pl`), or its default. An island's strings depend only on its type, version and language, so
-clients MAY cache them by those. Anything that depends on the request (a recipe's title, "Nothing
+clients MAY cache them by those. Anything that depends on the request (an article's title, "Nothing
 matches “pasta”") is data, in props.
 
 **App strings.** Words that belong to no island (a placeholder's "Loading", "Something went
@@ -416,7 +416,7 @@ and the composer answers `200` (`schema/strings-response.schema.json`):
   "protocol": 0,
   "locale": "pl",
   "plurals": { "one": "i = 1 and v = 0", "few": "v = 0 and i % 10 = 2..4 and i % 100 != 12..14", "many": "…" },
-  "strings": { "loading": "Ładowanie", "recipes": { "#1": "{count} przepis", "#few": "{count} przepisy", "#*": "{count} przepisów" } }
+  "strings": { "loading": "Ładowanie", "articles": { "#1": "{count} artykuł", "#few": "{count} artykuły", "#*": "{count} artykułów" } }
 }
 ```
 
@@ -429,7 +429,7 @@ Clients SHOULD fetch app strings at launch and keep them, refreshing them in the
 later launches and when the language changes.
 
 **Screen strings.** Some words are the composer's own: a screen's meta (§4), such as its title,
-says things like "Recipes by {creator}" in the client's language, but no island shows them. A
+says things like "Articles by {author}" in the client's language, but no island shows them. A
 composer declares each screen's own strings in a screen strings manifest
 (`schema/screen-strings-manifest.schema.json`), by screen id (or a name a few screens share), in the same format, and its code reads them in the
 language it answers in, for a screen or an action whose result carries words. They are never sent
@@ -460,8 +460,8 @@ conformance checks they agree with CLDR (`conformance/client/plural-cases.json`)
 ```json
 {
   "app": { "loading": "Ładowanie" },
-  "islands": { "recipe-list@1": { "heading": "Najnowsze przepisy" } },
-  "screens": { "creator": { "title": "Przepisy od {creator}" } }
+  "islands": { "article-list@1": { "heading": "Najnowsze artykuły" } },
+  "screens": { "author": { "title": "Artykuły od {author}" } }
 }
 ```
 

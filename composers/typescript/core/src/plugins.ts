@@ -23,9 +23,9 @@ export interface RequirementRequest {
  *       if (!ctx.viewer) throw new UnauthenticatedError();
  *     };
  *
- *     // 404 for a recipe that doesn't exist, 403 unless the viewer may edit it.
- *     const editsRecipe: Requirement<Ctx> = async (ctx, { params }) => {
- *       await recipes.editable(ctx.viewer, params.recipeId);
+ *     // 404 for an article that doesn't exist, 403 unless the viewer may edit it.
+ *     const editsArticle: Requirement<Ctx> = async (ctx, { params }) => {
+ *       await articles.editable(ctx.viewer, params.articleId);
  *     };
  */
 export type Requirement<Ctx> = (ctx: Ctx, request: RequirementRequest) => void | Promise<void>;

@@ -43,7 +43,7 @@ export interface ActionContext<Ctx> extends LoadContext {
   load: <T>(key: string, fn: (signal: AbortSignal) => Promise<T> | T) => Promise<T>;
   /**
    * Screen strings (spec §4.7) in the client's language, typed by their generated descriptor, for
-   * words an action's result carries: `ac.strings(SearchScreenStrings).creators`.
+   * words an action's result carries: `ac.strings(SearchScreenStrings).authors`.
    */
   strings: <S>(descriptor: ScreenStringsDescriptor<S>) => S;
 }

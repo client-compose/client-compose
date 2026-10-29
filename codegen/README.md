@@ -117,7 +117,7 @@ strings by key, with the params each fills in, and `counted` for one whose words
 "strings": {
   "heading": { "description": "Over the list." },
   "greeting": { "params": ["name"] },
-  "recipeCount": { "params": ["count"], "counted": true }
+  "articleCount": { "params": ["count"], "counted": true }
 }
 ```
 
@@ -127,7 +127,7 @@ whose members are the strings: text for those without params, functions for thos
 
 | Stack      | Generated | Used as |
 | ---------- | --------- | ------- |
-| TypeScript | `RecipeListV1Strings`, and the descriptor's `strings`; `AppStrings` | `props.t.recipeCount({ count })` in a registered component; `useAppStrings(AppStrings).retry` |
+| TypeScript | `ArticleListV1Strings`, and the descriptor's `strings`; `AppStrings` | `props.t.articleCount({ count })` in a registered component; `useAppStrings(AppStrings).retry` |
 
 The words are a catalog, one file per language, e.g. `strings/pl.json`:
 
@@ -135,20 +135,20 @@ The words are a catalog, one file per language, e.g. `strings/pl.json`:
 {
   "app": { "retry": "Spróbuj ponownie" },
   "islands": {
-    "recipe-list@1": {
+    "article-list@1": {
       "heading": "Najnowsze",
       "greeting": "Cześć {name}",
-      "recipeCount": { "#0": "Brak przepisów", "#one": "{count} przepis", "#few": "{count} przepisy", "#*": "{count} przepisów" }
+      "articleCount": { "#0": "Brak artykułów", "#one": "{count} artykuł", "#few": "{count} artykuły", "#*": "{count} artykułów" }
     }
   }
 }
 ```
 
 A screen's own strings are words its composer uses itself, such as its meta's title. The screen
-strings manifest declares them by screen id, `{ "screens": { "creator": { "title": { "params":
-["creator"] } } } }`, and the catalog has them under `screens`. Go gets
-`CreatorScreenStringsFor(r).Title(name)`; TypeScript, `lc.strings(CreatorScreenStrings).title({
-creator })`.
+strings manifest declares them by screen id, `{ "screens": { "author": { "title": { "params":
+["author"] } } } }`, and the catalog has them under `screens`. Go gets
+`AuthorScreenStringsFor(r).Title(name)`; TypeScript, `lc.strings(AuthorScreenStrings).title({
+author })`.
 
 A counted string's variants are keyed `#<number>`, `#<category>` (CLDR's `zero`, `one`, `two`,
 `few`, `many`, `other`) or `#*`, chosen in that order. `strings` checks the catalog against the

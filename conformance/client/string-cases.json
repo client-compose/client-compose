@@ -4,9 +4,9 @@
     {
       "name": "text without params is itself",
       "language": "en",
-      "template": "Latest recipes",
+      "template": "Latest articles",
       "values": {},
-      "expect": "Latest recipes"
+      "expect": "Latest articles"
     },
     {
       "name": "params fill their slots",
@@ -29,67 +29,67 @@
       "name": "an exact number comes first",
       "language": "pl",
       "template": {
-        "#0": "No recipes",
-        "#1": "{count} przepis",
-        "#few": "{count} przepisy",
-        "#*": "{count} przepisów"
+        "#0": "No articles",
+        "#1": "{count} artykuł",
+        "#few": "{count} artykuły",
+        "#*": "{count} artykułów"
       },
       "values": {
         "count": 0
       },
-      "expect": "No recipes"
+      "expect": "No articles"
     },
     {
       "name": "then the language's category: few",
       "language": "pl",
       "template": {
-        "#0": "No recipes",
-        "#1": "{count} przepis",
-        "#few": "{count} przepisy",
-        "#*": "{count} przepisów"
+        "#0": "No articles",
+        "#1": "{count} artykuł",
+        "#few": "{count} artykuły",
+        "#*": "{count} artykułów"
       },
       "values": {
         "count": 23
       },
-      "expect": "23 przepisy"
+      "expect": "23 artykuły"
     },
     {
       "name": "a category without a variant falls to #*",
       "language": "pl",
       "template": {
-        "#0": "No recipes",
-        "#1": "{count} przepis",
-        "#few": "{count} przepisy",
-        "#*": "{count} przepisów"
+        "#0": "No articles",
+        "#1": "{count} artykuł",
+        "#few": "{count} artykuły",
+        "#*": "{count} artykułów"
       },
       "values": {
         "count": 5
       },
-      "expect": "5 przepisów"
+      "expect": "5 artykułów"
     },
     {
       "name": "one, in English, by its exact number",
       "language": "en",
       "template": {
-        "#1": "{count} recipe",
-        "#*": "{count} recipes"
+        "#1": "{count} article",
+        "#*": "{count} articles"
       },
       "values": {
         "count": 1
       },
-      "expect": "1 recipe"
+      "expect": "1 article"
     },
     {
       "name": "anything else, #*",
       "language": "en",
       "template": {
-        "#1": "{count} recipe",
-        "#*": "{count} recipes"
+        "#1": "{count} article",
+        "#*": "{count} articles"
       },
       "values": {
         "count": 7
       },
-      "expect": "7 recipes"
+      "expect": "7 articles"
     },
     {
       "name": "a category variant (one) in a language whose 'one' isn't only 1",
@@ -108,11 +108,11 @@
       "name": "without a count, variants fall to #*",
       "language": "en",
       "template": {
-        "#1": "{count} recipe",
-        "#*": "{count} recipes"
+        "#1": "{count} article",
+        "#*": "{count} articles"
       },
       "values": {},
-      "expect": "{count} recipes"
+      "expect": "{count} articles"
     }
   ]
 }

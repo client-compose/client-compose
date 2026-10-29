@@ -179,7 +179,7 @@ timeout. If the posts service is down, the header still renders, and the posts i
 an error the app can hide or retry. Mark an island `required` when the screen means nothing without
 it.
 
-**Changes are typed too.** Actions (`follow-user`, `rename-recipe`) are described like islands, with
+**Changes are typed too.** Actions (`follow-user`, `rename-article`) are described like islands, with
 input, result and the errors callers should handle, so every platform gets generated types. An
 action's response says which screens it changed, and screens on display reload by themselves.
 

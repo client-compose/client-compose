@@ -126,22 +126,22 @@ func TestLayoutAuthErrors(t *testing.T) {
 
 func TestAnActionReadsScreenStringsInTheClientsLanguage(t *testing.T) {
 	catalog := Catalog{
-		"en": {Screens: map[string]Strings{"search": {"creators": {Text: "Creators"}}}},
-		"pl": {Screens: map[string]Strings{"search": {"creators": {Text: "Twórcy"}}}},
+		"en": {Screens: map[string]Strings{"search": {"authors": {Text: "Authors"}}}},
+		"pl": {Screens: map[string]Strings{"search": {"authors": {Text: "Autorzy"}}}},
 	}
 	c := New(Config{
 		Actions: []Action{DefineAction(func(_ context.Context, call Call, _ ca.ConformanceV1Input) (ca.ConformanceV1Result, Effects, error) {
-			return ca.ConformanceV1Result{Echo: call.ScreenStrings("search").Text("creators")}, Effects{}, nil
+			return ca.ConformanceV1Result{Echo: call.ScreenStrings("search").Text("authors")}, Effects{}, nil
 		})},
 		Strings: &StringsConfig{Catalog: catalog},
 	})
 	body := `{"protocol":0,"action":"conformance","version":1,"client":{"platform":"web","appVersion":"1","locale":"pl-PL"},"islands":{},"input":{"outcome":"ok","echo":"x"}}`
 	rec := httptest.NewRecorder()
 	c.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/actions/conformance", strings.NewReader(body)))
-	if !strings.Contains(rec.Body.String(), `"echo":"Twórcy"`) {
+	if !strings.Contains(rec.Body.String(), `"echo":"Autorzy"`) {
 		t.Fatalf("got %s", rec.Body.String())
 	}
-	if got := (Call{}).ScreenStrings("search").Text("creators"); got != "" {
+	if got := (Call{}).ScreenStrings("search").Text("authors"); got != "" {
 		t.Fatalf("without a catalog: %q", got)
 	}
 }

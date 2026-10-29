@@ -32,7 +32,7 @@ type Call struct {
 }
 
 // ScreenStrings returns screen strings (spec §4.7) in the client's language, for words an action's
-// result carries. Generated screen strings types read them: SearchScreenStringsFor(call).Creators().
+// result carries. Generated screen strings types read them: SearchScreenStringsFor(call).Authors().
 func (c Call) ScreenStrings(screen string) StringsTable { return c.words.table(screen) }
 
 // ScreenRef refers to screens: those with this id whose params include all of Params (spec §5.3).
