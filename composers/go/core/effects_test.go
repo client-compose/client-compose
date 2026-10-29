@@ -2,8 +2,10 @@ package clientcompose_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 
@@ -196,6 +198,10 @@ func TestAnUpdateIsTheIslandResolvedAgainInAFreshScope(t *testing.T) {
 	update := out.Effects.Updated[0]
 	if update.Screen != "list" || update.Island.Key != "items" || update.Island.Version != 1 || update.Island.Status != "ok" {
 		t.Fatalf("update: %+v", update)
+	}
+	// The screen's params are an object on the wire, even when it has none (spec §5.3).
+	if raw, _ := json.Marshal(update); !strings.Contains(string(raw), `"params":{}`) {
+		t.Fatalf("update on the wire: %s", raw)
 	}
 	// The action loaded the list before adding to it; the update has the item it added.
 	if got := fmt.Sprint(update.Island.Props); got != "map[items:[map[done:false id:1 name:Milk]]]" {
