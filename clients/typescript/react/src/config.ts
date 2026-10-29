@@ -69,16 +69,17 @@ export interface ClientComposeConfig extends ScreenConfig {
   onNavigate?: (ref: ScreenRef) => void;
   /**
    * An action changed these screens (spec §5.3). Screens shown with `useScreen`/`<ComposedScreen>`
-   * reload by themselves; use this for anything else, e.g. `router.refresh()` to re-render Server
-   * Components.
+   * reload by themselves; use this for anything else. For a page Server Components rendered, use
+   * `onStale`.
    */
   onInvalidate?: (refs: ScreenRef[]) => void;
   /**
-   * An action changed entities or islands (spec §5.3: its `changes` and `update`) that only the
-   * server can show: islands that are Server Components, or a Client Component island a Server
-   * Component rendered, when it can't take them. Re-render them, e.g. with `router.refresh()`.
-   * Everything else applies them by itself: screens shown with `useScreen`/`<ComposedScreen>`, and
-   * Client Component islands rendered by `@client-compose/react/server`.
+   * What Server Components rendered is out of date after an action (spec §5.3), and only the server
+   * can render it again: its screen was invalidated, or a change or update touched an island the
+   * browser can't change (one that's a Server Component, or a change a Client Component island
+   * can't take). Render it again, e.g. with `router.refresh()`. Everything else applies an action's
+   * effects by itself: screens shown with `useScreen`/`<ComposedScreen>`, and Client Component
+   * islands rendered by `@client-compose/react/server`.
    */
-  onChanges?: (effects: ActionEffects) => void;
+  onStale?: (effects: ActionEffects) => void;
 }

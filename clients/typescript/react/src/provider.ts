@@ -30,6 +30,15 @@ interface MountedScreen {
   apply: (batch: EffectsBatch) => void;
 }
 
+/** An island a Server Component rendered, as the browser keeps track of it. */
+interface RenderedIsland {
+  /** Its screen and the screen's params: an invalidation of it means the server must render again. */
+  screen: string;
+  params: Record<string, string>;
+  /** Applies an action's changes and updates, saying whether it could (false: only the server can). */
+  apply: (batch: EffectsBatch) => boolean;
+}
+
 /**
  * The provider's screens: cached responses, and the screens on show, which actions that change them
  * reload (spec §5.3).
@@ -38,7 +47,7 @@ class ScreenStore {
   private readonly cache = new Map<string, CacheEntry>();
   private readonly mounted = new Set<MountedScreen>();
   private readonly pages = new Set<(batch: EffectsBatch) => void>();
-  private readonly rendered = new Set<(batch: EffectsBatch) => boolean>();
+  private readonly rendered = new Set<RenderedIsland>();
 
   /** The cached response for a key, while it's fresh. */
   cached(key: string): ScreenResponse | undefined {
@@ -72,13 +81,10 @@ class ScreenStore {
     return () => void this.pages.delete(apply);
   }
 
-  /**
-   * An island a Server Component rendered: it applies an action's changes and updates, saying
-   * whether it could (false: only the server can show them). Returns what stops it.
-   */
-  watchRendered(apply: (batch: EffectsBatch) => boolean): () => void {
-    this.rendered.add(apply);
-    return () => void this.rendered.delete(apply);
+  /** An island a Server Component rendered, which actions change. Returns what stops it. */
+  watchRendered(island: RenderedIsland): () => void {
+    this.rendered.add(island);
+    return () => void this.rendered.delete(island);
   }
 
   /**
@@ -103,15 +109,18 @@ class ScreenStore {
     }
 
     let server = false;
-    for (const apply of this.rendered) {
-      server = !apply(batch) || server;
+    for (const island of this.rendered) {
+      server = !island.apply(batch) || server;
     }
 
     return server;
   }
 
-  /** Drop cached responses the refs match, and reload the screens on show that they match. */
-  invalidate(refs: ScreenRef[]) {
+  /**
+   * Drop cached responses the refs match, and reload the screens on show that they match. Returns
+   * whether they match a screen Server Components rendered, which only the server can render again.
+   */
+  invalidate(refs: ScreenRef[]): boolean {
     const matches = (screen: string, params: Record<string, string>) =>
       refs.some((ref) => screenRefMatches(ref, screen, params));
     for (const [key, entry] of this.cache) {
@@ -124,6 +133,8 @@ class ScreenStore {
         m.reload();
       }
     }
+
+    return [...this.rendered].some((island) => matches(island.screen, island.params));
   }
 }
 
@@ -146,13 +157,14 @@ export function ClientComposeProvider(props: {
       const batch = new EffectsBatch(effects, (type, version) =>
         config.registry.entities(type, version),
       );
-      if (batch.touchesScreens && screens.change(batch)) {
-        config.onChanges?.(effects);
-      }
+      const changedOnServer = batch.touchesScreens && screens.change(batch);
       const refs = effects.invalidate ?? [];
+      const invalidatedOnServer = refs.length > 0 && screens.invalidate(refs);
       if (refs.length) {
-        screens.invalidate(refs);
         config.onInvalidate?.(refs);
+      }
+      if (changedOnServer || invalidatedOnServer) {
+        config.onStale?.(effects);
       }
       if (effects.navigate) {
         config.onNavigate?.(effects.navigate);

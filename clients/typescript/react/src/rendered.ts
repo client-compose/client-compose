@@ -69,34 +69,38 @@ export function ClientIsland(props: ClientIslandProps): ReactNode {
       return undefined;
     }
 
-    return screens.watchRendered((batch) => {
-      const { from, strings } = current.current;
-      const entry: IslandEntry = {
-        key: scope.key,
-        type: scope.type,
-        version: scope.version,
-        status: "ok",
-        props: current.current.props,
-        ...(strings && { strings }),
-      };
-      const next = batch.island(entry, scope.screen, scope.params);
-      if (next === entry) {
+    return screens.watchRendered({
+      screen: scope.screen,
+      params: scope.params,
+      apply: (batch) => {
+        const { from, strings } = current.current;
+        const entry: IslandEntry = {
+          key: scope.key,
+          type: scope.type,
+          version: scope.version,
+          status: "ok",
+          props: current.current.props,
+          ...(strings && { strings }),
+        };
+        const next = batch.island(entry, scope.screen, scope.params);
+        if (next === entry) {
+          return true;
+        }
+
+        // Deleted where it can't be removed, or an update this component can't show.
+        if (next?.status !== "ok" || next.version !== scope.version) {
+          return false;
+        }
+
+        current.current = {
+          from,
+          props: next.props,
+          strings: next.strings,
+        };
+        setChanged(current.current);
+
         return true;
-      }
-
-      // Deleted where it can't be removed, or an update this component can't show.
-      if (next?.status !== "ok" || next.version !== scope.version) {
-        return false;
-      }
-
-      current.current = {
-        from,
-        props: next.props,
-        strings: next.strings,
-      };
-      setChanged(current.current);
-
-      return true;
+      },
     });
   }, [screens, scope]);
 
@@ -118,7 +122,7 @@ export interface ServerIslandProps {
 /**
  * An island the browser can't change, such as a Server Component: it shows what the server
  * rendered, and when an action's changes or updates touch it, asks for the server to render it
- * again (the config's `onChanges`).
+ * again (the config's `onStale`).
  */
 export function ServerIsland(props: ServerIslandProps): ReactNode {
   const { holds } = props;
@@ -130,9 +134,11 @@ export function ServerIsland(props: ServerIslandProps): ReactNode {
       return undefined;
     }
 
-    return screens.watchRendered(
-      (batch) => !batch.touches(holds, scope.screen, scope.params, scope.key),
-    );
+    return screens.watchRendered({
+      screen: scope.screen,
+      params: scope.params,
+      apply: (batch) => !batch.touches(holds, scope.screen, scope.params, scope.key),
+    });
   }, [screens, scope, holds]);
 
   return props.children;
