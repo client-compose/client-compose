@@ -1,5 +1,13 @@
 # @client-compose/react
 
+## 0.16.1
+
+### Patch Changes
+
+- [#66](https://github.com/client-compose/client-compose/pull/66) [`1c430ed`](https://github.com/client-compose/client-compose/commit/1c430ed3234f774a4f7de96e973bbd785793f73d) Thanks [@LewisYearsley](https://github.com/LewisYearsley)! - `registry.declare(...descriptors)` names islands the app renders somewhere else, such as Server Components rendered on the server: actions say the app can draw them, and changes to their entities apply to them, though the registry can't render them.
+- Updated dependencies [[`1c430ed`](https://github.com/client-compose/client-compose/commit/1c430ed3234f774a4f7de96e973bbd785793f73d)]:
+  - @client-compose/client@0.16.0
+
 ## 0.16.0
 
 ### Minor Changes
