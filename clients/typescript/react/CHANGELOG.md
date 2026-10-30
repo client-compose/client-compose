@@ -1,5 +1,12 @@
 # @client-compose/react
 
+## 0.18.1
+
+### Patch Changes
+
+- [#72](https://github.com/client-compose/client-compose/pull/72) [`d014fa4`](https://github.com/client-compose/client-compose/commit/d014fa485a72a559f0026e3dde4e54572a571c0c) Thanks [@LewisYearsley](https://github.com/LewisYearsley)! - Documents previewing islands alone, in each of their states, in Storybook with the test kit
+  (`createTestConfig` and `catalogStrings`), as the todo example's Next.js app now does.
+
 ## 0.18.0
 
 ### Minor Changes
