@@ -482,6 +482,53 @@ composer's `strings` handler. It's English, with English plural rules, unless yo
 
 The fake composer itself (no React) is `@client-compose/client/testing`.
 
+### Previewing islands
+
+Islands take everything they show as props, words included, so each one can be previewed alone, in
+each of its states, with a tool such as [Storybook](https://storybook.js.org). The test kit renders
+them there as it does in tests: wrap stories in the provider with a `createTestConfig` config, the
+app strings from `catalogStrings`, and any providers of your app's own. A story whose island
+performs actions says how the fake composer answers them, so failures can be previewed too.
+
+```tsx
+// .storybook/composer.tsx
+const english = catalogStrings(catalog);
+
+export function withComposer(handlers: FakeGatewayHandlers = {}): Decorator {
+  const { config } = createTestConfig({ registry, handlers });
+
+  return function WithComposer(Story) {
+    return (
+      <ClientComposeProvider config={config}>
+        <AppStringsProvider initial={english.appStrings}>
+          <Story />
+        </AppStringsProvider>
+      </ClientComposeProvider>
+    );
+  };
+}
+
+// src/islands/NewTodo.stories.tsx
+export const TooLong: Story = {
+  args: { maxLength: 80, t: english.t(NewTodoV1) },
+  decorators: [
+    withComposer({
+      actions: {
+        "add-todo": () => actionError(AddTodoV1, { code: "title_too_long", details: { maxLength: 80 } }),
+      },
+    }),
+  ],
+};
+```
+
+Add `withComposer()` to every story in your preview's `decorators`, and a story's own decorator, with
+its handlers, wraps inside it. The same works in React Native's Storybook, with the client set to the
+app's platform (`createTestConfig({ registry, client: { platform: "ios", … } })`). A paged island is
+previewed from a screen, as it's tested: render `pagedIsland`'s `element`, with its `handlers`.
+
+The [todo example's Next.js app](https://github.com/client-compose/client-compose/tree/main/examples/todo/next)
+has a Storybook set up this way: `pnpm storybook` in `examples/todo/next`.
+
 ## Behaviour
 
 - **Per-island crash isolation.** Each island renders inside its own error boundary and its own

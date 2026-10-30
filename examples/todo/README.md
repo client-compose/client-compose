@@ -17,7 +17,7 @@ composer-ts/                  the composer in TypeScript, on Node
 tests/                        what every composer must do, checked over HTTP
 
 web/                          React in the browser (Vite)
-next/                         Next.js, rendered with Server Components
+next/                         Next.js, rendered with Server Components (and a Storybook of its islands)
 react-native/                 React Native (Expo)
 ```
 
