@@ -24,6 +24,7 @@ export default defineConfig([
     "**/node_modules/",
     "**/dist/",
     "**/.next/",
+    "**/storybook-static/",
     ".build/",
     "build/",
     "**/*.generated.ts",

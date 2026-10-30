@@ -1,6 +1,7 @@
 # Generated, formatted by their own tools, laid out by hand, or not code.
 **/dist/
 **/.next/
+**/storybook-static/
 **/node_modules/
 .build/
 build/

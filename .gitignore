@@ -9,3 +9,4 @@ build/
 
 # Android SDK location, per machine
 local.properties
+storybook-static/
