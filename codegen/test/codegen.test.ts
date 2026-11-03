@@ -132,7 +132,10 @@ const rejects = (props: unknown, message: RegExp) =>
 test("rejects unsupported schema features rather than guessing", () => {
   rejects({ type: "object", properties: { a: { oneOf: [] } } }, /props\.a: "type" must be one of/);
   rejects({ type: "object", properties: { a: { type: ["string", "null"] } } }, /type unions/);
-  rejects({ type: "object", properties: { a: { $ref: "#/x" } } }, /"type" must be one of/);
+  rejects(
+    { type: "object", properties: { a: { $ref: "#/x" } } },
+    /"\$ref" names a shared type, in kebab-case/,
+  );
   rejects(
     { type: "object", properties: { a: { type: "string", format: "date-time" } } },
     /format "date-time"/,

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://client-compose.dev/schema/v0/entity-manifest.json",
   "title": "Entity manifest",
-  "description": "A thing several islands may show, so actions can say what changed about it (spec §2.1, §5.3).",
+  "description": "A thing several islands may show, so actions can say what changed about it (spec §2.1, §5.3). Any schema in it may be a shared type, `{ \"$ref\": \"<type>\" }` (spec §2.2).",
   "type": "object",
   "required": ["entity", "id", "properties"],
   "properties": {

@@ -125,6 +125,18 @@ export interface EntityPath {
   properties: string[];
 }
 
+/**
+ * A type several manifests share (spec §2.2): an object or a string enum, named once and used by
+ * `{ "$ref": "<name>" }` wherever a schema can be. Generated once, under its own name.
+ */
+export interface SharedType {
+  /** kebab-case, e.g. "image". */
+  name: string;
+  description?: string;
+  source: string;
+  def: ObjectDef | EnumDef;
+}
+
 export class ManifestError extends Error {}
 
 type Schema = Record<string, unknown>;
@@ -152,6 +164,8 @@ const ALLOWED: Record<string, Set<string>> = {
   boolean: new Set(["type"]),
 };
 const ISLAND_TYPE = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
+/** A reference to a shared type: `$ref` and annotations only. */
+const REF = "$ref";
 const ERROR_CODE = /^[a-z][a-z0-9]*(_[a-z0-9]+)*$/;
 
 function readJsonFiles<T>(dir: string, parse: (raw: unknown, source: string) => T): T[] {
@@ -171,8 +185,156 @@ function readJsonFiles<T>(dir: string, parse: (raw: unknown, source: string) => 
     });
 }
 
-export function loadManifests(dir: string): Island[] {
-  const islands = readJsonFiles(dir, parseManifest);
+/** A shared type's manifest, as read: lowered on first use, so types may refer to each other. */
+interface TypeManifest {
+  name: string;
+  description?: string;
+  source: string;
+  schema: Schema;
+}
+
+export function parseTypeManifest(raw: unknown, source: string): TypeManifest {
+  const at = (msg: string) => new ManifestError(`${source}: ${msg}`);
+  if (!isSchema(raw)) {
+    throw at("manifest must be an object");
+  }
+  for (const key of Object.keys(raw)) {
+    if (!["type", "description", "schema", "$schema", "$comment"].includes(key)) {
+      throw at(`unknown field ${JSON.stringify(key)}`);
+    }
+  }
+  const { type, schema } = raw;
+  if (typeof type !== "string" || !ISLAND_TYPE.test(type)) {
+    throw at(`"type" must be kebab-case, got ${JSON.stringify(type)}`);
+  }
+  if (!isSchema(schema)) {
+    throw at(`"schema" must be a JSON Schema: an object, or a string enum`);
+  }
+  return {
+    name: type,
+    description: str(raw.description),
+    source,
+    schema,
+  };
+}
+
+/**
+ * The shared types manifests can refer to (spec §2.2), by name. Each is lowered the first time it's
+ * used, or by `all()`, so a type may refer to another; one that refers back to itself is an error.
+ */
+export class SharedTypes {
+  /** No shared types: a config without a types directory. */
+  static readonly none = new SharedTypes([]);
+
+  private readonly manifests = new Map<string, TypeManifest>();
+  private readonly lowered = new Map<string, SharedType>();
+  private readonly lowering = new Set<string>();
+
+  constructor(manifests: TypeManifest[]) {
+    for (const m of manifests) {
+      const other = this.manifests.get(m.name);
+      if (other) {
+        throw new ManifestError(`${m.source}: type ${m.name} is also defined in ${other.source}`);
+      }
+      this.manifests.set(m.name, m);
+    }
+  }
+
+  /** The shared type `name`, lowered; `at` words the error when there's no such type. */
+  get(name: string, at: (msg: string) => ManifestError): SharedType {
+    const done = this.lowered.get(name);
+    if (done) {
+      return done;
+    }
+    const m = this.manifests.get(name);
+    if (!m) {
+      throw at(
+        `no shared type ${JSON.stringify(name)}${this.manifests.size === 0 ? ' (set "types" in the codegen config)' : ""}`,
+      );
+    }
+    if (this.lowering.has(name)) {
+      throw at(`type ${name} refers to itself (types can't be recursive)`);
+    }
+    this.lowering.add(name);
+    const err = (p: string, msg: string) => new ManifestError(`${m.source}: schema${p}: ${msg}`);
+    const type: SharedType = {
+      name,
+      description: m.description,
+      source: m.source,
+      def: this.lowerSchema(m, err),
+    };
+    this.lowering.delete(name);
+    this.lowered.set(name, type);
+    return type;
+  }
+
+  /** Every shared type, lowered, by name. */
+  all(): SharedType[] {
+    return [...this.manifests.keys()]
+      .sort()
+      .map((name) => this.get(name, (msg) => new ManifestError(msg)));
+  }
+
+  /**
+   * A schema with every reference replaced by its type's schema, all the way down: what composers
+   * validate against and what's compared, so a reference means exactly what writing it out would.
+   */
+  expand(schema: unknown): unknown {
+    if (Array.isArray(schema)) {
+      return schema.map((s) => this.expand(s));
+    }
+    if (!isSchema(schema)) {
+      return schema;
+    }
+    const name = schema[REF];
+    if (typeof name === "string") {
+      const m = this.manifests.get(name);
+      // Lowering has already rejected unknown and recursive types.
+      return m ? this.expand(m.schema) : schema;
+    }
+    return Object.fromEntries(Object.entries(schema).map(([k, v]) => [k, this.expand(v)]));
+  }
+
+  private lowerSchema(
+    m: TypeManifest,
+    err: (p: string, msg: string) => ManifestError,
+  ): ObjectDef | EnumDef {
+    const path = [pascal(m.name)];
+    if (m.schema.type === "object") {
+      if (m.schema.additionalProperties !== undefined) {
+        throw err(
+          "",
+          `a shared type can't use additionalProperties: share its values' type instead`,
+        );
+      }
+      const def = lowerObject(m.schema, path, err, "", this);
+      return { ...def, description: def.description ?? m.description };
+    }
+    if (m.schema.type === "string" && m.schema.enum !== undefined) {
+      const holder: ObjectDef = {
+        kind: "object",
+        path,
+        fields: [],
+        children: [],
+        schemas: {},
+      };
+      const type = lowerType(m.schema, "", err, () => path, holder, this);
+      if (type.kind !== "enum") {
+        throw err("", "unreachable");
+      }
+      return { ...type.def, description: type.def.description ?? m.description };
+    }
+    throw err("", `a shared type is an object or a string enum`);
+  }
+}
+
+/** The shared types in a directory (spec §2.2). */
+export function loadTypes(dir: string): SharedTypes {
+  return new SharedTypes(readJsonFiles(dir, parseTypeManifest));
+}
+
+export function loadManifests(dir: string, types: SharedTypes = SharedTypes.none): Island[] {
+  const islands = readJsonFiles(dir, (raw, source) => parseManifest(raw, source, types));
 
   const seen = new Map<string, string>();
   for (const i of islands) {
@@ -185,7 +347,11 @@ export function loadManifests(dir: string): Island[] {
   return islands.sort((a, b) => a.type.localeCompare(b.type) || a.version - b.version);
 }
 
-export function parseManifest(raw: unknown, source: string): Island {
+export function parseManifest(
+  raw: unknown,
+  source: string,
+  types: SharedTypes = SharedTypes.none,
+): Island {
   const at = (msg: string) => new ManifestError(`${source}: ${msg}`);
   if (!isSchema(raw)) {
     throw at("manifest must be an object");
@@ -210,13 +376,13 @@ export function parseManifest(raw: unknown, source: string): Island {
     version,
     description: str(raw.description),
     source,
-    props: lowerObject(props, path, (p, msg) => at(`props${p}: ${msg}`), ""),
+    props: lowerObject(props, path, (p, msg) => at(`props${p}: ${msg}`), "", types),
     strings: parseStrings(raw.strings, (msg) => at(`strings${msg}`)),
   };
 }
 
-export function loadEntities(dir: string): Entity[] {
-  const entities = readJsonFiles(dir, parseEntityManifest);
+export function loadEntities(dir: string, types: SharedTypes = SharedTypes.none): Entity[] {
+  const entities = readJsonFiles(dir, (raw, source) => parseEntityManifest(raw, source, types));
   const seen = new Map<string, string>();
   for (const e of entities) {
     if (seen.has(e.entity)) {
@@ -230,7 +396,11 @@ export function loadEntities(dir: string): Entity[] {
   return entities.sort((a, b) => a.entity.localeCompare(b.entity));
 }
 
-export function parseEntityManifest(raw: unknown, source: string): Entity {
+export function parseEntityManifest(
+  raw: unknown,
+  source: string,
+  types: SharedTypes = SharedTypes.none,
+): Entity {
   const at = (msg: string) => new ManifestError(`${source}: ${msg}`);
   if (!isSchema(raw)) {
     throw at("manifest must be an object");
@@ -255,6 +425,7 @@ export function parseEntityManifest(raw: unknown, source: string): Entity {
     [pascal(entity), "Entity"],
     (p, msg) => at(`properties${p}: ${msg}`),
     "",
+    types,
   );
 
   return {
@@ -444,8 +615,8 @@ function parseStrings(raw: unknown, at: (msg: string) => ManifestError): StringD
   });
 }
 
-export function loadActionManifests(dir: string): Action[] {
-  const actions = readJsonFiles(dir, parseActionManifest);
+export function loadActionManifests(dir: string, types: SharedTypes = SharedTypes.none): Action[] {
+  const actions = readJsonFiles(dir, (raw, source) => parseActionManifest(raw, source, types));
   const seen = new Map<string, string>();
   for (const a of actions) {
     const id = `${a.action}@${a.version}`;
@@ -457,7 +628,11 @@ export function loadActionManifests(dir: string): Action[] {
   return actions.sort((a, b) => a.action.localeCompare(b.action) || a.version - b.version);
 }
 
-export function parseActionManifest(raw: unknown, source: string): Action {
+export function parseActionManifest(
+  raw: unknown,
+  source: string,
+  types: SharedTypes = SharedTypes.none,
+): Action {
   const at = (msg: string) => new ManifestError(`${source}: ${msg}`);
   if (!isSchema(raw)) {
     throw at("manifest must be an object");
@@ -494,7 +669,7 @@ export function parseActionManifest(raw: unknown, source: string): Action {
     if (schema.additionalProperties !== undefined) {
       throw at(`"${field}" can't use additionalProperties`);
     }
-    return lowerObject(schema, path, (p, msg) => at(`${field}${p}: ${msg}`), "");
+    return lowerObject(schema, path, (p, msg) => at(`${field}${p}: ${msg}`), "", types);
   };
 
   const input = object("input", m.input, [...base, "Input"]);
@@ -536,9 +711,15 @@ export function parseActionManifest(raw: unknown, source: string): Action {
     input,
     result,
     errors,
-    // `input` is an object schema (checked above), so it stays one.
-    inputSchema: isSchema(m.input) ? stripObject(m.input) : {},
+    // `input` is an object schema (checked above), so it stays one, with its references written out.
+    inputSchema: isSchema(m.input) ? stripObject(expandObject(types, m.input)) : {},
   };
+}
+
+/** An object schema with its references written out: still an object schema. */
+function expandObject(types: SharedTypes, schema: Schema): Schema {
+  const expanded = types.expand(schema);
+  return isSchema(expanded) ? expanded : schema;
 }
 
 function stripAnnotations(schema: unknown): unknown {
@@ -569,6 +750,7 @@ function lowerObject(
   path: string[],
   err: (p: string, msg: string) => ManifestError,
   ptr: string,
+  types: SharedTypes,
 ): ObjectDef {
   const properties = schema.properties ?? {};
   if (!isSchema(properties)) {
@@ -597,9 +779,7 @@ function lowerObject(
     children: [],
     description: str(schema.description),
     entity: str(schema.entity),
-    schemas: Object.fromEntries(
-      Object.entries(properties).map(([name, s]) => [name, stripAnnotations(s)]),
-    ),
+    schemas: {},
   };
   const childNames = new Set<string>();
   const nameChild = (name: string, p: string) => {
@@ -621,6 +801,7 @@ function lowerObject(
       err,
       (s, suffix) => nameChild(pascal(str(s.title) ?? jsonName) + (s.title ? "" : suffix), p),
       def,
+      types,
     );
     def.fields.push({
       jsonName,
@@ -629,6 +810,10 @@ function lowerObject(
       description: str(propSchema.description),
     });
   }
+  // After lowering, which rejects unknown and recursive references, so they can be written out.
+  def.schemas = Object.fromEntries(
+    Object.entries(properties).map(([name, s]) => [name, stripAnnotations(types.expand(s))]),
+  );
   return def;
 }
 
@@ -638,15 +823,19 @@ function lowerType(
   err: (p: string, msg: string) => ManifestError,
   childPath: (schema: Schema, suffix: string) => string[],
   parent: ObjectDef,
+  types: SharedTypes,
 ): TypeRef {
   if (!isSchema(schema)) {
     throw err(ptr, "schema must be an object");
+  }
+  if (REF in schema) {
+    return lowerRef(schema, ptr, err, types);
   }
   const type = schema.type;
   if (typeof type !== "string" || !(type in ALLOWED)) {
     throw err(
       ptr,
-      `"type" must be one of ${Object.keys(ALLOWED).join(", ")} (type unions and $ref aren't supported)`,
+      `"type" must be one of ${Object.keys(ALLOWED).join(", ")}, or "$ref" a shared type (type unions aren't supported)`,
     );
   }
   for (const key of Object.keys(schema)) {
@@ -700,7 +889,7 @@ function lowerType(
       }
       return {
         kind: "array",
-        items: lowerType(schema.items, `${ptr}[]`, err, (s) => childPath(s, "Item"), parent),
+        items: lowerType(schema.items, `${ptr}[]`, err, (s) => childPath(s, "Item"), parent, types),
       };
     case "object": {
       const ap = schema.additionalProperties;
@@ -713,15 +902,43 @@ function lowerType(
         }
         return {
           kind: "map",
-          values: lowerType(ap, `${ptr}{}`, err, (s) => childPath(s, "Value"), parent),
+          values: lowerType(ap, `${ptr}{}`, err, (s) => childPath(s, "Value"), parent, types),
         };
       }
-      const def = lowerObject(schema, childPath(schema, ""), err, ptr);
+      const def = lowerObject(schema, childPath(schema, ""), err, ptr, types);
       parent.children.push(def);
       return { kind: "object", def };
     }
   }
   throw err(ptr, "unreachable");
+}
+
+/**
+ * `{ "$ref": "<name>" }`: the shared type of that name, which is generated once, so it's not a
+ * child of the object that uses it. Annotations may sit beside it; nothing else may.
+ */
+function lowerRef(
+  schema: Schema,
+  ptr: string,
+  err: (p: string, msg: string) => ManifestError,
+  types: SharedTypes,
+): TypeRef {
+  for (const key of Object.keys(schema)) {
+    if (key !== REF && !ANNOTATIONS.has(key)) {
+      throw err(
+        ptr,
+        `"$ref" stands for its type: only annotations may sit beside it, not "${key}"`,
+      );
+    }
+  }
+  const name = schema[REF];
+  if (typeof name !== "string" || !ISLAND_TYPE.test(name)) {
+    throw err(ptr, `"$ref" names a shared type, in kebab-case, got ${JSON.stringify(name)}`);
+  }
+  const type = types.get(name, (msg) => err(ptr, msg));
+  return type.def.kind === "enum"
+    ? { kind: "enum", def: type.def }
+    : { kind: "object", def: type.def };
 }
 
 const str = (v: unknown): string | undefined => (typeof v === "string" ? v : undefined);

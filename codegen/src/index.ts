@@ -10,6 +10,7 @@ import {
   loadActionManifestsAtRef,
   loadAppStringsAtRef,
   loadManifestsAtRef,
+  loadTypesAtRef,
 } from "./compat.ts";
 import {
   type Action,
@@ -22,8 +23,11 @@ import {
   loadEntities,
   loadManifests,
   loadScreenStrings,
+  loadTypes,
   ManifestError,
   type ObjectDef,
+  type SharedType,
+  SharedTypes,
 } from "./manifest.ts";
 import { generateGo, type GoOptions } from "./targets/go.ts";
 import { generateTypeScript, type TypeScriptOptions } from "./targets/typescript.ts";
@@ -36,6 +40,7 @@ export {
   loadActionManifestsAtRef,
   loadAppStringsAtRef,
   loadManifestsAtRef,
+  loadTypesAtRef,
 } from "./compat.ts";
 export {
   checkEntities,
@@ -45,12 +50,16 @@ export {
   loadEntities,
   loadManifests,
   loadScreenStrings,
+  loadTypes,
   ManifestError,
   parseActionManifest,
   parseAppStrings,
   parseEntityManifest,
   parseManifest,
   parseScreenStrings,
+  parseTypeManifest,
+  type SharedType,
+  SharedTypes,
 } from "./manifest.ts";
 export { generateGo, generateTypeScript };
 export { type CatalogIssue, catalogLocales, checkCatalog } from "./catalog.ts";
@@ -64,6 +73,11 @@ type OneOrMany<T> = T | T[];
 export interface CodegenConfig {
   /** Directory of island manifests. Optional when the config only generates actions. */
   manifests?: string;
+  /**
+   * Directory of shared types (spec §2.2): objects and enums several manifests use, by
+   * `{ "$ref": "<name>" }`. Generated once each, for every target.
+   */
+  types?: string;
   /** Directory of action manifests (spec §5). Generated for every target. */
   actions?: string;
   /**
@@ -104,6 +118,7 @@ function manifestsDirOf(configPath: string): {
   config: CodegenConfig;
   base: string;
   manifestsDir?: string;
+  typesDir?: string;
   actionsDir?: string;
   entitiesDir?: string;
   appStringsFile?: string;
@@ -129,6 +144,7 @@ function manifestsDirOf(configPath: string): {
     config,
     base,
     manifestsDir: dir(config.manifests),
+    typesDir: dir(config.types),
     actionsDir: dir(config.actions),
     entitiesDir: dir(config.entities),
     appStringsFile: dir(config.appStrings),
@@ -139,12 +155,13 @@ function manifestsDirOf(configPath: string): {
 
 /** Checks the config's strings catalog against its manifests (spec §4.7). */
 export function checkStrings(configPath: string): CatalogIssue[] {
-  const { config, manifestsDir, appStringsFile, screenStringsFile, catalogDir } =
+  const { config, manifestsDir, typesDir, appStringsFile, screenStringsFile, catalogDir } =
     manifestsDirOf(configPath);
   if (catalogDir === undefined) {
     throw new ManifestError(`${configPath}: set "catalog", the strings catalog's directory`);
   }
-  const islands = manifestsDir ? loadManifests(manifestsDir) : [];
+  const types = typesDir ? loadTypes(typesDir) : SharedTypes.none;
+  const islands = manifestsDir ? loadManifests(manifestsDir, types) : [];
   const app = appStringsFile ? loadAppStrings(appStringsFile) : undefined;
   const screens = screenStringsFile ? loadScreenStrings(screenStringsFile).screens : [];
   return checkCatalog(catalogDir, config.defaultLocale ?? "en", islands, app, screens);
@@ -156,26 +173,35 @@ export function checkStrings(configPath: string): CatalogIssue[] {
  */
 export function checkCompat(
   configPath: string,
-  against: { ref: string } | { dir: string; actionsDir?: string },
+  against: { ref: string } | { dir: string; actionsDir?: string; typesDir?: string },
 ): CompatIssue[] {
-  const { manifestsDir, actionsDir, appStringsFile } = manifestsDirOf(configPath);
-  const head = manifestsDir ? loadManifests(manifestsDir) : [];
-  const headActions = actionsDir ? loadActionManifests(actionsDir) : [];
+  const { manifestsDir, typesDir, actionsDir, appStringsFile } = manifestsDirOf(configPath);
+  // Shared types are compared where they're used: each island and action, with its own rules.
+  const types = typesDir ? loadTypes(typesDir) : SharedTypes.none;
+  const head = manifestsDir ? loadManifests(manifestsDir, types) : [];
+  const headActions = actionsDir ? loadActionManifests(actionsDir, types) : [];
   const headApp = appStringsFile ? loadAppStrings(appStringsFile) : undefined;
   if ("dir" in against) {
-    const baseActions = against.actionsDir ? loadActionManifests(against.actionsDir) : [];
+    const baseTypes = against.typesDir ? loadTypes(against.typesDir) : SharedTypes.none;
+    const baseActions = against.actionsDir
+      ? loadActionManifests(against.actionsDir, baseTypes)
+      : [];
     return [
-      ...compareIslands(loadManifests(against.dir), head),
+      ...compareIslands(loadManifests(against.dir, baseTypes), head),
       ...compareActions(baseActions, headActions),
     ];
   }
   const issues: CompatIssue[] = [];
+  const baseTypes = typesDir
+    ? loadTypesAtRef(typesDir, against.ref)
+    : { types: SharedTypes.none, issues: [] };
+  issues.push(...baseTypes.issues);
   if (manifestsDir) {
-    const base = loadManifestsAtRef(manifestsDir, against.ref);
+    const base = loadManifestsAtRef(manifestsDir, against.ref, baseTypes.types);
     issues.push(...base.issues, ...compareIslands(base.islands, head));
   }
   if (actionsDir) {
-    const baseActions = loadActionManifestsAtRef(actionsDir, against.ref);
+    const baseActions = loadActionManifestsAtRef(actionsDir, against.ref, baseTypes.types);
     issues.push(...baseActions.issues, ...compareActions(baseActions.actions, headActions));
   }
   if (appStringsFile) {
@@ -185,21 +211,32 @@ export function checkCompat(
 }
 
 export function generate(configPath: string): GeneratedFile[] {
-  const { config, base, manifestsDir, actionsDir, entitiesDir, appStringsFile, screenStringsFile } =
-    manifestsDirOf(configPath);
-  const islands = manifestsDir ? loadManifests(manifestsDir) : [];
-  const actions = actionsDir ? loadActionManifests(actionsDir) : [];
-  const entities = entitiesDir ? loadEntities(entitiesDir) : [];
+  const {
+    config,
+    base,
+    manifestsDir,
+    typesDir,
+    actionsDir,
+    entitiesDir,
+    appStringsFile,
+    screenStringsFile,
+  } = manifestsDirOf(configPath);
+  const types = typesDir ? loadTypes(typesDir) : SharedTypes.none;
+  const shared = types.all();
+  const islands = manifestsDir ? loadManifests(manifestsDir, types) : [];
+  const actions = actionsDir ? loadActionManifests(actionsDir, types) : [];
+  const entities = entitiesDir ? loadEntities(entitiesDir, types) : [];
   checkEntities(islands, entities);
   const app: AppStrings | undefined = appStringsFile ? loadAppStrings(appStringsFile) : undefined;
   const screens = screenStringsFile ? loadScreenStrings(screenStringsFile).screens : [];
-  checkFlatNames(islands, actions);
+  checkFlatNames(islands, actions, shared);
 
   // Must not depend on the working directory, so `--check` agrees wherever codegen ran.
   const header = [
     "Code generated by client-compose codegen. DO NOT EDIT.",
     [
       manifestsDir && `Manifests: ${relative(base, manifestsDir) || "."}`,
+      typesDir && `types: ${relative(base, typesDir) || "."}`,
       actionsDir && `actions: ${relative(base, actionsDir) || "."}`,
       entitiesDir && `entities: ${relative(base, entitiesDir) || "."}`,
       appStringsFile && `app strings: ${relative(base, appStringsFile)}`,
@@ -229,13 +266,14 @@ export function generate(configPath: string): GeneratedFile[] {
         actions,
         screens,
         entities,
+        shared,
       ),
     });
   }
   for (const t of list(typescript)) {
     files.push({
       path: resolve(base, t.out),
-      contents: generateTypeScript(islands, header, t, actions, app, screens, entities),
+      contents: generateTypeScript(islands, header, t, actions, app, screens, entities, shared),
     });
   }
   if (files.length === 0) {
@@ -264,7 +302,7 @@ function required<T extends object>(opts: T, key: keyof T & string, target: stri
 }
 
 /** Go and TypeScript put every type in one namespace, so nested names must not collide. */
-function checkFlatNames(islands: Island[], actions: Action[]): void {
+function checkFlatNames(islands: Island[], actions: Action[], types: SharedType[]): void {
   const seen = new Map<string, string>();
   const visit = (def: ObjectDef | EnumDef, owner: string) => {
     const name = def.path.join("");
@@ -280,6 +318,10 @@ function checkFlatNames(islands: Island[], actions: Action[]): void {
       }
     }
   };
+  // Shared types first: a manifest that refers to one doesn't generate it again.
+  for (const type of types) {
+    visit(type.def, `type ${type.name}`);
+  }
   for (const island of islands) {
     visit(island.props, `${island.type}@${island.version}`);
   }

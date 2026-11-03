@@ -1,5 +1,6 @@
 {
   "manifests": "islands",
+  "types": "types",
   "actions": "actions",
   "entities": "entities",
   "appStrings": "app-strings.json",

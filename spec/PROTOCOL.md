@@ -55,7 +55,7 @@ Manifests live somewhere every team can see (e.g. a shared repo; see
 ```
 
 `props` uses the small JSON Schema subset that `codegen/` supports (see `codegen/README.md`),
-so that every language maps it the same way.
+so that every language maps it the same way. A schema in it MAY use a shared type (§2.2).
 
 Rules:
 
@@ -136,6 +136,40 @@ An island's props mark each object that shows one with `entity`:
 - Marking is part of the island's version: marking an object, or unmarking it, is a new version.
 
 Entities are optional. An island with none is updated as a whole (§5.3), or with its screen.
+
+### 2.2 Shared types
+
+Several manifests often hold the same shape: an image on a card and at the top of a page, a status
+an action sets and a list shows. A **shared type** defines it once, as a manifest
+(`schema/type-manifest.schema.json`) whose `schema` is an object or a string enum, in the same
+schema subset as props:
+
+```json
+{
+  "type": "image",
+  "description": "A picture.",
+  "schema": {
+    "type": "object",
+    "required": ["url"],
+    "properties": {
+      "url": { "type": "string", "format": "uri" },
+      "width": { "type": "integer" }
+    }
+  }
+}
+```
+
+Any schema in an island, action, entity or other shared type MAY use it by name, with annotations
+beside it and nothing else: `"cover": { "$ref": "image", "description": "Shown at the top." }`.
+
+- `type` is kebab-case, unique among shared types, and never changes meaning. A type MAY refer to
+  another, but not to itself, however indirectly.
+- A reference means exactly what writing the type's schema in its place would: payloads, validation
+  (§5.1) and the rules for each island and action version are the same either way. So a shared type
+  isn't versioned on its own: a change to it is a change to every island and action that uses it,
+  allowed only where it's allowed in each (`codegen compat` checks this).
+- Shared types are a convenience for those who write manifests and the code generated from them.
+  Nothing on the wire names them, and a composer or client MAY treat every reference as written out.
 
 ---
 

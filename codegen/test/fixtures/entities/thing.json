@@ -5,7 +5,8 @@
   "properties": {
     "id": { "type": "string" },
     "name": { "type": "string" },
-    "visibility": { "type": "string", "enum": ["public", "private"] },
+    "visibility": { "$ref": "visibility" },
+    "cover": { "$ref": "image", "description": "Its picture, if it has one." },
     "owner": {
       "type": "object",
       "title": "Owner",

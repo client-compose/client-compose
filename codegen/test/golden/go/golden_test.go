@@ -51,7 +51,7 @@ func TestDefineActionWithGeneratedTypes(t *testing.T) {
 		if in.Name == "taken" {
 			return RenameThingV1Result{}, cc.Effects{}, RenameThingV1NameTaken{Suggestions: []string{"taken-2"}}
 		}
-		if in.Visibility != nil && *in.Visibility == RenameThingV1InputVisibilityPrivate {
+		if in.Visibility != nil && *in.Visibility == VisibilityPrivate {
 			return RenameThingV1Result{}, cc.Effects{}, RenameThingV1Locked{}
 		}
 		ref := cc.ScreenRef{Screen: "thing", Params: map[string]string{"thingId": in.ThingID}}

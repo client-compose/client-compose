@@ -1,0 +1,5 @@
+{
+  "type": "visibility",
+  "description": "Who sees a thing.",
+  "schema": { "type": "string", "enum": ["public", "private"] }
+}

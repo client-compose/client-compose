@@ -8,6 +8,7 @@ import {
   type ObjectDef,
   pascal,
   type ScreenStringsDef,
+  type SharedType,
   type StringDef,
   type TypeRef,
 } from "../manifest.ts";
@@ -29,6 +30,7 @@ export function generateTypeScript(
   app?: AppStrings,
   screens: ScreenStringsDef[] = [],
   entities: Entity[] = [],
+  types: SharedType[] = [],
 ): string {
   const imports = [
     ...(entities.length ? ["EntityDescriptor"] : []),
@@ -231,6 +233,14 @@ export function generateTypeScript(
     out.push(
       `export const ${name}: ScreenStringsDescriptor<${name}> = { screen: ${JSON.stringify(s.screen)}, strings: ${paramsOf(s.strings)} };`,
     );
+  }
+  // Shared types (spec §2.2): generated once, and used wherever a manifest refers to one.
+  for (const type of types) {
+    if (type.def.kind === "enum") {
+      emitEnum(type.def);
+    } else {
+      emitObject(type.def);
+    }
   }
   for (const entity of entities) {
     const name = flat(entity.def.path);

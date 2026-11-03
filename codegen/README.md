@@ -56,6 +56,9 @@ config may also have only `actions`.
 For entities (spec §2.1), add `"entities": "entities"`, a directory of entity manifests. See
 [Entities](#entities).
 
+For types several manifests share (spec §2.2), add `"types": "types"`, a directory of type
+manifests. See [Shared types](#shared-types).
+
 For strings (spec §4.7), add `"appStrings": "app-strings.json"` (the app strings manifest),
 `"screenStrings": "screen-strings.json"` (each screen's own strings, for Go and TypeScript composers),
 `"catalog": "strings"` (the directory of `<locale>.json` files the composer serves) and, if it isn't
@@ -103,6 +106,30 @@ treats marking or unmarking an object as a breaking change.
 | ---------- | --------- | ------- |
 | Go         | `TodoEntity`, every property but the id, each optional; `IslandEntities()` on islands that hold entities | `cc.Set("3", TodoEntity{Done: &done})`, `cc.Delete[TodoEntity]("3")` |
 | TypeScript | `TodoEntity` and its descriptor; `entities` on island descriptors | `changed(TodoEntity, "3", { done: true })`, `deleted(TodoEntity, "3")`; clients apply changes with the descriptors' `entities` |
+
+## Shared types
+
+When several islands, actions or entities hold the same shape (an image, a person's badge, a
+status), define it once and refer to it. Each is a manifest in the `types` directory: an object, or
+a string enum, in the same schema subset as everything else. A type may refer to another, but not
+to itself.
+
+```json
+// types/image.json
+{ "type": "image", "description": "A picture.", "schema": { "type": "object", "required": ["url"], "properties": { "url": { "type": "string", "format": "uri" }, "width": { "type": "integer" } } } }
+
+// anywhere a schema can be: an island's props, an action's input, result or error details, an
+// entity's properties, or another shared type
+"cover": { "$ref": "image", "description": "Shown at the top." }
+```
+
+Only annotations (`description`, `title`, `$comment`, `examples`) may sit beside `$ref`. Each type
+is generated once, under its own name (`Image`, with nested types like `ImageFocus`), and every
+reference uses it, so one helper or component can take it wherever it appears. Everywhere a schema
+is embedded or compared (action input schemas for composers to validate against, entity checks),
+references are written out, so a reference means exactly what writing the type in place would.
+`compat` judges a change to a shared type in every island and action that uses it, by their rules:
+adding a value to a shared enum is breaking wherever it's used.
 
 Codegen generates Go and TypeScript. Swift and Kotlin targets were removed with their clients, and
 need a maintainer to come back.
@@ -175,13 +202,16 @@ error, so a manifest can never mean different things in different languages.
 | `object` with `additionalProperties`     | `map[string]T`    | `Record<string, T>` |
 | not in `required`                        | pointer, or nil slice/map; `omitempty` | `prop?:`   |
 
+A shared type (`{ "$ref": "image" }`) becomes its own named type: see [Shared types](#shared-types).
+
 Also allowed: `description` (becomes doc comments), `title` (names a nested type), `$comment`,
-`examples`. Not supported: `$ref`, `oneOf`/`anyOf`/`allOf`, type unions, `null`, `pattern`,
+`examples`. Not supported: `$ref` to anything but a shared type's name, `oneOf`/`anyOf`/`allOf`, type unions, `null`, `pattern`,
 `minimum` and other validation keywords, formats other than `uri`, `int32` and `int64`.
 
 **Naming.** Nested types are named after their property (`author` → `Author`), or after
 `title` if set. Array items without a title get an `Item` suffix and map values a `Value` suffix.
-Go and TypeScript flatten them (`PostGridV1Post`). Property names are camelCased (Go: PascalCased with standard
+Go and TypeScript flatten them (`PostGridV1Post`). A shared type is named after itself
+(`image` → `Image`), and its name can't be one another manifest generates. Property names are camelCased (Go: PascalCased with standard
 initialisms, e.g. `avatarUrl` → `AvatarURL`), with the original JSON key preserved.
 
 ## Compatibility rules for manifests
