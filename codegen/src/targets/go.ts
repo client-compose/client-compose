@@ -1,9 +1,9 @@
 import { spawnSync } from "node:child_process";
 
+import { emit, type Model, type Role, type Target } from "../emit.ts";
 import {
   type Action,
   type Entity,
-  type EnumDef,
   type Island,
   islandEntityPaths,
   type ObjectDef,
@@ -52,249 +52,258 @@ export function generateGo(
   entities: Entity[] = [],
   types: SharedType[] = [],
 ): string {
-  const out: string[] = [header.replace(/^/gm, "// "), "", `package ${opts.package}`];
-  const holdsEntities = islands.some((i) => islandEntityPaths(i, entities).length > 0);
-  if (screens.length > 0 || holdsEntities) {
-    const counted = screens.some((s) => s.strings.some((d) => d.params.includes("count")));
+  return emit(
+    {
+      islands,
+      actions,
+      entities,
+      types,
+      screens,
+      header,
+    },
+    go(opts),
+  );
+}
+
+/** Doc comment lines. */
+function doc(indent: string, text?: string): string[] {
+  return text ? text.split("\n").map((line) => `${indent}// ${line}`) : [];
+}
+
+function typeName(t: TypeRef): string {
+  switch (t.kind) {
+    case "string":
+      return "string";
+    case "integer":
+      return t.int64 ? "int64" : "int";
+    case "number":
+      return "float64";
+    case "boolean":
+      return "bool";
+    case "array":
+      return `[]${typeName(t.items)}`;
+    case "map":
+      return `map[string]${typeName(t.values)}`;
+    case "object":
+    case "enum":
+      return typeIdent(t.def.path);
+  }
+}
+
+/** A struct for an object type, after its comment lines. */
+function struct(def: ObjectDef, comments: string[], description: string | undefined): string[] {
+  const name = typeIdent(def.path);
+  const out = ["", ...comments.map((c) => `// ${name} ${c}`), ...doc("", description)];
+  out.push(`type ${name} struct${def.fields.length ? " {" : "{}"}`);
+  for (const f of def.fields) {
+    // Optional scalars and objects are pointers so "absent" differs from the zero value;
+    // optional slices and maps use nil for absent.
+    const base = typeName(f.type);
+    const pointer = !f.required && f.type.kind !== "array" && f.type.kind !== "map";
+    const tag = `json:"${f.jsonName}${f.required ? "" : ",omitempty"}"`;
     out.push(
-      "",
-      "import (",
-      ...(counted ? [`\t"strconv"`, ""] : []),
-      `\tcc "github.com/client-compose/client-compose/composers/go/core"`,
-      ")",
+      ...doc("\t", f.description),
+      `\t${goName(f.jsonName)} ${pointer ? "*" : ""}${base} \`${tag}\``,
     );
   }
+  if (def.fields.length) {
+    out.push("}");
+  }
+  return out;
+}
 
-  const doc = (indent: string, text?: string) => {
-    if (text) {
-      for (const line of text.split("\n")) {
-        out.push(`${indent}// ${line}`);
-      }
-    }
-  };
+/** An island's props struct, and the methods that make it one. */
+function island(def: ObjectDef, role: Extract<Role, { kind: "island" }>): string[] {
+  const { island: i, entityPaths: paths } = role;
+  const name = typeIdent(def.path);
+  const out = [
+    ...struct(
+      def,
+      [`holds the props of island ${JSON.stringify(i.type)} v${i.version}.`],
+      i.description ?? def.description,
+    ),
+    "",
+    `func (${name}) IslandType() string { return ${JSON.stringify(i.type)} }`,
+    "",
+    `func (${name}) IslandVersion() int { return ${i.version} }`,
+  ];
+  if (paths.length > 0) {
+    const quoted = (list: string[]) => list.map((v) => JSON.stringify(v)).join(", ");
+    out.push(
+      "",
+      "// IslandEntities says where its props hold entities (spec §2.1), so changes reach them.",
+      `func (${name}) IslandEntities() []cc.EntityPath {`,
+      "\treturn []cc.EntityPath{",
+      ...paths.map(
+        (p) =>
+          `\t\t{Path: []string{${quoted(p.path)}}, Entity: ${JSON.stringify(p.entity)}, ID: ${JSON.stringify(p.id)}, Properties: []string{${quoted(p.properties)}}},`,
+      ),
+      "\t}",
+      "}",
+    );
+  }
+  return out;
+}
 
-  const typeName = (t: TypeRef): string => {
-    switch (t.kind) {
-      case "string":
-        return "string";
-      case "integer":
-        return t.int64 ? "int64" : "int";
-      case "number":
-        return "float64";
-      case "boolean":
-        return "bool";
-      case "array":
-        return `[]${typeName(t.items)}`;
-      case "map":
-        return `map[string]${typeName(t.values)}`;
-      case "object":
-      case "enum":
-        return typeIdent(t.def.path);
-    }
-  };
+/** An action's input struct, and the methods that tie it to the action. */
+function input(def: ObjectDef, action: Action): string[] {
+  const name = typeIdent(def.path);
+  const result = typeIdent(action.result.path);
+  return [
+    ...struct(def, [`is the input of ${label(action)}.`], action.description),
+    "",
+    `func (${name}) ActionName() string { return ${JSON.stringify(action.action)} }`,
+    "",
+    `func (${name}) ActionVersion() int { return ${action.version} }`,
+    "",
+    "// ActionInputSchema is the JSON Schema the composer validates requests against.",
+    `func (${name}) ActionInputSchema() string { return ${JSON.stringify(JSON.stringify(action.inputSchema))} }`,
+    "",
+    "// ActionErrorCodes lists the action's declared errors.",
+    `func (${name}) ActionErrorCodes() []string { return []string{${action.errors.map((e) => JSON.stringify(e.code)).join(", ")}} }`,
+    "",
+    `// ActionResult ties the input to its result type, ${result}.`,
+    `func (${name}) ActionResult(${result}) {}`,
+  ];
+}
 
-  const emitEnum = (def: EnumDef) => {
-    const name = typeIdent(def.path);
-    out.push("");
-    doc("", def.description);
-    out.push(`type ${name} string`, "", "const (");
-    for (const v of def.values) {
-      out.push(`\t${name}${goName(v)} ${name} = ${JSON.stringify(v)}`);
-    }
-    out.push(")");
-  };
+/** The methods that make a declared error's type one: its code, its action, its details. */
+function errorMethods(def: ObjectDef, role: Extract<Role, { kind: "error" }>): string[] {
+  const { action, error } = role;
+  const name = typeIdent(def.path);
+  return [
+    "",
+    `func (${name}) ActionErrorCode() string { return ${JSON.stringify(error.code)} }`,
+    "",
+    `// ActionErrorOf names the action version that declares this error.`,
+    `func (${name}) ActionErrorOf() (string, int) { return ${JSON.stringify(action.action)}, ${action.version} }`,
+    "",
+    error.details
+      ? `func (e ${name}) ActionErrorDetails() any { return e }`
+      : `func (${name}) ActionErrorDetails() any { return nil }`,
+    "",
+    `func (${name}) Error() string { return ${JSON.stringify(`${action.action} v${action.version}: ${error.code}`)} }`,
+  ];
+}
 
-  const emitObject = (def: ObjectDef, island?: Island, intro?: string) => {
-    const name = typeIdent(def.path);
-    out.push("");
-    if (island) {
+const label = (action: Action) => `action ${JSON.stringify(action.action)} v${action.version}`;
+
+/** A screen's own strings: a struct of its table, with a method for each string. */
+function screenStrings(s: ScreenStringsDef): string[] {
+  const name = `${goName(s.screen)}ScreenStrings`;
+  const out = [
+    "",
+    `// ${name} are the ${s.screen} screen's own strings, in the request's language (spec §4.7).`,
+    `type ${name} struct{ table cc.StringsTable }`,
+    "",
+    `// ${name}For reads them from a layout's, resolver's or meta's request, or an action's call.`,
+    `func ${name}For(r cc.ScreenStringsSource) ${name} { return ${name}{r.ScreenStrings(${JSON.stringify(s.screen)})} }`,
+  ];
+  for (const d of s.strings) {
+    out.push("", ...doc("", d.description));
+    const method = goName(d.key);
+    if (d.params.length === 0) {
       out.push(
-        `// ${name} holds the props of island ${JSON.stringify(island.type)} v${island.version}.`,
+        `func (s ${name}) ${method}() string { return s.table.Text(${JSON.stringify(d.key)}) }`,
       );
+      continue;
     }
-    if (intro) {
-      out.push(`// ${name} ${intro}`);
-    }
-    doc("", island?.description ?? def.description);
-    out.push(`type ${name} struct${def.fields.length ? " {" : "{}"}`);
-    for (const f of def.fields) {
-      doc("\t", f.description);
-      // Optional scalars and objects are pointers so "absent" differs from the zero value;
-      // optional slices and maps use nil for absent.
-      const base = typeName(f.type);
-      const pointer = !f.required && f.type.kind !== "array" && f.type.kind !== "map";
-      const tag = `json:"${f.jsonName}${f.required ? "" : ",omitempty"}"`;
-      out.push(`\t${goName(f.jsonName)} ${pointer ? "*" : ""}${base} \`${tag}\``);
-    }
-    if (def.fields.length) {
-      out.push("}");
-    }
-    if (island) {
-      out.push(
-        "",
-        `func (${name}) IslandType() string { return ${JSON.stringify(island.type)} }`,
-        "",
-        `func (${name}) IslandVersion() int { return ${island.version} }`,
+    const args = d.params.map((p) => `${goParam(p)} ${p === "count" ? "int" : "string"}`);
+    const values = d.params.map(
+      (p) => `${JSON.stringify(p)}: ${p === "count" ? `strconv.Itoa(${goParam(p)})` : goParam(p)}`,
+    );
+    out.push(
+      `func (s ${name}) ${method}(${args.join(", ")}) string {`,
+      `\treturn s.table.Format(${JSON.stringify(d.key)}, map[string]string{${values.join(", ")}})`,
+      "}",
+    );
+  }
+  return out;
+}
+
+/** Go: structs, string types with constants, and the methods composers use to tell them apart. */
+export function go(opts: GoOptions): Target {
+  return {
+    prelude: (model: Model) => {
+      const out = [model.header.replace(/^/gm, "// "), "", `package ${opts.package}`];
+      const holdsEntities = model.islands.some(
+        (i) => islandEntityPaths(i, model.entities).length > 0,
       );
-      const paths = islandEntityPaths(island, entities);
-      if (paths.length > 0) {
-        const quoted = (list: string[]) => list.map((v) => JSON.stringify(v)).join(", ");
+      if (model.screens.length > 0 || holdsEntities) {
+        const counted = model.screens.some((s) =>
+          s.strings.some((d) => d.params.includes("count")),
+        );
         out.push(
           "",
-          "// IslandEntities says where its props hold entities (spec §2.1), so changes reach them.",
-          `func (${name}) IslandEntities() []cc.EntityPath {`,
-          "\treturn []cc.EntityPath{",
-          ...paths.map(
-            (p) =>
-              `\t\t{Path: []string{${quoted(p.path)}}, Entity: ${JSON.stringify(p.entity)}, ID: ${JSON.stringify(p.id)}, Properties: []string{${quoted(p.properties)}}},`,
-          ),
-          "\t}",
-          "}",
+          "import (",
+          ...(counted ? [`\t"strconv"`, ""] : []),
+          `\tcc "github.com/client-compose/client-compose/composers/go/core"`,
+          ")",
         );
       }
-    }
-    for (const child of def.children) {
-      if (child.kind === "enum") {
-        emitEnum(child);
-      } else {
-        emitObject(child);
+      return out;
+    },
+    screenStrings,
+    enumeration: (def) => {
+      const name = typeIdent(def.path);
+      return [
+        "",
+        ...doc("", def.description),
+        `type ${name} string`,
+        "",
+        "const (",
+        ...def.values.map((v) => `\t${name}${goName(v)} ${name} = ${JSON.stringify(v)}`),
+        ")",
+      ];
+    },
+    object: (def, role) => {
+      switch (role.kind) {
+        case "island":
+          return island(def, role);
+        case "input":
+          return input(def, role.action);
+        case "result":
+          return struct(def, [`is the result of ${label(role.action)}.`], def.description);
+        case "error":
+          return struct(
+            def,
+            [`is the declared error ${JSON.stringify(role.error.code)} of ${label(role.action)}.`],
+            role.error.description,
+          );
+        case "entity":
+          return struct(
+            def,
+            [
+              `is a change to entity ${JSON.stringify(role.entity.entity)} (spec §2.1): what an action sets, each property absent unless it changed.`,
+            ],
+            def.description,
+          );
+        case "shared":
+          return struct(
+            def,
+            [
+              `is shared type ${JSON.stringify(role.type.name)} (spec §2.2): every manifest that refers to it uses this.`,
+            ],
+            def.description,
+          );
+        case "nested":
+          return struct(def, [], def.description);
       }
-    }
+    },
+    afterChildren: (def, role) => {
+      if (role.kind === "error") {
+        return errorMethods(def, role);
+      }
+      if (role.kind === "entity") {
+        return [
+          "",
+          `func (${typeIdent(def.path)}) EntityName() string { return ${JSON.stringify(role.entity.entity)} }`,
+        ];
+      }
+      return [];
+    },
+    finish: gofmt,
   };
-
-  const emitAction = (action: Action) => {
-    const label = `action ${JSON.stringify(action.action)} v${action.version}`;
-    const input = typeIdent(action.input.path);
-    const result = typeIdent(action.result.path);
-    emitObject(
-      {
-        ...action.input,
-        children: [],
-        description: action.description,
-      },
-      undefined,
-      `is the input of ${label}.`,
-    );
-    out.push(
-      "",
-      `func (${input}) ActionName() string { return ${JSON.stringify(action.action)} }`,
-      "",
-      `func (${input}) ActionVersion() int { return ${action.version} }`,
-      "",
-      "// ActionInputSchema is the JSON Schema the composer validates requests against.",
-      `func (${input}) ActionInputSchema() string { return ${JSON.stringify(JSON.stringify(action.inputSchema))} }`,
-      "",
-      "// ActionErrorCodes lists the action's declared errors.",
-      `func (${input}) ActionErrorCodes() []string { return []string{${action.errors.map((e) => JSON.stringify(e.code)).join(", ")}} }`,
-      "",
-      `// ActionResult ties the input to its result type, ${result}.`,
-      `func (${input}) ActionResult(${result}) {}`,
-    );
-    for (const child of action.input.children) {
-      if (child.kind === "enum") {
-        emitEnum(child);
-      } else {
-        emitObject(child);
-      }
-    }
-    emitObject(action.result, undefined, `is the result of ${label}.`);
-    for (const e of action.errors) {
-      const name = typeIdent(e.path);
-      const details: ObjectDef = e.details ?? {
-        kind: "object",
-        path: e.path,
-        fields: [],
-        children: [],
-        schemas: {},
-      };
-      emitObject(
-        { ...details, description: e.description },
-        undefined,
-        `is the declared error ${JSON.stringify(e.code)} of ${label}.`,
-      );
-      out.push(
-        "",
-        `func (${name}) ActionErrorCode() string { return ${JSON.stringify(e.code)} }`,
-        "",
-        `// ActionErrorOf names the action version that declares this error.`,
-        `func (${name}) ActionErrorOf() (string, int) { return ${JSON.stringify(action.action)}, ${action.version} }`,
-        "",
-        e.details
-          ? `func (e ${name}) ActionErrorDetails() any { return e }`
-          : `func (${name}) ActionErrorDetails() any { return nil }`,
-        "",
-        `func (${name}) Error() string { return ${JSON.stringify(`${action.action} v${action.version}: ${e.code}`)} }`,
-      );
-    }
-  };
-
-  for (const s of screens) {
-    const name = `${goName(s.screen)}ScreenStrings`;
-    out.push(
-      "",
-      `// ${name} are the ${s.screen} screen's own strings, in the request's language (spec §4.7).`,
-      `type ${name} struct{ table cc.StringsTable }`,
-      "",
-      `// ${name}For reads them from a layout's, resolver's or meta's request, or an action's call.`,
-      `func ${name}For(r cc.ScreenStringsSource) ${name} { return ${name}{r.ScreenStrings(${JSON.stringify(s.screen)})} }`,
-    );
-    for (const d of s.strings) {
-      out.push("");
-      doc("", d.description);
-      const method = goName(d.key);
-      if (d.params.length === 0) {
-        out.push(
-          `func (s ${name}) ${method}() string { return s.table.Text(${JSON.stringify(d.key)}) }`,
-        );
-        continue;
-      }
-      const args = d.params.map((p) => `${goParam(p)} ${p === "count" ? "int" : "string"}`);
-      const values = d.params.map(
-        (p) =>
-          `${JSON.stringify(p)}: ${p === "count" ? `strconv.Itoa(${goParam(p)})` : goParam(p)}`,
-      );
-      out.push(
-        `func (s ${name}) ${method}(${args.join(", ")}) string {`,
-        `\treturn s.table.Format(${JSON.stringify(d.key)}, map[string]string{${values.join(", ")}})`,
-        "}",
-      );
-    }
-  }
-  for (const type of types) {
-    if (type.def.kind === "enum") {
-      emitEnum(type.def);
-    } else {
-      emitObject(
-        type.def,
-        undefined,
-        `is shared type ${JSON.stringify(type.name)} (spec §2.2): every manifest that refers to it uses this.`,
-      );
-    }
-  }
-  for (const entity of entities) {
-    const name = typeIdent(entity.def.path);
-    // What an action sets: every property but the id, which names the entity, and each absent
-    // unless it changed.
-    emitObject(
-      {
-        ...entity.def,
-        fields: entity.def.fields
-          .filter((f) => f.jsonName !== entity.id)
-          .map((f) => ({ ...f, required: false })),
-        description: entity.description,
-      },
-      undefined,
-      `is a change to entity ${JSON.stringify(entity.entity)} (spec §2.1): what an action sets, each property absent unless it changed.`,
-    );
-    out.push("", `func (${name}) EntityName() string { return ${JSON.stringify(entity.entity)} }`);
-  }
-  for (const island of islands) {
-    emitObject(island.props, island);
-  }
-  for (const action of actions) {
-    emitAction(action);
-  }
-  return gofmt(`${out.join("\n")}\n`);
 }
 
 /** Align fields the way gofmt does. Go developers have gofmt; if it's missing, output is still valid Go. */
