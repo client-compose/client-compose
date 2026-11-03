@@ -1,5 +1,11 @@
 # @client-compose/codegen
 
+## 0.12.0
+
+### Minor Changes
+
+- [#74](https://github.com/client-compose/client-compose/pull/74) [`57f07ce`](https://github.com/client-compose/client-compose/commit/57f07ce481ea07206a086e75105754e616294448) Thanks [@LewisYearsley](https://github.com/LewisYearsley)! - Shared types (spec §2.2): define an object or a string enum once, in a `types` directory, and use it from any island, action, entity or other shared type with `{ "$ref": "<name>" }`. Each is generated once, under its own name, for Go and TypeScript. References are written out wherever schemas are embedded or compared (action input schemas, entity checks), and `compat` judges a change to a shared type in every island and action that uses it.
+
 ## 0.11.0
 
 ### Minor Changes
