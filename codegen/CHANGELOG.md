@@ -1,5 +1,11 @@
 # @client-compose/codegen
 
+## 0.12.1
+
+### Patch Changes
+
+- [#75](https://github.com/client-compose/client-compose/pull/75) [`e14062d`](https://github.com/client-compose/client-compose/commit/e14062d62e6b4e714b54b9447fa259409a1e3626) Thanks [@LewisYearsley](https://github.com/LewisYearsley)! - Internal: the Go and TypeScript targets now only render; one shared walk (`emit.ts`) decides what's generated and in what order. Generated output is unchanged.
+
 ## 0.12.0
 
 ### Minor Changes
