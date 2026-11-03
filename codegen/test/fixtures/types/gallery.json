@@ -1,0 +1,12 @@
+{
+  "type": "gallery",
+  "description": "Pictures shown together: a type that uses another.",
+  "schema": {
+    "type": "object",
+    "required": ["images"],
+    "properties": {
+      "caption": { "type": "string" },
+      "images": { "type": "array", "items": { "$ref": "image" } }
+    }
+  }
+}

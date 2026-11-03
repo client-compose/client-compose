@@ -8,6 +8,7 @@ import {
   islandEntityPaths,
   type ObjectDef,
   type ScreenStringsDef,
+  type SharedType,
   type TypeRef,
   words,
 } from "../manifest.ts";
@@ -49,6 +50,7 @@ export function generateGo(
   actions: Action[] = [],
   screens: ScreenStringsDef[] = [],
   entities: Entity[] = [],
+  types: SharedType[] = [],
 ): string {
   const out: string[] = [header.replace(/^/gm, "// "), "", `package ${opts.package}`];
   const holdsEntities = islands.some((i) => islandEntityPaths(i, entities).length > 0);
@@ -255,6 +257,17 @@ export function generateGo(
         `func (s ${name}) ${method}(${args.join(", ")}) string {`,
         `\treturn s.table.Format(${JSON.stringify(d.key)}, map[string]string{${values.join(", ")}})`,
         "}",
+      );
+    }
+  }
+  for (const type of types) {
+    if (type.def.kind === "enum") {
+      emitEnum(type.def);
+    } else {
+      emitObject(
+        type.def,
+        undefined,
+        `is shared type ${JSON.stringify(type.name)} (spec §2.2): every manifest that refers to it uses this.`,
       );
     }
   }

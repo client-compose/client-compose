@@ -1,0 +1,18 @@
+{
+  "type": "image",
+  "description": "A picture, and the point to keep in view when it's cropped.",
+  "schema": {
+    "type": "object",
+    "required": ["url", "width", "height"],
+    "properties": {
+      "url": { "type": "string", "format": "uri" },
+      "width": { "type": "integer" },
+      "height": { "type": "integer" },
+      "focus": {
+        "type": "object",
+        "required": ["x", "y"],
+        "properties": { "x": { "type": "number" }, "y": { "type": "number" } }
+      }
+    }
+  }
+}

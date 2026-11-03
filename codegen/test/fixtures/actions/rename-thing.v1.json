@@ -8,7 +8,7 @@
     "properties": {
       "thingId": { "type": "string" },
       "name": { "type": "string", "description": "The new name." },
-      "visibility": { "type": "string", "enum": ["public", "private"] }
+      "visibility": { "$ref": "visibility" }
     }
   },
   "result": {

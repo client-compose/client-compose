@@ -19,6 +19,8 @@ import {
   parseActionManifest,
   parseAppStrings,
   parseManifest,
+  parseTypeManifest,
+  SharedTypes,
   type StringDef,
   type TypeRef,
 } from "./manifest.ts";
@@ -271,8 +273,11 @@ const quote = (values: string[]) => values.map((v) => JSON.stringify(v)).join(",
 export function loadManifestsAtRef(
   manifestsDir: string,
   ref: string,
+  types: SharedTypes = SharedTypes.none,
 ): { islands: Island[]; issues: CompatIssue[] } {
-  const { items, issues } = loadAtRef(manifestsDir, ref, parseManifest);
+  const { items, issues } = loadAtRef(manifestsDir, ref, (raw, source) =>
+    parseManifest(raw, source, types),
+  );
   return { islands: items, issues };
 }
 
@@ -280,9 +285,24 @@ export function loadManifestsAtRef(
 export function loadActionManifestsAtRef(
   actionsDir: string,
   ref: string,
+  types: SharedTypes = SharedTypes.none,
 ): { actions: Action[]; issues: CompatIssue[] } {
-  const { items, issues } = loadAtRef(actionsDir, ref, parseActionManifest);
+  const { items, issues } = loadAtRef(actionsDir, ref, (raw, source) =>
+    parseActionManifest(raw, source, types),
+  );
   return { actions: items, issues };
+}
+
+/**
+ * The shared types that were in `typesDir` at a git ref (spec §2.2), for reading that ref's
+ * manifests as they were: none if the directory didn't exist there.
+ */
+export function loadTypesAtRef(
+  typesDir: string,
+  ref: string,
+): { types: SharedTypes; issues: CompatIssue[] } {
+  const { items, issues } = loadAtRef(typesDir, ref, parseTypeManifest);
+  return { types: new SharedTypes(items), issues };
 }
 
 /** The app strings manifest as it was at a git ref, or undefined if it didn't exist there. */

@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://client-compose.dev/schema/v0/type-manifest.json",
+  "title": "Shared type manifest",
+  "description": "A type several manifests share (spec \u00a72.2): an object or a string enum, used by `{ \"$ref\": \"<type>\" }`.",
+  "type": "object",
+  "required": [
+    "type",
+    "schema"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "$comment": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+      "description": "Its name, which references use and generated code is named after."
+    },
+    "description": {
+      "type": "string"
+    },
+    "schema": {
+      "description": "JSON Schema (2020-12), in the props subset: an object, or a string with `enum`. It may use other shared types, but not itself.",
+      "type": "object",
+      "oneOf": [
+        {
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "const": "object"
+            }
+          }
+        },
+        {
+          "required": [
+            "type",
+            "enum"
+          ],
+          "properties": {
+            "type": {
+              "const": "string"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -16,7 +16,8 @@
           "properties": {
             "id": { "type": "string" },
             "name": { "type": "string" },
-            "pinned": { "type": "boolean", "description": "The island's own: not part of the entity." }
+            "pinned": { "type": "boolean", "description": "The island's own: not part of the entity." },
+            "cover": { "$ref": "image" }
           }
         }
       },
@@ -31,7 +32,7 @@
             "required": ["id"],
             "properties": {
               "id": { "type": "string" },
-              "visibility": { "type": "string", "enum": ["public", "private"] }
+              "visibility": { "$ref": "visibility" }
             }
           }
         }

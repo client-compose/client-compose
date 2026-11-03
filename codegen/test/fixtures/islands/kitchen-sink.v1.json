@@ -99,7 +99,8 @@
       "bigNumber": {
         "type": "integer",
         "format": "int64"
-      }
+      },
+      "gallery": { "$ref": "gallery", "description": "Pictures, if there are any." }
     }
   },
   "strings": {

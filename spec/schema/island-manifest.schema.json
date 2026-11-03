@@ -21,7 +21,7 @@
       "type": "string"
     },
     "props": {
-      "description": "JSON Schema (2020-12) describing the island's props object. An object in it that shows an entity is marked with `entity` (spec §2.1).",
+      "description": "JSON Schema (2020-12) describing the island's props object. An object in it that shows an entity is marked with `entity` (spec §2.1); any schema in it may be a shared type, `{ \"$ref\": \"<type>\" }` (spec §2.2).",
       "type": "object"
     },
     "strings": {

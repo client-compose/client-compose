@@ -228,6 +228,7 @@ proxy that keeps a session in an httpOnly cookie, are web-only.
 | TL-4 | **Standalone binaries.** Codegen without Node. |
 | TL-6 | **Codegen, strings.** Typed strings for each island and for the app, compatibility rules for them, and a check that the catalog has every string in the default language and nothing undeclared. |
 | TL-7 | **Codegen, entities.** Entity manifests to typed changes for every composer language, and for each island descriptor a map of where its entities sit in its props; a check that each marked object shows part of its entity, with the entity's schemas. |
+| TL-8 | **Codegen, shared types.** Types several manifests share, defined once and used by `$ref`: generated once for every language, written out wherever schemas are embedded or compared, and checked for compatibility in every island and action that uses them. |
 | TL-5 | **Conformance runner.** Runs the composer suite against any URL; client fixtures are plain JSON any language can load. |
 
 ## Ergonomics
@@ -338,6 +339,7 @@ until someone can maintain them. They're a welcome contribution: see
 | TL-2 actions | ✅ | ✅ |
 | TL-6 strings | — (the composer serves the catalog) | ✅ |
 | TL-7 entities | ✅ | ✅ |
+| TL-8 shared types | ✅ | ✅ |
 
 TL-3 to TL-5 are language-neutral and done.
 
