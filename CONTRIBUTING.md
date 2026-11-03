@@ -12,7 +12,7 @@ of that protocol, one per stack, mostly contributed by people who use that stack
 | New composer framework adapter | `composers/<language>/<framework>` | Passes composer conformance through that framework.      |
 | New client core              | `clients/<platform>/core`          | Passes client conformance fixtures.                       |
 | UI binding                   | `clients/<platform>/<ui-lib>`      | Example usage + a smoke test.                             |
-| New codegen target           | `codegen/src/targets/<language>.ts` | Golden output for `codegen/test/fixtures` that compiles and decodes the sample in that language's CI. |
+| New codegen target           | `codegen/src/targets/<language>.ts`: a `Target` (`codegen/src/emit.ts`), which renders each declaration the shared walk gives it | Golden output for `codegen/test/fixtures` that compiles and decodes the sample in that language's CI. |
 | Fix to an implementation     | anywhere                           | Its owner reviews (see `.github/CODEOWNERS`).            |
 
 Swift and Kotlin clients were here once, and were removed until someone can maintain them. They're
