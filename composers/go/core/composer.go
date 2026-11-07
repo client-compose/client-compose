@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"sync"
 	"time"
 )
 
@@ -190,6 +191,8 @@ type Composer struct {
 	actions        map[string]map[int]Action
 	plugins        []Plugin
 	cache          Cache
+	flightsMu      sync.Mutex
+	flights        map[string]*flight
 	idempotency    *Idempotency
 	defaultTimeout time.Duration
 	strings        *StringsConfig
@@ -208,6 +211,7 @@ func New(cfg Config) *Composer {
 		actions:        map[string]map[int]Action{},
 		defaultTimeout: cfg.DefaultTimeout,
 		cache:          cfg.Cache,
+		flights:        map[string]*flight{},
 		strings:        cfg.Strings,
 	}
 	if idem := cfg.Idempotency; idem != nil {

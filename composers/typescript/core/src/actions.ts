@@ -173,6 +173,7 @@ export async function performAction<Ctx>(
   report: (failure: Failure) => void,
   words: LocaleStrings | undefined,
   resolveUpdates: (refs: IslandRef[]) => Promise<ResolvedUpdates>,
+  invalidateCached: (effects: Effects) => Promise<void>,
 ): Promise<PerformResult> {
   const { descriptor } = handler;
   const reportFailure = (error: unknown) =>
@@ -232,6 +233,7 @@ export async function performAction<Ctx>(
         },
       };
     }
+    await invalidateCached(outcome.effects ?? {});
     const effects = await sentEffects(outcome.effects ?? {}, resolveUpdates);
     const hasEffects = Object.keys(effects).length > 0;
 

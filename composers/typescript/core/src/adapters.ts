@@ -1,8 +1,9 @@
 // Adapters (spec/CAPABILITIES.md): interfaces the composer uses, implemented by your app. Each is
 // optional: without one, its feature is off.
 
-import type { ActionRequest } from "@client-compose/protocol";
+import type { ActionRequest, EntityPath } from "@client-compose/protocol";
 
+import { isRecord } from "./guards.ts";
 import type { Failure } from "./plugins.ts";
 import { fail, type PerformResult } from "./results.ts";
 import type { Island, LayoutContext } from "./screens.ts";
@@ -12,36 +13,107 @@ import type { Island, LayoutContext } from "./screens.ts";
  * Memcached, a Map. It's optional: without one (`cache` in the composer's config), islands resolve
  * on every request, whether they opt in or not.
  *
+ * Each entry is filed under tags: the island it is (its type, version and key) and each entity its
+ * props hold. After an action, the composer invalidates the tags of what its effects say changed,
+ * so a change shows on the next request, from every composer sharing the cache. With Redis, keep
+ * each tag as a set of keys:
+ *
  *     const redisCache: Cache = {
  *       get: async (key) => (await redis.get(key)) ?? undefined,
- *       set: async (key, value, ttlMs) => { await redis.set(key, value, { PX: ttlMs }); },
+ *       set: async (key, value, ttlMs, tags) => {
+ *         const tx = redis.multi().set(key, value, { PX: ttlMs });
+ *         for (const tag of tags) tx.sAdd(tag, key).pExpire(tag, ttlMs);
+ *         await tx.exec();
+ *       },
+ *       invalidate: async (tags) => {
+ *         for (const tag of tags) {
+ *           const keys = await redis.sMembers(tag);
+ *           if (keys.length) await redis.multi().unlink(keys).sRem(tag, keys).exec();
+ *         }
+ *       },
  *     };
  */
 export interface Cache {
   /** The value stored under `key`, or undefined. */
   get(key: string): Promise<string | undefined> | string | undefined;
-  /** Store `value` under `key` for `ttlMs`. */
-  set(key: string, value: string, ttlMs: number): Promise<void> | void;
+  /** Store `value` under `key` for `ttlMs`, filed under each of `tags`. */
+  set(key: string, value: string, ttlMs: number, tags: readonly string[]): Promise<void> | void;
+  /** Remove every value filed under any of `tags`. */
+  invalidate(tags: readonly string[]): Promise<void> | void;
 }
 
 /** How an island is cached, when the composer has a `Cache`. */
 export interface IslandCache<Ctx> {
+  /** How long it can be out of date if something changes other than through an action's effects. */
   ttlMs: number;
   /**
-   * What the island's props depend on for this request: the params it reads, the viewer for a
-   * personalised island, the locale. Return undefined (or "") to skip the cache for this request,
-   * e.g. when someone is signed in. The island's type and version are added to the key.
+   * What the island's props depend on for this request, other than who's asking: the params it
+   * reads, the locale. Return undefined (or "") to skip the cache for this request. The island's
+   * type and version are added to the key.
    */
   key: (rc: LayoutContext<Ctx>) => string | undefined;
+  /**
+   * Who sees the same props: an audience, such as "visitor" or "member:<team>", never one person
+   * unless the island is theirs alone. Each audience gets its own entry, and invalidating the
+   * island invalidates every audience's. Without it, everyone shares one entry.
+   */
+  varyBy?: (rc: LayoutContext<Ctx>) => string;
 }
+
+/** The tag of every entry of one island, for every audience. */
+export function islandTag(island: { type: string; version: number }, appKey: string): string {
+  return `tag:island:${island.type}:${island.version}:${appKey}`;
+}
+
+/** The tag of every entry holding one entity. */
+export function entityTag(entity: string, id: string): string {
+  return `tag:entity:${entity}:${id}`;
+}
+
+/** The entities props hold, by the island's entity paths (spec §2.1), as tags. */
+function heldTags(props: unknown, paths: readonly EntityPath[] | undefined): string[] {
+  const out: string[] = [];
+  const walk = (value: unknown, path: EntityPath, rest: readonly string[]) => {
+    if (rest.length === 0) {
+      const id = isRecord(value) ? value[path.id] : undefined;
+      if (typeof id === "string" || typeof id === "number") {
+        out.push(entityTag(path.entity, String(id)));
+      }
+      return;
+    }
+    const [step, ...next] = rest;
+    if (Array.isArray(value)) {
+      if (step === "[]") {
+        value.forEach((item) => walk(item, path, next));
+      }
+    } else if (isRecord(value)) {
+      for (const [key, item] of Object.entries(value)) {
+        if (step === "{}" || step === key) {
+          walk(item, path, next);
+        }
+      }
+    }
+  };
+  for (const path of paths ?? []) {
+    walk(props, path, path.path);
+  }
+  return out;
+}
+
+/**
+ * Resolves of missing entries in progress, by key: requests for one wait for it, rather than
+ * resolving it again.
+ */
+export type Flights = Map<string, Promise<string>>;
 
 /**
  * The innermost island resolver: from the cache when the island opts in and the composer has one,
  * otherwise by the island's own function. Failures are never cached; a cache that errors is
- * reported and bypassed.
+ * reported and bypassed. Requests for an entry already being resolved wait for it.
  */
 export async function resolveCached<Ctx>(
   cache: Cache | undefined,
+  flights: Flights,
   call: {
     screen: string;
     key: string;
@@ -59,7 +131,8 @@ export async function resolveCached<Ctx>(
   if (!appKey) {
     return call.island.resolve(call.rc);
   }
-  const key = `island:${call.island.type}:${call.island.version}:${appKey}`;
+  const audience = opts.varyBy ? `@${opts.varyBy(call.rc)}` : "";
+  const key = `island:${call.island.type}:${call.island.version}:${appKey}${audience}`;
   const failed = (error: unknown) =>
     report({
       kind: "cache",
@@ -77,9 +150,25 @@ export async function resolveCached<Ctx>(
   } catch (error) {
     failed(error);
   }
-  const props = await call.island.resolve(call.rc);
+
+  const inFlight = flights.get(key);
+  if (inFlight) {
+    try {
+      return JSON.parse(await inFlight);
+    } catch {
+      // The first request failed, perhaps only for its own reasons (its timeout): try ours.
+      return call.island.resolve(call.rc);
+    }
+  }
+
+  const resolving = (async () => JSON.stringify((await call.island.resolve(call.rc)) ?? {}))();
+  flights.set(key, resolving);
+  resolving.catch(() => {}).finally(() => flights.delete(key));
+  const encoded = await resolving;
+  const props: unknown = JSON.parse(encoded);
   try {
-    await cache.set(key, JSON.stringify(props ?? {}), opts.ttlMs);
+    const tags = [islandTag(call.island, appKey), ...heldTags(props, call.island.entities)];
+    await cache.set(key, encoded, opts.ttlMs, tags);
   } catch (error) {
     failed(error);
   }
