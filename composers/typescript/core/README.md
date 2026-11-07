@@ -263,32 +263,55 @@ In tests, `app.strings({ locale: "pl" })` fetches the app strings, and an island
 ## Caching islands (optional)
 
 To keep an island's props between requests, give the composer a `Cache` and opt islands in. The
-cache is your own: implement `get` and `set` with whatever you run. Without `cache`, nothing is
-cached and every island resolves on every request.
+cache is your own: implement `get`, `set` and `invalidate` with whatever you run. Without `cache`,
+nothing is cached and every island resolves on every request.
 
 ```ts
-// Your adapter, e.g. over node-redis:
+// Your adapter, e.g. over node-redis. Each tag is a set of the keys filed under it.
 const redisCache: Cache = {
   get: async (key) => (await redis.get(key)) ?? undefined,
-  set: async (key, value, ttlMs) => {
-    await redis.set(key, value, { PX: ttlMs });
+  set: async (key, value, ttlMs, tags) => {
+    const tx = redis.multi().set(key, value, { PX: ttlMs });
+    for (const tag of tags) tx.sAdd(tag, key).pExpire(tag, ttlMs);
+    await tx.exec();
+  },
+  invalidate: async (tags) => {
+    for (const tag of tags) {
+      const keys = await redis.sMembers(tag);
+      if (keys.length) await redis.multi().unlink(keys).sRem(tag, keys).exec();
+    }
   },
 };
 
-// Islands say how long, and what their props depend on:
+// Islands say how long, what their props depend on, and who sees the same:
 const Trending = island(TrendingV1, resolveTrending, { cache: { ttlMs: 300_000, key: () => "all" } });
-const Feed = island(FeedV1, resolveFeed, {
-  cache: { ttlMs: 30_000, key: ({ ctx, params }) => `${ctx.viewer?.id}:${params.page}` }, // personalised
+const Team = island(TeamV1, resolveTeam, {
+  cache: {
+    ttlMs: 300_000,
+    key: ({ params }) => params.team,
+    varyBy: ({ ctx, params }) => (ctx.viewer?.teams.includes(params.team) ? "member" : "visitor"),
+  },
 });
 
 const composer = createComposer({ screens, cache: redisCache });
 ```
 
-- The key function returns what the props depend on; the composer adds the island's type and
-  version. Return undefined to skip the cache for this request.
+- The key function returns what the props depend on, other than who's asking; the composer adds the
+  island's type and version. Return undefined to skip the cache for this request.
+- `varyBy` says who sees the same props: an audience, never one person unless the island is theirs
+  alone. Each audience has its own entry. Without it, everyone shares one.
+- **Actions keep it up to date.** Each entry is filed under tags: the island (its type, version
+  and key, for every audience) and each entity its props hold. After an action, before its updates
+  are resolved, the composer invalidates what its effects name: the entities it changed, the islands
+  it updates, and every cached island of the screens it invalidates (as the caller's request would
+  place them). With a cache shared by several composers, a change shows on the next request to any
+  of them. The TTL is how long an entry can be out of date when something changes another way.
+- Requests for an entry this composer is already resolving wait for it, rather than resolving it
+  again.
 - Failures are never cached.
-- If the cache errors, the island resolves anyway and the error reaches plugins as a `"cache"`
-  failure, so a cache outage never breaks a screen.
+- If the cache errors, the island resolves anyway (or the action's changes stay cached until their
+  TTL) and the error reaches plugins as a `"cache"` failure, so a cache outage never breaks a screen
+  or an action.
 - In tests, `memoryCache()` from `@client-compose/composer/testing` is an in-memory `Cache`.
 
 ## Retried actions (optional)

@@ -214,6 +214,7 @@ func (c *Composer) performAction(ctx context.Context, req ActionRequest) Result 
 		if resp.Result == nil {
 			resp.Result = map[string]any{}
 		}
+		c.invalidateCached(outside, action, effects, client)
 		effects = c.resolveUpdates(outside, effects, client, req.Islands)
 		if !effects.empty() {
 			resp.Effects = &effects
