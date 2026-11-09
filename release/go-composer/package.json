@@ -1,6 +1,6 @@
 {
   "name": "go-composer",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "private": true,
   "description": "The Go composer's version and changelog (github.com/client-compose/client-compose/composers/go/core), for Changesets. Never published to npm: the release workflow tags composers/go/core/v<version>."
 }

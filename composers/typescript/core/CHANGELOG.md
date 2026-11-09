@@ -1,5 +1,14 @@
 # @client-compose/composer
 
+## 0.15.0
+
+### Minor Changes
+
+- [#78](https://github.com/client-compose/client-compose/pull/78) [`4db709a`](https://github.com/client-compose/client-compose/commit/4db709af5789022b6e28758ede9d46612aed5e48) Thanks [@LewisYearsley](https://github.com/LewisYearsley)! - The island cache stays up to date as actions change things. Each entry is filed under tags, the
+  island and the entities it holds, and an action's effects invalidate what they name before its
+  updates resolve. The `Cache` adapter gains tags on `set` and an `invalidate(tags)` method (a
+  breaking change to implementations). Requests for an entry being resolved wait for it.
+
 ## 0.14.1
 
 ### Patch Changes
