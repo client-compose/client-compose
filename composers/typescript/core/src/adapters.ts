@@ -47,20 +47,16 @@ export interface IslandCache<Ctx> {
   /** How long it can be out of date if something changes other than through an action's effects. */
   ttlMs: number;
   /**
-   * What the island's props depend on for this request, other than who's asking: the params it
-   * reads, the locale. Return undefined (or "") to skip the cache for this request. The island's
-   * type and version are added to the key.
+   * What the island's props depend on for this request: the params it reads, the locale. Return
+   * undefined (or "") to skip the cache for this request. The island's type and version are added
+   * to the key. An action invalidates the entries its caller's key names, so an island that some
+   * people see differently from others is best split into islands that are each the same for
+   * everyone who sees them.
    */
   key: (rc: LayoutContext<Ctx>) => string | undefined;
-  /**
-   * Who sees the same props: an audience, such as "visitor" or "member:<team>", never one person
-   * unless the island is theirs alone. Each audience gets its own entry, and invalidating the
-   * island invalidates every audience's. Without it, everyone shares one entry.
-   */
-  varyBy?: (rc: LayoutContext<Ctx>) => string;
 }
 
-/** The tag of every entry of one island, for every audience. */
+/** The tag of an island's entry. */
 export function islandTag(island: { type: string; version: number }, appKey: string): string {
   return `tag:island:${island.type}:${island.version}:${appKey}`;
 }
@@ -131,8 +127,7 @@ export async function resolveCached<Ctx>(
   if (!appKey) {
     return call.island.resolve(call.rc);
   }
-  const audience = opts.varyBy ? `@${opts.varyBy(call.rc)}` : "";
-  const key = `island:${call.island.type}:${call.island.version}:${appKey}${audience}`;
+  const key = `island:${call.island.type}:${call.island.version}:${appKey}`;
   const failed = (error: unknown) =>
     report({
       kind: "cache",

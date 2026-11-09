@@ -1,5 +1,5 @@
 // The island cache (CMP-18): entries filed under the islands and entities they hold, invalidated by
-// what actions say they changed, each audience apart, and resolved once while missing.
+// what actions say they changed, and resolved once while missing.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
@@ -72,38 +72,26 @@ const AddV1: ActionDescriptor<{ name: string }, Record<string, never>, never> = 
   },
 };
 
-interface Ctx {
-  audience: string;
-}
-
-const asMember = { headers: { "x-audience": "member" } };
-
 /**
- * A list of items and what's left, both cached (the items each audience apart), with actions to
+ * A list of items and what's left, both cached, with actions to
  * finish an item (an entity change), add one (an update), and add "everything" (invalidating the
  * screen).
  */
 function cachedList(list: Item[], cache: Cache, failures: Failure[] = []) {
   let runs = 0;
   const left = () => list.filter((item) => !item.done).length;
-  const items = island<{ items: Item[] }, Ctx>(
+  const items = island(
     ItemsV1,
     () => {
       runs++;
       return { items: list.map((item) => ({ ...item })) };
     },
-    {
-      cache: {
-        ttlMs: 60_000,
-        key: () => "all",
-        varyBy: ({ ctx }) => ctx.audience,
-      },
-    },
+    { cache: { ttlMs: 60_000, key: () => "all" } },
   );
   const leftIsland = island(LeftV1, () => ({ id: "all", left: left() }), {
     cache: { ttlMs: 60_000, key: () => "all" },
   });
-  const composer = createComposer<Ctx>({
+  const composer = createComposer({
     screens: [screen("list", { islands: [place("items", items), place("left", leftIsland)] })],
     actions: [
       action(FinishV1, ({ id }) => {
@@ -137,17 +125,13 @@ function cachedList(list: Item[], cache: Cache, failures: Failure[] = []) {
       }),
     ],
     cache,
-    context: (request: Request) => ({ audience: request.headers.get("x-audience") ?? "visitor" }),
     use: [reportErrors((failure) => failures.push(failure))],
   });
   return { app: testComposer(composer), runs: () => runs };
 }
 
-const names = async (
-  app: ReturnType<typeof cachedList>["app"],
-  options: { headers?: Record<string, string> } = {},
-) =>
-  (await app.screen("list", {}, options))
+const names = async (app: ReturnType<typeof cachedList>["app"]) =>
+  (await app.screen("list"))
     .props(ItemsV1, "items")
     .items.map((item) => (item.done ? `${item.name} (done)` : item.name));
 
@@ -170,7 +154,7 @@ test("cached islands are filed under themselves and the entities they hold", asy
   );
   await app.screen("list");
 
-  assert.deepEqual(cache.tags("island:items:1:all@visitor"), [
+  assert.deepEqual(cache.tags("island:items:1:all"), [
     "tag:entity:item:1",
     "tag:entity:item:2",
     "tag:island:items:1:all",
@@ -198,16 +182,14 @@ test("a change to an entity invalidates the islands holding it", async () => {
   assert.equal((await app.screen("list")).props(LeftV1, "left").left, 0);
 });
 
-test("an update invalidates the island for every audience, and is resolved fresh", async () => {
+test("an update invalidates the island, and is resolved fresh", async () => {
   const { app } = cachedList([], memoryCache());
   await app.screen("list");
-  await app.screen("list", {}, asMember);
 
   const outcome = await app.perform(AddV1, { name: "Milk" });
 
   assert.equal(outcome.effects?.update?.length, 1);
   assert.deepEqual(await names(app), ["Milk"]);
-  assert.deepEqual(await names(app, asMember), ["Milk"]);
 });
 
 test("invalidating a screen invalidates its cached islands", async () => {
@@ -218,20 +200,6 @@ test("invalidating a screen invalidates its cached islands", async () => {
 
   assert.deepEqual(await names(app), ["everything"]);
   assert.equal((await app.screen("list")).props(LeftV1, "left").left, 1);
-});
-
-test("each audience has its own entry", async () => {
-  const cache = memoryCache();
-  const { app, runs } = cachedList([], cache);
-  await app.screen("list");
-  await app.screen("list", {}, asMember);
-
-  assert.deepEqual(cache.keys().sort(), [
-    "island:items:1:all@member",
-    "island:items:1:all@visitor",
-    "island:left:1:all",
-  ]);
-  assert.equal(runs(), 2);
 });
 
 test("requests for an entry being resolved wait for it", async () => {

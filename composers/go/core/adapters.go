@@ -39,24 +39,15 @@ type Cache interface {
 	Invalidate(ctx context.Context, tags []string) error
 }
 
-// CacheKey says what an island's props depend on for this request, other than who's asking: the
-// params it reads, the locale. Return "" to skip the cache for this request.
+// CacheKey says what an island's props depend on for this request: the params it reads, the
+// locale. Return "" to skip the cache for this request. An action invalidates the entries its
+// caller's key names, so an island that some people see differently from others is best split
+// into islands that are each the same for everyone who sees them.
 type CacheKey func(ctx context.Context, r Request) string
 
-// CacheOption configures an island's caching (CacheFor).
-type CacheOption func(*islandCache)
-
-// VaryBy says who sees the same props: an audience, such as "visitor" or "member:<team>", never
-// one person unless the island is theirs alone. Each audience gets its own entry, and invalidating
-// the island invalidates every audience's. Without it, everyone shares one entry.
-func VaryBy(audience func(ctx context.Context, r Request) string) CacheOption {
-	return func(c *islandCache) { c.vary = audience }
-}
-
 type islandCache struct {
-	ttl  time.Duration
-	key  CacheKey
-	vary func(ctx context.Context, r Request) string
+	ttl time.Duration
+	key CacheKey
 }
 
 // CacheFor returns the island with its props cached for ttl, under the key that key returns, when
@@ -68,21 +59,17 @@ type islandCache struct {
 //	trending := cc.Define(resolveTrending).CacheFor(5*time.Minute, func(context.Context, cc.Request) string { return "all" })
 //	feed := cc.Define(resolveFeed).CacheFor(30*time.Second, func(ctx context.Context, r cc.Request) string {
 //		return r.Params["team"]
-//	}, cc.VaryBy(audienceOf))
-func (i Island) CacheFor(ttl time.Duration, key CacheKey, options ...CacheOption) Island {
+//	})
+func (i Island) CacheFor(ttl time.Duration, key CacheKey) Island {
 	if i.paged {
 		// A page depends on its cursor, and the cache keeps props alone, not where they go on.
 		panic(fmt.Sprintf("clientcompose: %s v%d has pages, which aren't cached", i.Type, i.Version))
 	}
-	settings := islandCache{ttl: ttl, key: key}
-	for _, option := range options {
-		option(&settings)
-	}
-	i.cache = &settings
+	i.cache = &islandCache{ttl: ttl, key: key}
 	return i
 }
 
-// islandTag is the tag of every entry of one island, for every audience.
+// islandTag is the tag of an island's entry.
 func islandTag(island Island, appKey string) string {
 	return fmt.Sprintf("tag:island:%s:%d:%s", island.Type, island.Version, appKey)
 }
@@ -112,9 +99,6 @@ func (c *Composer) resolveIsland(ctx context.Context, call IslandCall) (any, err
 		return call.Island.resolve(ctx, call.Request)
 	}
 	key := fmt.Sprintf("island:%s:%d:%s", call.Island.Type, call.Island.Version, appKey)
-	if ic.vary != nil {
-		key += "@" + ic.vary(ctx, call.Request)
-	}
 	report := func(err error) {
 		c.report(ctx, Failure{Kind: CacheFailed, Screen: call.Screen, Key: call.Key, Type: call.Island.Type, Err: err})
 	}
@@ -236,7 +220,7 @@ func appendHeld(out []held, value any, path EntityPath, rest []string) []held {
 
 // invalidateCached invalidates the cached islands an action's effects say changed, before its
 // updates are resolved: those holding the entities it changed, the islands it updates and every
-// island of the screens it invalidates, for every audience. Islands are found as the caller's
+// island of the screens it invalidates. Islands are found as the caller's
 // request would place them. A cache that errors is reported; its entries stay until their ttl.
 func (c *Composer) invalidateCached(ctx context.Context, action Action, effects Effects, client ClientContext) {
 	if c.cache == nil {

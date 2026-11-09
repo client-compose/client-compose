@@ -325,26 +325,22 @@ func (c redisCache) Invalidate(ctx context.Context, tags []string) error {
 	return nil
 }
 
-// Islands say how long, what their props depend on, and who sees the same:
+// Islands say how long, and what their props depend on:
 trending := cc.Define(resolveTrending).CacheFor(5*time.Minute, func(context.Context, cc.Request) string { return "all" })
 team := cc.Define(resolveTeam).CacheFor(5*time.Minute, func(_ context.Context, r cc.Request) string {
 	return r.Params["team"]
-}, cc.VaryBy(func(ctx context.Context, r cc.Request) string {
-	if isMember(ctx, r.Params["team"]) {
-		return "member"
-	}
-	return "visitor"
-}))
+})
 
 composer := cc.New(cc.Config{Screens: screens, Cache: redisCache{rdb}})
 ```
 
-- The key function returns what the props depend on, other than who's asking; the composer adds the
-  island's type and version. Return `""` to skip the cache for this request.
-- `VaryBy` says who sees the same props: an audience, never one person unless the island is theirs
-  alone. Each audience has its own entry. Without it, everyone shares one.
+- The key function returns what the props depend on: the params it reads, the locale. The
+  composer adds the island's type and version. Return `""` to skip the cache for this request.
+- An action invalidates the entries its caller's key names. So cache islands that are the same for
+  everyone who sees them: when some people see an island differently from others (members see
+  more than visitors, say), split it into islands that each are, and place each for whoever sees it.
 - **Actions keep it up to date.** Each entry is filed under tags: the island (its type, version
-  and key, for every audience) and each entity its props hold. After an action, before its updates
+  and key) and each entity its props hold. After an action, before its updates
   are resolved, the composer invalidates what its effects name: the entities it changed, the islands
   it updates, and every cached island of the screens it invalidates (as the caller's request would
   place them). With a cache shared by several composers, a change shows on the next request to any

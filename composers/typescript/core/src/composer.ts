@@ -346,7 +346,7 @@ export function createComposer<Ctx = undefined, Req = Request>(
   /**
    * Invalidates the cached islands an action's effects say changed, before its updates are
    * resolved: those holding the entities it changed, the islands it updates and every island of the
-   * screens it invalidates, for every audience. Islands are found as the caller's request would
+   * screens it invalidates. Islands are found as the caller's request would
    * place them. A cache that errors is reported; its entries stay until their TTL.
    */
   async function invalidateCached(effects: Effects, req: ActionRequest, ctx: Ctx): Promise<void> {

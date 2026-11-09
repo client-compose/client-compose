@@ -3,7 +3,6 @@ package clientcompose_test
 import (
 	"context"
 	"encoding/json"
-	"net/http"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -14,28 +13,15 @@ import (
 	"github.com/client-compose/client-compose/composers/go/core/cctest"
 )
 
-type audienceKey struct{}
-
-// asMember is a request from a member of the list's team.
-var asMember = cctest.Header("X-Audience", "member")
-
-func audience(ctx context.Context, _ cc.Request) string {
-	if a, _ := ctx.Value(audienceKey{}).(string); a != "" {
-		return a
-	}
-	return "visitor"
-}
-
 func all(context.Context, cc.Request) string { return "all" }
 
-// cachedList is listComposer's screen with both islands cached, each audience apart, and an
-// action that renames the list's screen, invalidating it. runs counts how often the items island
+// cachedList is listComposer's screen with both islands cached, and an action that renames the list's screen, invalidating it. runs counts how often the items island
 // really resolves.
 func cachedList(s *items, cache cc.Cache, runs *atomic.Int32, use ...cc.Plugin) *cc.Composer {
 	itemsIsland := cc.Define(func(context.Context, cc.Request) (itemsV1, error) {
 		runs.Add(1)
 		return itemsV1{Items: s.all()}, nil
-	}).CacheFor(time.Minute, all, cc.VaryBy(audience))
+	}).CacheFor(time.Minute, all)
 	leftIsland := cc.Define(func(context.Context, cc.Request) (leftV1, error) {
 		return leftV1{ID: "all", Left: s.left()}, nil
 	}).CacheFor(time.Minute, all)
@@ -58,10 +44,7 @@ func cachedList(s *items, cache cc.Cache, runs *atomic.Int32, use ...cc.Plugin) 
 			}),
 		},
 		Cache: cache,
-		Context: func(ctx context.Context, r *http.Request) (context.Context, error) {
-			return context.WithValue(ctx, audienceKey{}, r.Header.Get("X-Audience")), nil
-		},
-		Use: use,
+		Use:   use,
 	})
 }
 
@@ -84,7 +67,7 @@ func TestCachedIslandsAreFiledUnderThemselvesAndTheEntitiesTheyHold(t *testing.T
 	app := cctest.New(t, cachedList(&items{list: []itemsV1Item{{ID: "1", Name: "Milk"}, {ID: "2", Name: "Eggs"}}}, cache, &runs))
 	app.Screen("list", nil)
 
-	got := cache.Tags("island:items:1:all@visitor")
+	got := cache.Tags("island:items:1:all")
 	want := []string{"tag:entity:item:1", "tag:entity:item:2", "tag:island:items:1:all"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("tags %v, want %v", got, want)
@@ -111,12 +94,11 @@ func TestAChangeToAnEntityInvalidatesTheIslandsHoldingIt(t *testing.T) {
 	}
 }
 
-func TestAnUpdateInvalidatesTheIslandForEveryAudienceAndIsResolvedFresh(t *testing.T) {
+func TestAnUpdateInvalidatesTheIslandAndIsResolvedFresh(t *testing.T) {
 	cache := cctest.NewMemoryCache()
 	var runs atomic.Int32
 	app := cctest.New(t, cachedList(&items{}, cache, &runs))
 	app.Screen("list", nil)
-	app.Screen("list", nil, asMember)
 
 	out := cctest.Perform(app, addInput{Name: "Milk"})
 
@@ -128,10 +110,8 @@ func TestAnUpdateInvalidatesTheIslandForEveryAudienceAndIsResolvedFresh(t *testi
 	if err := json.Unmarshal(raw, &updated); err != nil || len(updated.Items) != 1 {
 		t.Fatalf("the update isn't fresh: %s", raw)
 	}
-	for _, opts := range [][]cctest.RequestOption{nil, {asMember}} {
-		if got := names(t, app.Screen("list", nil, opts...)); !slices.Equal(got, []string{"Milk"}) {
-			t.Fatalf("after the update: %v", got)
-		}
+	if got := names(t, app.Screen("list", nil)); !slices.Equal(got, []string{"Milk"}) {
+		t.Fatalf("after the update: %v", got)
 	}
 }
 
@@ -148,21 +128,6 @@ func TestInvalidatingAScreenInvalidatesItsCachedIslands(t *testing.T) {
 	}
 	if left := cctest.Props[leftV1](t, app.Screen("list", nil), "left").Left; left != 1 {
 		t.Fatalf("what's left: %d", left)
-	}
-}
-
-func TestEachAudienceHasItsOwnEntry(t *testing.T) {
-	cache := cctest.NewMemoryCache()
-	var runs atomic.Int32
-	app := cctest.New(t, cachedList(&items{}, cache, &runs))
-	app.Screen("list", nil)
-	app.Screen("list", nil, asMember)
-
-	keys := cache.Keys()
-	slices.Sort(keys)
-	want := []string{"island:items:1:all@member", "island:items:1:all@visitor", "island:left:1:all"}
-	if !slices.Equal(keys, want) || runs.Load() != 2 {
-		t.Fatalf("keys %v, runs %d", keys, runs.Load())
 	}
 }
 
