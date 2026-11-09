@@ -95,7 +95,11 @@ func (brokenCache) Get(context.Context, string) ([]byte, bool, error) {
 	return nil, false, errors.New("redis down")
 }
 
-func (brokenCache) Set(context.Context, string, []byte, time.Duration) error {
+func (brokenCache) Set(context.Context, string, []byte, time.Duration, []string) error {
+	return errors.New("redis down")
+}
+
+func (brokenCache) Invalidate(context.Context, []string) error {
 	return errors.New("redis down")
 }
 

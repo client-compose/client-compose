@@ -459,17 +459,39 @@ function declared(descriptors: IslandDescriptor<unknown>[]): Capabilities {
   return out;
 }
 
-/** An in-memory `Cache` for tests, with the keys it holds. Entries expire after their TTL. */
-export function memoryCache(): Cache & { keys(): string[] } {
+/**
+ * An in-memory `Cache` for tests, with the keys it holds and their tags. Entries expire after their
+ * TTL, and are invalidated by their tags.
+ */
+export function memoryCache(): Cache & { keys(): string[]; tags(key: string): string[] } {
   const entries = new Map<string, { value: string; expires: number }>();
+  const tagged = new Map<string, Set<string>>();
   const live = (key: string) => {
     const entry = entries.get(key);
     return entry && entry.expires > Date.now() ? entry : undefined;
   };
   return {
     get: (key) => live(key)?.value,
-    set: (key, value, ttlMs) => void entries.set(key, { value, expires: Date.now() + ttlMs }),
+    set(key, value, ttlMs, tags) {
+      entries.set(key, { value, expires: Date.now() + ttlMs });
+      for (const tag of tags) {
+        tagged.set(tag, (tagged.get(tag) ?? new Set()).add(key));
+      }
+    },
+    invalidate(tags) {
+      for (const tag of tags) {
+        for (const key of tagged.get(tag) ?? []) {
+          entries.delete(key);
+        }
+        tagged.delete(tag);
+      }
+    },
     keys: () => [...entries.keys()].filter((key) => live(key)),
+    tags: (key) =>
+      [...tagged]
+        .filter(([, keys]) => keys.has(key))
+        .map(([tag]) => tag)
+        .sort(),
   };
 }
 

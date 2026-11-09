@@ -286,11 +286,11 @@ In tests, `app.Strings("pl")` fetches the app strings, and an island's entry has
 ## Caching islands (optional)
 
 To keep an island's props between requests, give the composer a `cc.Cache` and opt islands in with
-`CacheFor`. The cache is your own: implement `Get` and `Set` with whatever you run. Without
-`Config.Cache`, nothing is cached and every island resolves on every request.
+`CacheFor`. The cache is your own: implement `Get`, `Set` and `Invalidate` with whatever you run.
+Without `Config.Cache`, nothing is cached and every island resolves on every request.
 
 ```go
-// Your adapter, e.g. over go-redis:
+// Your adapter, e.g. over go-redis. Each tag is a set of the keys filed under it.
 type redisCache struct{ rdb *redis.Client }
 
 func (c redisCache) Get(ctx context.Context, key string) ([]byte, bool, error) {
@@ -301,24 +301,56 @@ func (c redisCache) Get(ctx context.Context, key string) ([]byte, bool, error) {
 	return v, err == nil, err
 }
 
-func (c redisCache) Set(ctx context.Context, key string, value []byte, ttl time.Duration) error {
-	return c.rdb.Set(ctx, key, value, ttl).Err()
+func (c redisCache) Set(ctx context.Context, key string, value []byte, ttl time.Duration, tags []string) error {
+	_, err := c.rdb.TxPipelined(ctx, func(p redis.Pipeliner) error {
+		p.Set(ctx, key, value, ttl)
+		for _, tag := range tags {
+			p.SAdd(ctx, tag, key)
+			p.Expire(ctx, tag, ttl)
+		}
+		return nil
+	})
+	return err
+}
+
+func (c redisCache) Invalidate(ctx context.Context, tags []string) error {
+	for _, tag := range tags {
+		keys, err := c.rdb.SMembers(ctx, tag).Result()
+		if err != nil || len(keys) == 0 {
+			continue
+		}
+		c.rdb.Unlink(ctx, keys...)
+		c.rdb.SRem(ctx, tag, keys)
+	}
+	return nil
 }
 
 // Islands say how long, and what their props depend on:
 trending := cc.Define(resolveTrending).CacheFor(5*time.Minute, func(context.Context, cc.Request) string { return "all" })
-feed := cc.Define(resolveFeed).CacheFor(30*time.Second, func(ctx context.Context, r cc.Request) string {
-	return viewerID(ctx) + ":" + r.Params["page"] // personalised: the viewer is in the key
+team := cc.Define(resolveTeam).CacheFor(5*time.Minute, func(_ context.Context, r cc.Request) string {
+	return r.Params["team"]
 })
 
 composer := cc.New(cc.Config{Screens: screens, Cache: redisCache{rdb}})
 ```
 
-- The key function returns what the props depend on; the composer adds the island's type and
-  version. Return `""` to skip the cache for this request.
+- The key function returns what the props depend on: the params it reads, the locale. The
+  composer adds the island's type and version. Return `""` to skip the cache for this request.
+- An action invalidates the entries its caller's key names. So cache islands that are the same for
+  everyone who sees them: when some people see an island differently from others (members see
+  more than visitors, say), split it into islands that each are, and place each for whoever sees it.
+- **Actions keep it up to date.** Each entry is filed under tags: the island (its type, version
+  and key) and each entity its props hold. After an action, before its updates
+  are resolved, the composer invalidates what its effects name: the entities it changed, the islands
+  it updates, and every cached island of the screens it invalidates (as the caller's request would
+  place them). With a cache shared by several composers, a change shows on the next request to any
+  of them. The ttl is how long an entry can be out of date when something changes another way.
+- Requests for an entry this composer is already resolving wait for it, rather than resolving it
+  again.
 - Failures are never cached.
-- If the cache errors, the island resolves anyway and the error reaches plugins as a `CacheFailed`
-  failure, so a cache outage never breaks a screen.
+- If the cache errors, the island resolves anyway (or the action's changes stay cached until their
+  ttl) and the error reaches plugins as a `CacheFailed` failure, so a cache outage never breaks a
+  screen or an action.
 - In tests, `cctest.NewMemoryCache()` is an in-memory `cc.Cache`.
 
 ## Retried actions (optional)

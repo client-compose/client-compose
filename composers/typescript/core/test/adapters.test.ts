@@ -93,6 +93,7 @@ test("a broken cache is reported and bypassed", async () => {
   const broken: Cache = {
     get: () => Promise.reject(new Error("redis down")),
     set: () => Promise.reject(new Error("redis down")),
+    invalidate: () => Promise.reject(new Error("redis down")),
   };
   const failures: Failure[] = [];
   const { header } = counted();

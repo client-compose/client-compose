@@ -16,13 +16,22 @@ import {
 
 import {
   type Action,
+  type Effects,
   isActionRequestShape,
   type IslandRef,
   performAction,
   protocolError,
   type ResolvedUpdates,
 } from "./actions.ts";
-import { type Cache, type Idempotency, performIdempotent, resolveCached } from "./adapters.ts";
+import {
+  type Cache,
+  entityTag,
+  type Flights,
+  type Idempotency,
+  islandTag,
+  performIdempotent,
+  resolveCached,
+} from "./adapters.ts";
 import { isRecord } from "./guards.ts";
 import { attachScope, InvalidCursorError, RequestScope } from "./loading.ts";
 import type { ComposeFn, Failure, PerformFn, Plugin, ResolveFn } from "./plugins.ts";
@@ -185,7 +194,8 @@ export function createComposer<Ctx = undefined, Req = Request>(
     return found;
   };
 
-  let resolveChain: ResolveFn<Ctx> = (call) => resolveCached(config.cache, call, report);
+  const flights: Flights = new Map();
+  let resolveChain: ResolveFn<Ctx> = (call) => resolveCached(config.cache, flights, call, report);
   let composeChain: ComposeFn<Ctx> = (req, ctx) => composeScreen(screenOf(req.screen), req, ctx);
   const performOnce = (req: ActionRequest, ctx: Ctx) =>
     performAction(
@@ -195,6 +205,7 @@ export function createComposer<Ctx = undefined, Req = Request>(
       report,
       wordsFor(req.client.locale),
       (refs) => resolveUpdates(refs, req, ctx),
+      (effects) => invalidateCached(effects, req, ctx),
     );
   let performChain: PerformFn<Ctx> = (req, ctx) =>
     performIdempotent(config.idempotency, req, ctx, performOnce, report);
@@ -330,6 +341,90 @@ export function createComposer<Ctx = undefined, Req = Request>(
     }
 
     return out;
+  }
+
+  /**
+   * Invalidates the cached islands an action's effects say changed, before its updates are
+   * resolved: those holding the entities it changed, the islands it updates and every island of the
+   * screens it invalidates. Islands are found as the caller's request would
+   * place them. A cache that errors is reported; its entries stay until their TTL.
+   */
+  async function invalidateCached(effects: Effects, req: ActionRequest, ctx: Ctx): Promise<void> {
+    const cache = config.cache;
+    if (!cache) {
+      return;
+    }
+    const tags = new Set<string>();
+    for (const change of effects.changes ?? []) {
+      tags.add(entityTag(change.entity, change.id));
+    }
+    const refs: { screen: string; params?: Record<string, string>; key?: string }[] = [
+      ...(effects.update ?? []),
+      ...(effects.invalidate ?? []),
+    ];
+    for (const ref of refs) {
+      for (const tag of await placedTags(ref.screen, ref.params ?? {}, ref.key, req, ctx)) {
+        tags.add(tag);
+      }
+    }
+    if (tags.size === 0) {
+      return;
+    }
+    try {
+      await cache.invalidate([...tags].sort());
+    } catch (error) {
+      report({
+        kind: "cache",
+        action: req.action,
+        version: req.version,
+        error,
+      });
+    }
+  }
+
+  /** The tags of the cached islands a screen places for these params, or only the one with `key`. */
+  async function placedTags(
+    id: string,
+    params: Record<string, string>,
+    key: string | undefined,
+    req: ActionRequest,
+    ctx: Ctx,
+  ): Promise<string[]> {
+    const screen = screens.get(id);
+    if (!screen) {
+      return [];
+    }
+    const request = new AbortController();
+    const scope = new RequestScope(request.signal);
+    const language = wordsFor(req.client.locale);
+    const fields = {
+      screen: screen.id,
+      params,
+      client: req.client,
+      ctx,
+      load: scope.load.bind(scope),
+      strings: <S>(d: ScreenStringsDescriptor<S>) => screenStrings(language, d),
+    };
+    const lc: LayoutContext<Ctx> = attachScope(fields, scope);
+    try {
+      const tags: string[] = [];
+      for (const placement of await placementsFor(screen, lc)) {
+        if (key !== undefined && placement.key !== key) {
+          continue;
+        }
+        for (const island of placement.versions) {
+          const appKey = island.cache?.key(lc);
+          if (appKey) {
+            tags.push(islandTag(island, appKey));
+          }
+        }
+      }
+      return tags;
+    } catch {
+      return [];
+    } finally {
+      request.abort();
+    }
   }
 
   async function resolveUpdate(
