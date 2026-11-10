@@ -21,7 +21,9 @@ import {
   ClientComposeProvider,
   ComposedScreen,
   ReactIslandRegistry,
+  type RunAction,
   useAction,
+  useRunAction,
 } from "../src/index.ts";
 
 const Count: IslandDescriptor<{ n: number }> = { type: "count", version: 1 };
@@ -159,6 +161,54 @@ test("run posts the action with the configured headers and resolves with the res
   assert.equal(typeof c.actions[0].body.idempotencyKey, "string");
   assert.equal(ui.action().last?.status, "ok");
   await ui.unmount();
+});
+
+test("useRunAction performs any action given, with its effects, and resolves failures", async () => {
+  const c = fakeComposer(() => okResponse({ invalidate: [{ screen: "feed" }] }));
+  let run!: RunAction;
+  function Harness(): ReactNode {
+    run = useRunAction();
+    return null;
+  }
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  await act(async () =>
+    root.render(
+      createElement(
+        ClientComposeProvider,
+        { config: baseConfig(c.impl) },
+        createElement(Harness),
+        createElement(ComposedScreen, { screen: "feed" }),
+      ),
+    ),
+  );
+  assert.equal(container.innerHTML, "<b>1</b>");
+
+  let res!: Awaited<ReturnType<RunAction>>;
+  await act(async () => {
+    res = await run(Follow, { userId: "u1" });
+  });
+  assert.equal(res.status, "ok");
+  assert.deepEqual(c.actions[0].body.input, { userId: "u1" });
+  assert.equal(c.actions[0].body.action, "follow");
+  // Its effects applied, as useAction's are: the feed reloaded.
+  assert.equal(container.innerHTML, "<b>2</b>");
+
+  const failing = fakeComposer(() => new Response("nope", { status: 500 }));
+  await act(async () =>
+    root.render(
+      createElement(
+        ClientComposeProvider,
+        { config: baseConfig(failing.impl) },
+        createElement(Harness),
+      ),
+    ),
+  );
+  await act(async () => {
+    res = await run(Follow, { userId: "u1" });
+  });
+  assert.equal(res.status, "failed");
+  await act(async () => root.unmount());
 });
 
 test("invalidate reloads the matching screens on show, and only those", async () => {

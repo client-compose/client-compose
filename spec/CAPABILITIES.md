@@ -267,7 +267,7 @@ What makes these feel like one toolkit rather than six libraries:
 | Register | | | `registry.registerComponent(Props, C)` |
 | Screen view | | | `<ComposedScreen>` |
 | Screen state | | | `useScreen` |
-| Action | | | `useAction(Action)` |
+| Action | | | `useAction(Action)`, `useRunAction()` |
 | Test kit | `cctest` | `@client-compose/composer/testing` | `@client-compose/react/testing` |
 
 Names in *italics* don't exist yet; the parity work below adds them.

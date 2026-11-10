@@ -16,8 +16,10 @@ export {
   type ComposedScreenProps,
   Island,
   IslandBoundary,
+  type RunAction,
   type ScreenState,
   useAction,
+  useRunAction,
   useScreen,
   type UseScreenOptions,
 } from "./client.ts";
