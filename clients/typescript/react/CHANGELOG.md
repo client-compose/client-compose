@@ -1,5 +1,13 @@
 # @client-compose/react
 
+## 0.19.0
+
+### Minor Changes
+
+- [#82](https://github.com/client-compose/client-compose/pull/82) [`c40783d`](https://github.com/client-compose/client-compose/commit/c40783d302c83d162ebce74af0253f0d04a6ba21) Thanks [@LewisYearsley](https://github.com/LewisYearsley)! - `useRunAction()` performs actions chosen at run time: `run(descriptor, input)` behaves as
+  `useAction`'s `run`, effects included, for actions an app kept to perform later or a list of them.
+  `useAction` is built on it, unchanged.
+
 ## 0.18.1
 
 ### Patch Changes
