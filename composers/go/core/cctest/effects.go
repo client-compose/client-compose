@@ -46,6 +46,18 @@ func CheckEffects[R any](a *App, screen string, params Params, perform func() Ou
 			a.t.Errorf("cctest: after its effects, island %q shows\n\t%s\nbut composed again it's\n\t%s", entry.Key, got, want)
 		}
 	}
+	// What's kept must be what's true: data the action changed and didn't name (Changes, Stale)
+	// would be served from the cache, out of date, until its ttl.
+	fresh := a.Screen(screen, params, append(slices.Clone(opts), Fresh())...)
+	for i, entry := range after.Response.Islands {
+		if i >= len(fresh.Response.Islands) || entry.Key != fresh.Response.Islands[i].Key {
+			break
+		}
+		kept, truth := asJSON(a, entry.Props), asJSON(a, fresh.Response.Islands[i].Props)
+		if kept != truth {
+			a.t.Errorf("cctest: after the action, island %q is served from the cache as\n\t%s\nbut its data is now\n\t%s\nsay what changed: entities in Changes, other data in Stale", entry.Key, kept, truth)
+		}
+	}
 	return out
 }
 

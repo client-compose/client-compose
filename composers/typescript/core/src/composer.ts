@@ -23,17 +23,15 @@ import {
   protocolError,
   type ResolvedUpdates,
 } from "./actions.ts";
+import { type Cache, type Idempotency, performIdempotent } from "./adapters.ts";
+import { isRecord } from "./guards.ts";
 import {
-  type Cache,
+  attachScope,
   entityTag,
   type Flights,
-  type Idempotency,
-  islandTag,
-  performIdempotent,
-  resolveCached,
-} from "./adapters.ts";
-import { isRecord } from "./guards.ts";
-import { attachScope, InvalidCursorError, RequestScope } from "./loading.ts";
+  InvalidCursorError,
+  RequestScope,
+} from "./loading.ts";
 import type { ComposeFn, Failure, PerformFn, Plugin, ResolveFn } from "./plugins.ts";
 import {
   type ComposeResult,
@@ -65,10 +63,15 @@ export interface ComposerConfig<Ctx, Req = Request> {
   /** Plugins, outermost first. */
   use?: Plugin<Ctx, Req>[];
   /**
-   * Serves islands that opt in with `cache` (CMP-18). Without it, every island resolves on every
-   * request.
+   * Keeps data that opts in with `cacheMs` (`defineData`) between requests (CMP-18). Without it,
+   * data is fetched on every request.
    */
   cache?: Cache;
+  /**
+   * Who's asking, for data kept per viewer (`perViewer`): usually the signed-in user's id from
+   * your context, undefined for no one. Without it, data kept per viewer isn't cached.
+   */
+  viewer?: (ctx: Ctx) => string | undefined;
   /**
    * Runs each action at most once per scope and idempotency key (CMP-19). Without it, keys pass
    * through to actions.
@@ -81,6 +84,15 @@ export interface ComposerConfig<Ctx, Req = Request> {
    * Without it, entries carry no strings, and POST /strings answers 404.
    */
   strings?: StringsConfig;
+}
+
+/** How `handle` serves a request. */
+export interface HandleOptions {
+  /**
+   * Read no cached data: everything the request loads is fetched (CMP-18). Tests use it to compare
+   * what's kept with what's true (the testing kit's `checkEffects`).
+   */
+  fresh?: boolean;
 }
 
 /**
@@ -107,7 +119,12 @@ export interface Composer<Ctx, Req = Request> {
    * /screens/{screen}/islands/{key}, /actions/{action} or /strings, given its raw body and your
    * server's request (for `context`). Returns undefined for any other path.
    */
-  handle(path: string, body: string, request: Req): Promise<HandleResult | undefined>;
+  handle(
+    path: string,
+    body: string,
+    request: Req,
+    options?: HandleOptions,
+  ): Promise<HandleResult | undefined>;
   /**
    * Compose a screen in-process, with a context you provide: its stream, or its error. `collect`
    * puts a stream together. Tests use the testing kit instead.
@@ -195,7 +212,21 @@ export function createComposer<Ctx = undefined, Req = Request>(
   };
 
   const flights: Flights = new Map();
-  let resolveChain: ResolveFn<Ctx> = (call) => resolveCached(config.cache, flights, call, report);
+  /** Requests `handle` was asked to serve fresh, by their parsed body. */
+  const freshRequests = new WeakSet<object>();
+  /** A request's scope: its shared loads, and the cache data reads when `reads` (not in actions). */
+  const scopeFor = (signal: AbortSignal, ctx: Ctx, reads: boolean) =>
+    new RequestScope(
+      signal,
+      config.cache && {
+        cache: config.cache,
+        reads,
+        viewer: config.viewer && (() => config.viewer?.(ctx)),
+        flights,
+        report: (error: unknown) => report({ kind: "cache", error }),
+      },
+    );
+  let resolveChain: ResolveFn<Ctx> = async (call) => call.island.resolve(call.rc);
   let composeChain: ComposeFn<Ctx> = (req, ctx) => composeScreen(screenOf(req.screen), req, ctx);
   const performOnce = (req: ActionRequest, ctx: Ctx) =>
     performAction(
@@ -205,7 +236,7 @@ export function createComposer<Ctx = undefined, Req = Request>(
       report,
       wordsFor(req.client.locale),
       (refs) => resolveUpdates(refs, req, ctx),
-      (effects) => invalidateCached(effects, req, ctx),
+      (effects) => invalidateCached(effects, req),
     );
   let performChain: PerformFn<Ctx> = (req, ctx) =>
     performIdempotent(config.idempotency, req, ctx, performOnce, report);
@@ -241,7 +272,7 @@ export function createComposer<Ctx = undefined, Req = Request>(
     }
     // As for a screen: shared loads live as long as this request.
     const request = new AbortController();
-    const scope = new RequestScope(request.signal);
+    const scope = scopeFor(request.signal, ctx, !freshRequests.has(req));
     try {
       return await composeIslandIn(screen, req, ctx, scope);
     } finally {
@@ -344,28 +375,18 @@ export function createComposer<Ctx = undefined, Req = Request>(
   }
 
   /**
-   * Invalidates the cached islands an action's effects say changed, before its updates are
-   * resolved: those holding the entities it changed, the islands it updates and every island of the
-   * screens it invalidates. Islands are found as the caller's request would
-   * place them. A cache that errors is reported; its entries stay until their TTL.
+   * Clears the data an action's effects say changed, before its updates are resolved: what holds
+   * the entities it changed (`entityTag`), and the tags it names (`stale`). A cache that errors is
+   * reported; its entries stay until their TTL.
    */
-  async function invalidateCached(effects: Effects, req: ActionRequest, ctx: Ctx): Promise<void> {
+  async function invalidateCached(effects: Effects, req: ActionRequest): Promise<void> {
     const cache = config.cache;
     if (!cache) {
       return;
     }
-    const tags = new Set<string>();
+    const tags = new Set<string>(effects.stale ?? []);
     for (const change of effects.changes ?? []) {
       tags.add(entityTag(change.entity, change.id));
-    }
-    const refs: { screen: string; params?: Record<string, string>; key?: string }[] = [
-      ...(effects.update ?? []),
-      ...(effects.invalidate ?? []),
-    ];
-    for (const ref of refs) {
-      for (const tag of await placedTags(ref.screen, ref.params ?? {}, ref.key, req, ctx)) {
-        tags.add(tag);
-      }
     }
     if (tags.size === 0) {
       return;
@@ -382,51 +403,6 @@ export function createComposer<Ctx = undefined, Req = Request>(
     }
   }
 
-  /** The tags of the cached islands a screen places for these params, or only the one with `key`. */
-  async function placedTags(
-    id: string,
-    params: Record<string, string>,
-    key: string | undefined,
-    req: ActionRequest,
-    ctx: Ctx,
-  ): Promise<string[]> {
-    const screen = screens.get(id);
-    if (!screen) {
-      return [];
-    }
-    const request = new AbortController();
-    const scope = new RequestScope(request.signal);
-    const language = wordsFor(req.client.locale);
-    const fields = {
-      screen: screen.id,
-      params,
-      client: req.client,
-      ctx,
-      load: scope.load.bind(scope),
-      strings: <S>(d: ScreenStringsDescriptor<S>) => screenStrings(language, d),
-    };
-    const lc: LayoutContext<Ctx> = attachScope(fields, scope);
-    try {
-      const tags: string[] = [];
-      for (const placement of await placementsFor(screen, lc)) {
-        if (key !== undefined && placement.key !== key) {
-          continue;
-        }
-        for (const island of placement.versions) {
-          const appKey = island.cache?.key(lc);
-          if (appKey) {
-            tags.push(islandTag(island, appKey));
-          }
-        }
-      }
-      return tags;
-    } catch {
-      return [];
-    } finally {
-      request.abort();
-    }
-  }
-
   async function resolveUpdate(
     ref: IslandRef,
     params: Record<string, string>,
@@ -439,7 +415,7 @@ export function createComposer<Ctx = undefined, Req = Request>(
     }
 
     const request = new AbortController();
-    const scope = new RequestScope(request.signal);
+    const scope = scopeFor(request.signal, ctx, true);
     const language = wordsFor(req.client.locale);
     const fields = {
       screen: screen.id,
@@ -491,7 +467,7 @@ export function createComposer<Ctx = undefined, Req = Request>(
     // Shared loads live as long as this request: until its last island is resolved, or it fails.
     // Whatever is still running then is cancelled.
     const request = new AbortController();
-    const scope = new RequestScope(request.signal);
+    const scope = scopeFor(request.signal, ctx, !freshRequests.has(req));
     const end = () => request.abort();
     try {
       const res = await composeIn(screen, req, ctx, scope, end);
@@ -752,6 +728,7 @@ export function createComposer<Ctx = undefined, Req = Request>(
     path: string,
     body: string,
     request: Req,
+    options: HandleOptions = {},
   ): Promise<HandleResult | undefined> {
     const route = matchRoute(path);
     if (!route) {
@@ -772,6 +749,9 @@ export function createComposer<Ctx = undefined, Req = Request>(
     }
     if (!parsed.ok) {
       return answer(fail(400, "bad_request", "Body is not valid JSON"));
+    }
+    if (options.fresh && isRecord(parsed.value)) {
+      freshRequests.add(parsed.value);
     }
     switch (route.kind) {
       case "screens":

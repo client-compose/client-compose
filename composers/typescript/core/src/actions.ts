@@ -75,6 +75,13 @@ export interface Effects {
   invalidate?: ScreenRef[];
   /** A screen to show next. Clients map it to their own routes, and may ignore it. */
   navigate?: ScreenRef;
+  /**
+   * Cached data the action changed beyond its entities (CMP-18), by tag: a data's entry
+   * (`data.tag(key)`), or a tag of your own given by its `tags`, such as a list's when something
+   * joins or leaves it. The composer clears them, with the entities in `changes`, before resolving
+   * `update`. It's never sent to clients.
+   */
+  stale?: string[];
 }
 
 /** An entity's properties an action changed: `changed(TodoEntity, "3", { done: true })`. */

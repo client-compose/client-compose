@@ -57,6 +57,11 @@ type Effects struct {
 	Invalidate []ScreenRef `json:"invalidate,omitempty"`
 	// Navigate suggests a screen to show next. Clients map it to their own routes.
 	Navigate *ScreenRef `json:"navigate,omitempty"`
+	// Stale names the cached data the action changed beyond its entities (CMP-18), by tag: a
+	// Data's entry (Data.Tag), or a tag of your own given by Data.Tags, such as a list's when
+	// something joins or leaves it. The composer clears them, with the entities in Changes, before
+	// resolving Update. It's never sent to clients.
+	Stale []string `json:"-"`
 }
 
 func (e Effects) empty() bool {
@@ -185,7 +190,7 @@ func (c *Composer) Perform(ctx context.Context, req ActionRequest) Result {
 func (c *Composer) performAction(ctx context.Context, req ActionRequest) Result {
 	action := c.actions[req.Action][req.Version]
 	outside := ctx
-	ctx, endRequest := withRequestScope(ctx)
+	ctx, endRequest := c.withRequestScope(ctx, false)
 	defer endRequest()
 
 	var client ClientContext
@@ -214,7 +219,7 @@ func (c *Composer) performAction(ctx context.Context, req ActionRequest) Result 
 		if resp.Result == nil {
 			resp.Result = map[string]any{}
 		}
-		c.invalidateCached(outside, action, effects, client)
+		c.invalidateCached(outside, action, effects)
 		effects = c.resolveUpdates(outside, effects, client, req.Islands)
 		if !effects.empty() {
 			resp.Effects = &effects

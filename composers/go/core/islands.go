@@ -23,7 +23,7 @@ func (c *Composer) ComposeIsland(ctx context.Context, req IslandRequest) Result 
 		req.Client = &ClientContext{}
 	}
 
-	ctx, endRequest := withRequestScope(ctx)
+	ctx, endRequest := c.withRequestScope(ctx, true)
 	defer endRequest()
 
 	language := c.words(req.Client.Locale)

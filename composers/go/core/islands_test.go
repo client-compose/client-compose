@@ -163,12 +163,3 @@ func TestAFailingPageIsTheIslands(t *testing.T) {
 		t.Fatalf("reported %+v", reported)
 	}
 }
-
-func TestPagedIslandsArentCached(t *testing.T) {
-	defer func() {
-		if recover() == nil {
-			t.Fatal("CacheFor on a paged island should panic")
-		}
-	}()
-	numbers(3, 1).CacheFor(0, func(context.Context, cc.Request) string { return "all" })
-}

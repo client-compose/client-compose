@@ -56,7 +56,7 @@ them to say what they add.
 | CMP-15 | **App context.** One function turns the incoming request into the app's own context (the viewer, their locale, a tenant), which every layout, island and action receives. | §3 |
 | CMP-16 | **Requirements.** Screens and actions declare what they need, such as a signed-in viewer, a role, or (for screens) that what the params refer to exists and the viewer may see it. The composer answers 401, 403 or 404 before any of their islands or handler runs. Requirements see the app context (CMP-15) and the request. | §4.3 |
 | CMP-17 | **Plugins.** Integrations hook into a composer through a small, documented set of extension points (see [The composer as a platform](#the-composer-as-a-platform)), never by forking or wrapping the core. | — |
-| CMP-18 | **Cache adapter.** An optional cache the app supplies; islands opt in with a TTL and a key. Actions' effects invalidate what they changed (see [Adapters](#adapters)). | — |
+| CMP-18 | **Cached data.** Each kind of data is declared once, with how to fetch many by key and how it may be cached: for how long, under which tags, and whether per viewer. Loads batch within a request and are kept across requests in an optional cache the app supplies. Actions clear what they changed: entities they return, and tags they name as stale. Islands always resolve (see [Adapters](#adapters)). | — |
 | CMP-19 | **Idempotency adapter.** An optional store the app supplies, so retried actions return their first outcome (see [Adapters](#adapters)). | §5.2 |
 | CMP-20 | **Island requests.** Define an island with pages by its generated props type; it resolves the page a cursor asks for, and the cursor of the next. One island of a screen can be resolved again on its own, laid out as its screen would be. | §4.5 |
 | CMP-22 | **Strings.** Load a catalog, one file per language. Each island's entry carries its strings in the language nearest the client's, string by string falling back to the default; the head says which language, with its plural rules. App strings are answered at `/strings` with no session. A screen's own strings (its meta's words) are read in the request's language. | §4.7 |
@@ -165,19 +165,21 @@ in-memory ones in its test kits, so apps can test the behaviour without running 
 
 | Adapter | Interface | Without it | With it |
 | --- | --- | --- | --- |
-| **Cache** (CMP-18) | `get(key)`, `set(key, value, ttl, tags)` and `invalidate(tags)`, bytes or strings in and out | islands resolve on every request | islands that opt in (a TTL, a key function you write, and optionally who sees the same) are served from the cache while fresh. Each entry is tagged with its island and the entities it holds; an action's effects invalidate the tags of what it changed, so a cache shared by several composers stays up to date. Requests for an entry being resolved wait for it. Failures are never cached, and a cache that errors is reported and bypassed, so an outage never breaks a screen. |
+| **Cache** (CMP-18) | `getMany(keys)`, `set(key, value, ttl, tags)` and `invalidate(tags)`, bytes or strings in and out | data is fetched on every request | data that opts in (a TTL, its tags, and whether it's kept per viewer, by the composer's viewer function) is served from the cache while fresh. Each value is tagged with itself and the tags its data gives it (the entities it holds, the lists it's on); an action clears the entities it changed and the tags it names as stale, so a cache shared by several composers stays up to date. Actions read fresh; requests for a value being fetched wait for it. Failures are never cached, and a cache that errors is reported and bypassed, so an outage never breaks a screen. |
 | **Idempotency store** (CMP-19) | `begin`, `finish` and `release` for a key, plus a scope function (e.g. the viewer's id) | the idempotency key passes through to your action, as it always has | a retried action returns its first outcome instead of running again; a duplicate in flight waits for it; failures release the key so a retry runs. A store that errors is reported, and the action runs. |
 
 Auth, data loading and observability need no new adapters: they already have their extension
 points. Auth is your `context` function plus requirements, data loading is `load` and batch loaders
 calling your services, and observability is a plugin wrapping screens, islands and actions.
 
-A note on caching. The protocol says caching across requests belongs in the services a composer
-calls, because only they know what a result depends on (§9). The island cache doesn't change that:
-it's opt-in per island, and your key function says what the result depends on. A personalised
-island has to put the viewer in its key; an island with no key, or a key function that returns
-nothing for this request, isn't cached. It exists because many apps have no service layer of their
-own: the composer *is* their backend.
+A note on caching. How long something can be cached is a property of the data, not of the screens
+that show it: an article's title is the same on every screen, and whether the viewer follows its
+author is theirs on every screen. So the cache sits where data is loaded, by kind, and never on
+islands: an island showing shared data with one personal detail is resolved for each request from
+data that's mostly kept for everyone, and its personal part kept per viewer. The protocol leaves
+caching across requests to composers and the services they call (§9); a composer that calls
+services that cache already declares its data without a TTL. It exists because many apps have no
+service layer of their own: the composer *is* their backend.
 
 ## Client core
 
@@ -288,7 +290,7 @@ Names in *italics* don't exist yet; the parity work below adds them.
 | CMP-15 app context | ✅ `Config.Context` | ✅ `context` |
 | CMP-16 requirements | ✅ `Requires` | ✅ `requires` |
 | CMP-17 plugins | ✅ `cc.Plugin` | ✅ `Plugin` |
-| CMP-18 cache adapter | ✅ `Config.Cache`, `Island.CacheFor` | ✅ `cache`, `island(…, { cache })` |
+| CMP-18 cached data | ✅ `Config.Cache`, `cc.NewData` | ✅ `cache`, `defineData` |
 | CMP-19 idempotency adapter | ✅ `Config.Idempotency` | ✅ `idempotency` |
 | CMP-20 island requests | ✅ `cc.DefinePaged`, `ComposeIsland` | ✅ `pagedIsland`, `composeIsland` |
 | CMP-21 streams | ✅ `cc.ScreenStream`, `cc.ReadScreen` | ✅ `ScreenStream`, `collect`, every adapter |

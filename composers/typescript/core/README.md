@@ -208,7 +208,7 @@ const Results = pagedIsland(ResultListV1, async ({ params, cursor }) => {
 The island's entry carries `next` while there are more pages. Clients fetch them from
 `POST /screens/{screen}/islands/{key}`, which lays the screen out as it would (requirements,
 layout, `when`) and resolves that one island. The same request without a cursor resolves any
-island again, so a client can refresh one without the whole screen. Paged islands aren't cached.
+island again, so a client can refresh one without the whole screen.
 
 In tests, `app.nextPage(screen, "results")` fetches the page after a screen's island, `app.next`
 the one after that, and `page.props(ResultListV1)` reads it.
@@ -260,16 +260,49 @@ sent outside any request, such as an email or a notification, read them from a l
 In tests, `app.strings({ locale: "pl" })` fetches the app strings, and an island's entry has its
 `strings`.
 
-## Caching islands (optional)
+## Caching data (optional)
 
-To keep an island's props between requests, give the composer a `Cache` and opt islands in. The
-cache is your own: implement `get`, `set` and `invalidate` with whatever you run. Without `cache`,
-nothing is cached and every island resolves on every request.
+How long something can be cached is a property of the data, not of the screens that show it: an
+article's title is the same wherever it appears, and whether the viewer follows its author is theirs
+wherever it appears. So you declare each kind of data once, with how to fetch it and how it may be
+cached, and every island that loads it gets that. Islands themselves always resolve; what they load
+comes from the cache when it can.
+
+Give the composer a `Cache` (your own: implement `getMany`, `set` and `invalidate` with whatever you
+run), and declare your data with `defineData`:
+
+```ts
+const articles = defineData("article", (ids: string[], signal) => store.articles(ids, { signal }), {
+  cacheMs: 600_000,
+  tags: (id) => [entityTag("article", id)],
+});
+
+const feed = defineData("feed", store.feeds, {
+  cacheMs: 60_000,
+  // the list (actions that add to it name it), and what it holds
+  tags: (team, list) => [`feed:${team}`, ...list.map((a) => entityTag("article", a.id))],
+});
+
+const following = defineData("following", store.following, { cacheMs: 3_600_000, perViewer: true });
+
+// in any resolver:
+const article = await articles.load(rc, rc.params.id);
+const follows = await following.load(rc, article.authorId);
+
+const composer = createComposer<Ctx>({
+  screens,
+  cache: redisCache,
+  viewer: (ctx) => ctx.viewer?.id, // for perViewer data
+});
+```
 
 ```ts
 // Your adapter, e.g. over node-redis. Each tag is a set of the keys filed under it.
 const redisCache: Cache = {
-  get: async (key) => (await redis.get(key)) ?? undefined,
+  getMany: async (keys) => {
+    const values = await redis.mGet([...keys]);
+    return Object.fromEntries(keys.flatMap((k, i) => (values[i] == null ? [] : [[k, values[i]]])));
+  },
   set: async (key, value, ttlMs, tags) => {
     const tx = redis.multi().set(key, value, { PX: ttlMs });
     for (const tag of tags) tx.sAdd(tag, key).pExpire(tag, ttlMs);
@@ -282,34 +315,29 @@ const redisCache: Cache = {
     }
   },
 };
-
-// Islands say how long, and what their props depend on:
-const Trending = island(TrendingV1, resolveTrending, { cache: { ttlMs: 300_000, key: () => "all" } });
-const Team = island(TeamV1, resolveTeam, {
-  cache: { ttlMs: 300_000, key: ({ params }) => params.team },
-});
-
-const composer = createComposer({ screens, cache: redisCache });
 ```
 
-- The key function returns what the props depend on: the params it reads, the locale. The
-  composer adds the island's type and version. Return undefined to skip the cache for this request.
-- An action invalidates the entries its caller's key names. So cache islands that are the same for
-  everyone who sees them: when some people see an island differently from others (members see
-  more than visitors, say), split it into islands that each are, and place each for whoever sees it.
-- **Actions keep it up to date.** Each entry is filed under tags: the island (its type, version
-  and key) and each entity its props hold. After an action, before its updates
-  are resolved, the composer invalidates what its effects name: the entities it changed, the islands
-  it updates, and every cached island of the screens it invalidates (as the caller's request would
-  place them). With a cache shared by several composers, a change shows on the next request to any
-  of them. The TTL is how long an entry can be out of date when something changes another way.
-- Requests for an entry this composer is already resolving wait for it, rather than resolving it
-  again.
-- Failures are never cached.
-- If the cache errors, the island resolves anyway (or the action's changes stay cached until their
-  TTL) and the error reaches plugins as a `"cache"` failure, so a cache outage never breaks a screen
-  or an action.
-- In tests, `memoryCache()` from `@client-compose/composer/testing` is an in-memory `Cache`.
+- **Within a request**, loads batch and share as a batch loader's do. **Across requests**, a value
+  is kept for its `cacheMs`, under its data's name and its key, values being JSON.
+- **`perViewer`** keeps each viewer's values apart, by the composer's `viewer`: whatever differs by
+  who's asking. It's never shared, and never cached by a composer without a `viewer`.
+- **Actions keep it up to date.** Each value is filed under its own tag (`data.tag(key)`) and those
+  `tags` gives it. After an action, before its updates are resolved, the composer clears what it
+  says changed: what holds the entities in its `changes` (`entityTag`), and the tags it names in
+  `stale`, for changes entities can't show, such as something joining a list. With a cache shared
+  by several composers, a change shows on the next request to any of them. The TTL is how long a
+  value can be out of date when something changes another way.
+- **Actions read fresh data:** loads outside a screen's or island's request (pass the action's
+  call) skip the cache. Islands an action updates are resolved after its changes are cleared, so
+  they're fresh too.
+- When several requests miss the same value at once, one fetches it and the others wait for it.
+- Failures and missing keys are never cached.
+- If the cache errors, data is fetched anyway (or the action's changes stay cached until their
+  TTL), and the error reaches plugins as a `"cache"` failure, so a cache outage never breaks a
+  screen or an action.
+- In tests, `memoryCache()` from `@client-compose/composer/testing` is an in-memory `Cache`, and
+  `checkEffects` checks an action names everything it changed: what's served from the cache
+  afterwards must be what a fresh request (`{ fresh: true }`) gets.
 
 ## Retried actions (optional)
 
@@ -417,8 +445,10 @@ const authors = await userById.loadMany(rc, authorIds); // rejects if any is mis
 `fetch` returns a `Map` keyed by id, or an array aligned with `ids` (`undefined` for a missing id,
 which rejects with `LoadNotFoundError`). Options: `maxBatchSize`, `windowMs`, `cacheKey`.
 
-**3. Cache across requests in your service clients, not here.** `load` and batch loaders are scoped
-to one request on purpose, so one user's data never leaks into another's screen.
+**3. Cache across requests by declaring data.** `load` and batch loaders are scoped to one request.
+To keep data between requests, declare it with `defineData` (see [Caching data](#caching-data-optional)):
+it batches like a batch loader, and its kind says how long it may be kept, and for whom, so one
+user's data never reaches another's screen.
 
 ## Testing
 

@@ -8,7 +8,6 @@ import type {
   ScreenStringsDescriptor,
 } from "@client-compose/protocol";
 
-import type { IslandCache } from "./adapters.ts";
 import type { LoadContext } from "./loading.ts";
 import type { Requirement } from "./plugins.ts";
 
@@ -51,8 +50,6 @@ export interface Island<Ctx, P = unknown> {
   type: string;
   version: number;
   resolve: (rc: ResolveContext<Ctx>) => Promise<P> | P;
-  /** Cache the island's props, when the composer has a `Cache` (CMP-18). */
-  cache?: IslandCache<Ctx>;
   /** It has pages: it resolves to a `Page`, its props and where the next page starts. */
   paged?: boolean;
   /** Where its props hold entities (spec §2.1), from its generated descriptor. */
@@ -65,18 +62,9 @@ export interface Page<P> {
   next?: string;
 }
 
-export interface IslandOptions<Ctx> {
-  /**
-   * Cache the island's props when the composer has a `Cache`:
-   *
-   *     island(TrendingV1, resolveTrending, { cache: { ttlMs: 300_000, key: () => "all" } })
-   *     island(FeedV1, resolveFeed, { cache: { ttlMs: 30_000, key: ({ ctx, params }) => `${ctx.viewer?.id}:${params.page}` } })
-   */
-  cache?: IslandCache<Ctx>;
-}
-
 /**
- * Define how to resolve one island version, by its generated descriptor:
+ * Define how to resolve one island version, by its generated descriptor. What it loads is cached as
+ * each kind of data says (`defineData`), not by the island:
  *
  *     const ProfileHeader = island(ProfileHeaderV2, async ({ params, load }) => {
  *       const user = await load(`user:${params.userId}`, () => users.get(params.userId));
@@ -86,14 +74,12 @@ export interface IslandOptions<Ctx> {
 export function island<P, Ctx = unknown>(
   descriptor: IslandDescriptor<P>,
   resolve: (rc: ResolveContext<Ctx>) => Promise<P> | P,
-  options: IslandOptions<Ctx> = {},
 ): Island<Ctx, P> {
   return {
     type: descriptor.type,
     version: descriptor.version,
     resolve,
     entities: descriptor.entities,
-    ...options,
   };
 }
 
