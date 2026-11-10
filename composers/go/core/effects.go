@@ -120,7 +120,7 @@ func (c *Composer) resolveUpdate(parent context.Context, ref IslandRef, client C
 		return IslandEntry{}, false
 	}
 
-	ctx, endRequest := withRequestScope(parent)
+	ctx, endRequest := c.withRequestScope(parent, true)
 	defer endRequest()
 
 	words := c.words(client.Locale)

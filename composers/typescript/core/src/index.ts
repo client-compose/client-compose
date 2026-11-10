@@ -12,16 +12,12 @@ export {
   type Effects,
   type IslandRef,
 } from "./actions.ts";
-export {
-  type Cache,
-  type Idempotency,
-  type IdempotencyStore,
-  type IslandCache,
-} from "./adapters.ts";
+export { type Cache, type Idempotency, type IdempotencyStore } from "./adapters.ts";
 export {
   type Composer,
   type ComposerConfig,
   createComposer,
+  type HandleOptions,
   type HandleResult,
   matchRoute,
   type Route,
@@ -30,7 +26,11 @@ export { conformanceActions, conformanceScreen } from "./conformance.ts";
 export {
   type BatchLoader,
   type BatchLoaderOptions,
+  type Data,
+  type DataOptions,
   defineBatchLoader,
+  defineData,
+  entityTag,
   ForbiddenError,
   InvalidCursorError,
   type LoadContext,
@@ -53,7 +53,6 @@ export type { ComposeResult, IslandResult, PerformResult, StringsResult } from "
 export {
   type Island,
   island,
-  type IslandOptions,
   type LayoutContext,
   negotiate,
   type Page,

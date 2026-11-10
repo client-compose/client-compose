@@ -6,17 +6,17 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
-	"strconv"
+	"sync"
 	"time"
 )
 
-// Cache keeps island props between requests (CMP-18). Implement it with whatever your app runs:
-// Redis, Memcached, a map in memory. It's optional: without one (Config.Cache), islands resolve on
-// every request, whether they opt in with CacheFor or not.
+// Cache keeps data between requests (CMP-18), for every kind of data that opts in with
+// Data.CacheFor. Implement it with whatever your app runs: Redis, Memcached, a map in memory. It's
+// optional: without one (Config.Cache), data is fetched on every request.
 //
-// Each entry is filed under tags: the island it is (its type, version and key) and each entity its
-// props hold. After an action, the composer invalidates the tags of what its effects say changed,
-// so a change shows on the next request, from every composer sharing the cache. A Redis
+// Each entry is filed under tags: its own, and those its Data's Tags gives it (the entities it
+// holds, the lists it's on). After an action, the composer invalidates the tags of what it says
+// changed, so a change shows on the next request, from every composer sharing the cache. A Redis
 // implementation keeps each tag as a set of keys:
 //
 //	func (c redisCache) Set(ctx context.Context, key string, value []byte, ttl time.Duration, tags []string) error {
@@ -31,210 +31,65 @@ import (
 //		return err
 //	}
 type Cache interface {
-	// Get returns the value stored under key, and whether there was one.
-	Get(ctx context.Context, key string) (value []byte, found bool, err error)
+	// GetMany returns the values stored under any of keys, by key: keys with none are left out.
+	GetMany(ctx context.Context, keys []string) (map[string][]byte, error)
 	// Set stores value under key for ttl, filed under each of tags.
 	Set(ctx context.Context, key string, value []byte, ttl time.Duration, tags []string) error
 	// Invalidate removes every value filed under any of tags.
 	Invalidate(ctx context.Context, tags []string) error
 }
 
-// CacheKey says what an island's props depend on for this request: the params it reads, the
-// locale. Return "" to skip the cache for this request. An action invalidates the entries its
-// caller's key names, so an island that some people see differently from others is best split
-// into islands that are each the same for everyone who sees them.
-type CacheKey func(ctx context.Context, r Request) string
-
-type islandCache struct {
-	ttl time.Duration
-	key CacheKey
-}
-
-// CacheFor returns the island with its props cached for ttl, under the key that key returns, when
-// the composer has a Cache. The island's type and version are added to the key. Failures are never
-// cached. Actions invalidate it through their effects: changes to entities it holds, an update to
-// it, or invalidating its screen. The ttl is how long it can be out of date if something changes
-// another way.
-//
-//	trending := cc.Define(resolveTrending).CacheFor(5*time.Minute, func(context.Context, cc.Request) string { return "all" })
-//	feed := cc.Define(resolveFeed).CacheFor(30*time.Second, func(ctx context.Context, r cc.Request) string {
-//		return r.Params["team"]
-//	})
-func (i Island) CacheFor(ttl time.Duration, key CacheKey) Island {
-	if i.paged {
-		// A page depends on its cursor, and the cache keeps props alone, not where they go on.
-		panic(fmt.Sprintf("clientcompose: %s v%d has pages, which aren't cached", i.Type, i.Version))
-	}
-	i.cache = &islandCache{ttl: ttl, key: key}
-	return i
-}
-
-// islandTag is the tag of an island's entry.
-func islandTag(island Island, appKey string) string {
-	return fmt.Sprintf("tag:island:%s:%d:%s", island.Type, island.Version, appKey)
-}
-
-// entityTag is the tag of every entry holding one entity.
-func entityTag(entity, id string) string {
-	return fmt.Sprintf("tag:entity:%s:%s", entity, id)
-}
-
-// flight is one resolve of a missing entry that other requests for it wait on.
+// flight is one fetch of a missing entry that other requests for it wait on.
 type flight struct {
 	done  chan struct{}
 	props json.RawMessage
 	err   error
 }
 
-// resolveIsland is the innermost island resolver: from the cache when the island opts in and the
-// composer has one, otherwise by the island's own function. Requests for an entry this composer is
-// already resolving wait for it, rather than resolving it again.
-func (c *Composer) resolveIsland(ctx context.Context, call IslandCall) (any, error) {
-	ic := call.Island.cache
-	if c.cache == nil || ic == nil {
-		return call.Island.resolve(ctx, call.Request)
-	}
-	appKey := ic.key(ctx, call.Request)
-	if appKey == "" {
-		return call.Island.resolve(ctx, call.Request)
-	}
-	key := fmt.Sprintf("island:%s:%d:%s", call.Island.Type, call.Island.Version, appKey)
-	report := func(err error) {
-		c.report(ctx, Failure{Kind: CacheFailed, Screen: call.Screen, Key: call.Key, Type: call.Island.Type, Err: err})
-	}
-
-	cached, found, err := c.cache.Get(ctx, key)
-	if err != nil {
-		report(fmt.Errorf("cache get %s: %w", key, err))
-	} else if found && json.Valid(cached) {
-		return json.RawMessage(cached), nil
-	}
-
-	f, leader := c.join(key)
-	if !leader {
-		select {
-		case <-f.done:
-			if f.err == nil {
-				return f.props, nil
-			}
-			// The first request failed, perhaps only for its own reasons (its deadline): try ours.
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		}
-		return call.Island.resolve(ctx, call.Request)
-	}
-
-	props, err := call.Island.resolve(ctx, call.Request)
-	if err != nil {
-		c.land(key, f, nil, err)
-		return nil, err
-	}
-	encoded, err := json.Marshal(props)
-	if err != nil {
-		c.land(key, f, nil, err)
-		report(fmt.Errorf("cache encode %s: %w", key, err))
-		return props, nil
-	}
-	c.land(key, f, encoded, nil)
-	tags := []string{islandTag(call.Island, appKey)}
-	for _, held := range heldEntities(encoded, call.Island.entities) {
-		tags = append(tags, entityTag(held.entity, held.id))
-	}
-	if err := c.cache.Set(ctx, key, encoded, ic.ttl, tags); err != nil {
-		report(fmt.Errorf("cache set %s: %w", key, err))
-	}
-	return props, nil
+// flights are the fetches of missing entries in progress, across every request a composer serves.
+type flights struct {
+	mu sync.Mutex
+	in map[string]*flight
 }
 
-// join returns the flight resolving key, starting one if there's none: leader says it's the
-// caller's to resolve.
-func (c *Composer) join(key string) (f *flight, leader bool) {
-	c.flightsMu.Lock()
-	defer c.flightsMu.Unlock()
-	if f, ok := c.flights[key]; ok {
+// join returns the flight fetching key, starting one if there's none: leader says it's the
+// caller's to fetch.
+func (fs *flights) join(key string) (f *flight, leader bool) {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+	if f, ok := fs.in[key]; ok {
 		return f, false
 	}
 	f = &flight{done: make(chan struct{})}
-	c.flights[key] = f
+	fs.in[key] = f
 	return f, true
 }
 
-// land ends a flight, with what it resolved to.
-func (c *Composer) land(key string, f *flight, props json.RawMessage, err error) {
-	c.flightsMu.Lock()
-	delete(c.flights, key)
-	c.flightsMu.Unlock()
-	f.props, f.err = props, err
+// land ends a flight, with what it fetched.
+func (fs *flights) land(key string, f *flight, value json.RawMessage, err error) {
+	fs.mu.Lock()
+	delete(fs.in, key)
+	fs.mu.Unlock()
+	f.props, f.err = value, err
 	close(f.done)
 }
 
-type held struct{ entity, id string }
-
-// heldEntities are the entities encoded props hold, by the island's entity paths (spec §2.1).
-func heldEntities(encoded []byte, paths []EntityPath) []held {
-	if len(paths) == 0 {
-		return nil
-	}
-	var props any
-	if err := json.Unmarshal(encoded, &props); err != nil {
-		return nil
-	}
-	var out []held
-	for _, path := range paths {
-		out = appendHeld(out, props, path, path.Path)
-	}
-	return out
+// resolveIsland is the innermost island resolver: the island's own function. What it loads comes
+// from Data, cached as each kind of data says.
+func resolveIsland(ctx context.Context, call IslandCall) (any, error) {
+	return call.Island.resolve(ctx, call.Request)
 }
 
-func appendHeld(out []held, value any, path EntityPath, rest []string) []held {
-	if len(rest) == 0 {
-		object, ok := value.(map[string]any)
-		if !ok {
-			return out
-		}
-		switch id := object[path.ID].(type) {
-		case string:
-			return append(out, held{path.Entity, id})
-		case float64:
-			return append(out, held{path.Entity, strconv.FormatFloat(id, 'f', -1, 64)})
-		}
-		return out
-	}
-	step, next := rest[0], rest[1:]
-	switch v := value.(type) {
-	case []any:
-		if step == "[]" {
-			for _, item := range v {
-				out = appendHeld(out, item, path, next)
-			}
-		}
-	case map[string]any:
-		for key, item := range v {
-			if step == "{}" || step == key {
-				out = appendHeld(out, item, path, next)
-			}
-		}
-	}
-	return out
-}
-
-// invalidateCached invalidates the cached islands an action's effects say changed, before its
-// updates are resolved: those holding the entities it changed, the islands it updates and every
-// island of the screens it invalidates. Islands are found as the caller's
-// request would place them. A cache that errors is reported; its entries stay until their ttl.
-func (c *Composer) invalidateCached(ctx context.Context, action Action, effects Effects, client ClientContext) {
+// invalidateCached clears the data an action's effects say changed, before its updates are
+// resolved: what holds the entities it changed (EntityTag), and the tags it names (Stale). A cache
+// that errors is reported; its entries stay until their ttl.
+func (c *Composer) invalidateCached(ctx context.Context, action Action, effects Effects) {
 	if c.cache == nil {
 		return
 	}
-	var tags []string
+	tags := slices.Clone(effects.Stale)
 	for _, change := range effects.Changes {
-		tags = append(tags, entityTag(change.Entity, change.ID))
-	}
-	for _, ref := range effects.Update {
-		tags = append(tags, c.placedTags(ctx, ref.Screen, ref.Params, client, ref.Key)...)
-	}
-	for _, ref := range effects.Invalidate {
-		tags = append(tags, c.placedTags(ctx, ref.Screen, ref.Params, client, "")...)
+		tags = append(tags, EntityTag(change.Entity, change.ID))
 	}
 	if len(tags) == 0 {
 		return
@@ -244,40 +99,6 @@ func (c *Composer) invalidateCached(ctx context.Context, action Action, effects 
 	if err := c.cache.Invalidate(ctx, tags); err != nil {
 		c.report(ctx, Failure{Kind: CacheFailed, Action: action.Name, Version: action.Version, Err: fmt.Errorf("cache invalidate: %w", err)})
 	}
-}
-
-// placedTags are the tags of the cached islands a screen places for these params, or only the one
-// with key when it's set.
-func (c *Composer) placedTags(parent context.Context, id string, params map[string]string, client ClientContext, key string) []string {
-	screen, ok := c.screens[id]
-	if !ok {
-		return nil
-	}
-	ctx, endRequest := withRequestScope(parent)
-	defer endRequest()
-	if params == nil {
-		params = map[string]string{}
-	}
-	r := Request{Screen: id, Params: params, Client: client, words: c.words(client.Locale)}
-	placements, err := c.placements(ctx, screen, r)
-	if err != nil {
-		return nil
-	}
-	var tags []string
-	for _, p := range placements {
-		if key != "" && p.Key != key {
-			continue
-		}
-		for _, island := range p.Versions {
-			if island.cache == nil {
-				continue
-			}
-			if appKey := island.cache.key(ctx, r); appKey != "" {
-				tags = append(tags, islandTag(island, appKey))
-			}
-		}
-	}
-	return tags
 }
 
 // IdempotencyStore keeps action outcomes by idempotency key (CMP-19), so a retried action returns

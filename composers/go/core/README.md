@@ -230,7 +230,7 @@ results := cc.DefinePaged(func(ctx context.Context, r cc.Request) (ResultListV1,
 The island's entry carries `next` while there are more pages. Clients fetch them from
 `POST /screens/{screen}/islands/{key}`, which lays the screen out as it would (requirements,
 layout, `When`) and resolves that one island. The same request without a cursor resolves any
-island again, so a client can refresh one without the whole screen. Paged islands aren't cached.
+island again, so a client can refresh one without the whole screen.
 
 In tests, `app.NextPage(screen, "results")` fetches the page after a screen's island, `app.Next`
 the one after that, and `cctest.IslandProps[ResultListV1](t, page)` reads it.
@@ -283,22 +283,63 @@ results carry words read them the same way, from their `Call`: `SearchScreenStri
 
 In tests, `app.Strings("pl")` fetches the app strings, and an island's entry has its `Strings`.
 
-## Caching islands (optional)
+## Caching data (optional)
 
-To keep an island's props between requests, give the composer a `cc.Cache` and opt islands in with
-`CacheFor`. The cache is your own: implement `Get`, `Set` and `Invalidate` with whatever you run.
-Without `Config.Cache`, nothing is cached and every island resolves on every request.
+How long something can be cached is a property of the data, not of the screens that show it: an
+article's title is the same wherever it appears, and whether the viewer follows its author is theirs
+wherever it appears. So you declare each kind of data once, with how to fetch it and how it may be
+cached, and every island that loads it gets that. Islands themselves always resolve; what they load
+comes from the cache when it can.
+
+Give the composer a `cc.Cache` (your own: implement `GetMany`, `Set` and `Invalidate` with whatever
+you run), and declare your data with `cc.NewData`:
+
+```go
+var articles = cc.NewData("article", store.Articles). // func(ctx, ids []string) (map[string]Article, error)
+	CacheFor(10*time.Minute).
+	Tags(func(id string, _ Article) []string { return []string{cc.EntityTag("article", id)} })
+
+var feed = cc.NewData("feed", store.Feeds). // a team's latest, by team
+	CacheFor(time.Minute).
+	Tags(func(team string, list []Article) []string {
+		tags := []string{"feed:" + team} // the list: actions that add to it name it
+		for _, a := range list {
+			tags = append(tags, cc.EntityTag("article", a.ID)) // and what it holds
+		}
+		return tags
+	})
+
+var following = cc.NewData("following", store.Following). // whom the viewer follows, by author
+	CacheFor(time.Hour).
+	PerViewer()
+
+// in any resolver:
+article, err := articles.Load(ctx, r.Params["id"])
+follows, err := following.Load(ctx, article.AuthorID)
+
+composer := cc.New(cc.Config{
+	Screens: screens,
+	Cache:   redisCache{rdb},
+	Viewer:  func(ctx context.Context) string { return userID(ctx) }, // for PerViewer data
+})
+```
 
 ```go
 // Your adapter, e.g. over go-redis. Each tag is a set of the keys filed under it.
 type redisCache struct{ rdb *redis.Client }
 
-func (c redisCache) Get(ctx context.Context, key string) ([]byte, bool, error) {
-	v, err := c.rdb.Get(ctx, key).Bytes()
-	if errors.Is(err, redis.Nil) {
-		return nil, false, nil
+func (c redisCache) GetMany(ctx context.Context, keys []string) (map[string][]byte, error) {
+	values, err := c.rdb.MGet(ctx, keys...).Result()
+	if err != nil {
+		return nil, err
 	}
-	return v, err == nil, err
+	out := map[string][]byte{}
+	for i, v := range values {
+		if s, ok := v.(string); ok {
+			out[keys[i]] = []byte(s)
+		}
+	}
+	return out, nil
 }
 
 func (c redisCache) Set(ctx context.Context, key string, value []byte, ttl time.Duration, tags []string) error {
@@ -324,34 +365,28 @@ func (c redisCache) Invalidate(ctx context.Context, tags []string) error {
 	}
 	return nil
 }
-
-// Islands say how long, and what their props depend on:
-trending := cc.Define(resolveTrending).CacheFor(5*time.Minute, func(context.Context, cc.Request) string { return "all" })
-team := cc.Define(resolveTeam).CacheFor(5*time.Minute, func(_ context.Context, r cc.Request) string {
-	return r.Params["team"]
-})
-
-composer := cc.New(cc.Config{Screens: screens, Cache: redisCache{rdb}})
 ```
 
-- The key function returns what the props depend on: the params it reads, the locale. The
-  composer adds the island's type and version. Return `""` to skip the cache for this request.
-- An action invalidates the entries its caller's key names. So cache islands that are the same for
-  everyone who sees them: when some people see an island differently from others (members see
-  more than visitors, say), split it into islands that each are, and place each for whoever sees it.
-- **Actions keep it up to date.** Each entry is filed under tags: the island (its type, version
-  and key) and each entity its props hold. After an action, before its updates
-  are resolved, the composer invalidates what its effects name: the entities it changed, the islands
-  it updates, and every cached island of the screens it invalidates (as the caller's request would
-  place them). With a cache shared by several composers, a change shows on the next request to any
-  of them. The ttl is how long an entry can be out of date when something changes another way.
-- Requests for an entry this composer is already resolving wait for it, rather than resolving it
-  again.
-- Failures are never cached.
-- If the cache errors, the island resolves anyway (or the action's changes stay cached until their
-  ttl) and the error reaches plugins as a `CacheFailed` failure, so a cache outage never breaks a
+- **Within a request**, loads batch and share as a `BatchLoader`'s do. **Across requests**, a value
+  is kept for its `CacheFor` ttl, under its data's name and its key, values being JSON.
+- **`PerViewer`** keeps each viewer's values apart, by `Config.Viewer`: whatever differs by who's
+  asking. It's never shared, and never cached by a composer without a `Viewer`.
+- **Actions keep it up to date.** Each value is filed under its own tag (`data.Tag(ctx, key)`) and
+  those `Tags` gives it. After an action, before its updates are resolved, the composer clears what
+  it says changed: what holds the entities in its `Changes` (`cc.EntityTag`), and the tags it names
+  in `Effects.Stale`, for changes entities can't show, such as something joining a list. With a
+  cache shared by several composers, a change shows on the next request to any of them. The ttl is
+  how long a value can be out of date when something changes another way.
+- **Actions read fresh data:** their loads skip the cache, since they check what they change.
+  Islands an action updates are resolved after its changes are cleared, so they're fresh too.
+- When several requests miss the same value at once, one fetches it and the others wait for it.
+- Failures and missing keys are never cached.
+- If the cache errors, data is fetched anyway (or the action's changes stay cached until their
+  ttl), and the error reaches plugins as a `CacheFailed` failure, so a cache outage never breaks a
   screen or an action.
-- In tests, `cctest.NewMemoryCache()` is an in-memory `cc.Cache`.
+- In tests, `cctest.NewMemoryCache()` is an in-memory `cc.Cache`, and `cctest.CheckEffects` checks
+  an action names everything it changed: what's served from the cache afterwards must be what a
+  fresh request (`cc.Fresh`) gets.
 
 ## Retried actions (optional)
 
@@ -423,8 +458,10 @@ authors, err := userByID.LoadMany(ctx, authorIDs) // fails if any is missing
 Keys missing from the returned map fail with `cc.ErrNotFound`. Options: `cc.WithBatchWindow`
 (default 2ms) and `cc.WithMaxBatchSize`.
 
-**3. Cache across requests in your service clients, not here.** `Load` and batch loaders are scoped
-to one request on purpose, so one user's data never leaks into another's screen.
+**3. Cache across requests by declaring data.** `Load` and batch loaders are scoped to one request.
+To keep data between requests, declare it with `cc.NewData` (see [Caching data](#caching-data-optional)):
+it batches like a batch loader, and its kind says how long it may be kept, and for whom, so one
+user's data never reaches another's screen.
 
 Rules of thumb: put every input in the key (`"user:"+id`); use one result type per key (a mismatch
 is reported as an error); loading in the layout or in a `When` is fine, and islands reuse it.

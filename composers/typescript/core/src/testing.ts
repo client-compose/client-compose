@@ -49,6 +49,8 @@ export interface TestComposerOptions<Req> {
 
 export interface RequestOptions {
   headers?: Record<string, string>;
+  /** Read no cached data: everything the request loads is fetched, as if the cache were empty. */
+  fresh?: boolean;
 }
 
 export interface TestScreen {
@@ -168,7 +170,12 @@ export function testComposer<Ctx, Req = Request>(
         body: init.body,
       }) as Req);
 
-  async function post(path: string, body: unknown, headers: Record<string, string> = {}) {
+  async function post(
+    path: string,
+    body: unknown,
+    headers: Record<string, string> = {},
+    fresh = false,
+  ) {
     const raw = JSON.stringify(body);
     const allHeaders = { "content-type": "application/json", ...headers };
     const res = await composer.handle(
@@ -179,6 +186,7 @@ export function testComposer<Ctx, Req = Request>(
         headers: allHeaders,
         body: raw,
       }),
+      { fresh },
     );
     if (!res) {
       throw new Error(`testComposer: ${path} isn't a composer route`);
@@ -244,6 +252,7 @@ export function testComposer<Ctx, Req = Request>(
           islands,
         },
         requestOptions.headers,
+        requestOptions.fresh,
       );
       const stream =
         res.status === 200 ? (res.body as { head: ScreenHead; screen: ScreenResponse }) : undefined;
@@ -392,6 +401,23 @@ export function testComposer<Ctx, Req = Request>(
         }
       }
 
+      // What's kept must be what's true: data the action changed and didn't name (changes, stale)
+      // would be served from the cache, out of date, until its TTL.
+      const truth = await this.screen(screen, params, { fresh: true });
+      for (const [i, entry] of (after.response?.islands ?? []).entries()) {
+        const fresh = truth.response?.islands[i];
+        if (fresh?.key !== entry.key) {
+          break;
+        }
+        const kept = canonical(entry.status === "ok" ? entry.props : entry);
+        const now = canonical(fresh.status === "ok" ? fresh.props : fresh);
+        if (kept !== now) {
+          throw new Error(
+            `checkEffects: after the action, island ${entry.key} is served from the cache as ${kept}, but its data is now ${now}: say what changed, entities in changes, other data in stale`,
+          );
+        }
+      }
+
       return outcome;
     },
   };
@@ -460,7 +486,8 @@ function declared(descriptors: IslandDescriptor<unknown>[]): Capabilities {
 }
 
 /**
- * An in-memory `Cache` for tests, with the keys it holds and their tags. Entries expire after their
+ * An in-memory `Cache` for tests of data that opts in with `cacheMs`, with the keys it holds and
+ * their tags. Entries expire after their
  * TTL, and are invalidated by their tags.
  */
 export function memoryCache(): Cache & { keys(): string[]; tags(key: string): string[] } {
@@ -471,7 +498,13 @@ export function memoryCache(): Cache & { keys(): string[]; tags(key: string): st
     return entry && entry.expires > Date.now() ? entry : undefined;
   };
   return {
-    get: (key) => live(key)?.value,
+    getMany: (keys) =>
+      Object.fromEntries(
+        keys.flatMap((key) => {
+          const value = live(key)?.value;
+          return value === undefined ? [] : [[key, value]];
+        }),
+      ),
     set(key, value, ttlMs, tags) {
       entries.set(key, { value, expires: Date.now() + ttlMs });
       for (const tag of tags) {

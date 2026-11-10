@@ -907,7 +907,9 @@ need the profile's user). Composer cores MUST provide a request-scoped load:
 - Results are never shared between requests.
 
 Cores SHOULD also offer a batch loader that combines keys requested by different islands in the same
-request into one call. Caching across requests is out of scope here: it belongs in the services a
-composer calls, where cache keys can account for who is asking.
+request into one call. Caching across requests is outside the protocol: clients can't tell whether a
+composer cached what it sent. Cores MAY keep data between requests by its kind, never by island,
+keyed by who is asking where it differs by viewer, and clearing what an action says it changed
+before resolving its updates (CMP-18 in CAPABILITIES.md).
 
 The conformance suite checks the MUST rules (§8.1).

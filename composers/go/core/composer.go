@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
-	"sync"
 	"time"
 )
 
@@ -29,8 +28,6 @@ type Island struct {
 	Type    string
 	Version int
 	resolve func(ctx context.Context, r Request) (any, error)
-	// cache, if set with CacheFor, caches the island's props when the composer has a Cache.
-	cache *islandCache
 	// paged islands resolve to a page: their props, and the cursor of the page after (DefinePaged).
 	paged bool
 	// entities are where its props hold entities (spec §2.1), from its generated props type.
@@ -164,9 +161,12 @@ type Config struct {
 	Context func(ctx context.Context, r *http.Request) (context.Context, error)
 	// Use lists plugins, outermost first.
 	Use []Plugin
-	// Cache, if set, serves islands that opt in with Island.CacheFor (CMP-18). Without it, every
-	// island resolves on every request.
+	// Cache, if set, keeps data that opts in with Data.CacheFor between requests (CMP-18). Without
+	// it, data is fetched on every request.
 	Cache Cache
+	// Viewer says who's asking, for data kept per viewer (Data.PerViewer): usually the signed-in
+	// user's id from the context, "" for no one. Required for data kept per viewer to be cached.
+	Viewer func(ctx context.Context) string
 	// Idempotency, if set, runs each action at most once per scope and idempotency key (CMP-19).
 	// Without it, keys pass through to actions.
 	Idempotency *Idempotency
@@ -191,8 +191,8 @@ type Composer struct {
 	actions        map[string]map[int]Action
 	plugins        []Plugin
 	cache          Cache
-	flightsMu      sync.Mutex
-	flights        map[string]*flight
+	viewer         func(ctx context.Context) string
+	flights        *flights
 	idempotency    *Idempotency
 	defaultTimeout time.Duration
 	strings        *StringsConfig
@@ -211,7 +211,8 @@ func New(cfg Config) *Composer {
 		actions:        map[string]map[int]Action{},
 		defaultTimeout: cfg.DefaultTimeout,
 		cache:          cfg.Cache,
-		flights:        map[string]*flight{},
+		viewer:         cfg.Viewer,
+		flights:        &flights{in: map[string]*flight{}},
 		strings:        cfg.Strings,
 	}
 	if idem := cfg.Idempotency; idem != nil {
@@ -253,7 +254,7 @@ func New(cfg Config) *Composer {
 	}
 	c.plugins = append(c.plugins, cfg.Use...)
 
-	c.compose, c.perform, c.resolve = c.composeScreen, c.performIdempotent, c.resolveIsland
+	c.compose, c.perform, c.resolve = c.composeScreen, c.performIdempotent, resolveIsland
 	for i := len(c.plugins) - 1; i >= 0; i-- {
 		p := c.plugins[i]
 		if p.Screen != nil {
@@ -323,7 +324,7 @@ func (c *Composer) composeScreen(ctx context.Context, req ScreenRequest) Result 
 
 	// Shared loads (Load, BatchLoader) live as long as this request: until its stream ends, or it
 	// fails. Whatever is still running then is cancelled.
-	ctx, endRequest := withRequestScope(ctx)
+	ctx, endRequest := c.withRequestScope(ctx, true)
 	streaming := false
 	defer func() {
 		if !streaming {

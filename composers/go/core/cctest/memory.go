@@ -7,8 +7,8 @@ import (
 	"time"
 )
 
-// MemoryCache is an in-memory cc.Cache for tests: pass it as Config.Cache to test islands that opt
-// in with CacheFor. Entries expire after their TTL, and are invalidated by their tags.
+// MemoryCache is an in-memory cc.Cache for tests: pass it as Config.Cache to test data that opts in
+// with Data.CacheFor. Entries expire after their TTL, and are invalidated by their tags.
 type MemoryCache struct {
 	mu      sync.Mutex
 	entries map[string]memoryEntry
@@ -25,15 +25,17 @@ func NewMemoryCache() *MemoryCache {
 	return &MemoryCache{entries: map[string]memoryEntry{}, tags: map[string]map[string]bool{}}
 }
 
-// Get implements cc.Cache.
-func (m *MemoryCache) Get(_ context.Context, key string) ([]byte, bool, error) {
+// GetMany implements cc.Cache.
+func (m *MemoryCache) GetMany(_ context.Context, keys []string) (map[string][]byte, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	e, ok := m.entries[key]
-	if !ok || time.Now().After(e.expires) {
-		return nil, false, nil
+	out := map[string][]byte{}
+	for _, key := range keys {
+		if e, ok := m.entries[key]; ok && time.Now().Before(e.expires) {
+			out[key] = e.value
+		}
 	}
-	return e.value, true, nil
+	return out, nil
 }
 
 // Set implements cc.Cache.

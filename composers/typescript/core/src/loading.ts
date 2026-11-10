@@ -1,3 +1,5 @@
+import type { Cache } from "./adapters.ts";
+
 // Request-scoped data loading: islands (and the layout) that need the same data within one screen
 // request share one call, and batch loaders combine their keys into one call.
 //
@@ -13,13 +15,28 @@ export interface LoadContext {
   readonly [scopeSymbol]: RequestScope;
 }
 
+/**
+ * What data needs to be kept between requests (CMP-18): the composer's cache, whether this request
+ * reads it (actions read fresh), who's asking, the fetches in flight across every request, and
+ * where to report a cache that errors.
+ */
+export interface ScopeCache {
+  cache: Cache;
+  reads: boolean;
+  viewer: (() => string | undefined) | undefined;
+  flights: Flights;
+  report: (error: unknown) => void;
+}
+
 export class RequestScope {
   readonly signal: AbortSignal;
+  readonly kept: ScopeCache | undefined;
   private readonly memo = new Map<string, Promise<unknown>>();
   private readonly batches = new Map<BatchLoader<unknown, unknown>, BatchState<unknown, unknown>>();
 
-  constructor(signal: AbortSignal) {
+  constructor(signal: AbortSignal, kept?: ScopeCache) {
     this.signal = signal;
+    this.kept = kept;
   }
 
   /** Run `fn` once per key for this request; every caller gets the same result (or error). */
@@ -149,6 +166,7 @@ export function defineBatchLoader<K, V>(
   fetch: (
     keys: K[],
     signal: AbortSignal,
+    scope: RequestScope,
   ) => Promise<ReadonlyMap<K, V> | ReadonlyArray<V | undefined>>,
   options: BatchLoaderOptions<K> = {},
 ): BatchLoader<K, V> {
@@ -194,7 +212,7 @@ export function defineBatchLoader<K, V>(
       const batch = state.pending.splice(0, maxBatchSize);
       const keys = batch.map((p) => p.key);
       Promise.resolve()
-        .then(() => fetch(keys, scope.signal))
+        .then(() => fetch(keys, scope.signal, scope))
         .then(
           (result) =>
             batch.forEach((p, i) => {
@@ -216,3 +234,206 @@ export function defineBatchLoader<K, V>(
 const isMap = <K, V>(
   value: ReadonlyMap<K, V> | ReadonlyArray<V | undefined>,
 ): value is ReadonlyMap<K, V> => value instanceof Map;
+
+/**
+ * Fetches of missing entries in progress, by cache key, across every request a composer serves:
+ * requests for one wait for it, rather than fetching it again.
+ */
+export type Flights = Map<string, Promise<string | undefined>>;
+
+export interface DataOptions<K, V> extends BatchLoaderOptions<K> {
+  /**
+   * Keep each value this long across requests, when the composer has a `cache`: the longest it may
+   * be out of date if it changes without an action saying so. Without it, it's fetched on every
+   * request, batched within each.
+   */
+  cacheMs?: number;
+  /**
+   * Keep each viewer's values apart, by the composer's `viewer`: for data that differs by who's
+   * asking (what they've saved, whom they follow). It's never shared between viewers, and never
+   * cached by a composer that can't say who's asking.
+   */
+  perViewer?: boolean;
+  /**
+   * More tags to file each value under than its own, for actions to clear it by: `entityTag` for
+   * each entity it holds, and tags of your own (a list's, so actions that add to it can clear it).
+   */
+  tags?: (key: K, value: V) => readonly string[];
+}
+
+/** One kind of data: loaded by key, batched within a request, and kept between requests if it opts in. */
+export interface Data<K, V> {
+  /** Load one key: from this request's loads, then the cache, then `fetch`. */
+  load(context: Partial<LoadContext>, key: K): Promise<V>;
+  /** Load several keys at once, as `load` does. Rejects if any key fails, missing keys included. */
+  loadMany(context: Partial<LoadContext>, keys: readonly K[]): Promise<Map<K, V>>;
+  /**
+   * The tag of key's entry, for an action's `stale`: the value changed. For data kept per viewer,
+   * pass who's asking.
+   */
+  tag(key: K, viewer?: string): string;
+}
+
+/** The tag of every value holding one entity: an action changing the entity clears them. */
+export function entityTag(entity: string, id: string): string {
+  return `tag:entity:${entity}:${id}`;
+}
+
+/**
+ * Declare a kind of data your islands show (CMP-18), once, at module level: users, articles, whether
+ * the viewer follows someone. How long something can be cached is a property of the data, not of
+ * the islands that show it.
+ *
+ *     const users = defineData("user", (ids: string[], signal) => store.users(ids, { signal }), {
+ *       cacheMs: 600_000,
+ *       tags: (id) => [entityTag("user", id)], // cleared when an action changes the user
+ *     });
+ *     const following = defineData("following", store.following, { cacheMs: 3_600_000, perViewer: true });
+ *     // in any resolver:
+ *     const author = await users.load(rc, article.authorId);
+ *
+ * Every entry is filed under its own tag (`tag`) and those `tags` gives it. An action clears them by
+ * returning entity changes (`changed`, `deleted` clear `entityTag(entity, id)`) or naming them in
+ * `stale`. Actions read fresh data: loads outside a screen's or island's request aren't cached.
+ * Failures and missing keys are never cached. A cache that errors is reported and bypassed. When
+ * several requests miss the same entry at once, one fetches it and the others wait for it.
+ */
+export function defineData<K, V>(
+  name: string,
+  fetch: (
+    keys: K[],
+    signal: AbortSignal,
+  ) => Promise<ReadonlyMap<K, V> | ReadonlyArray<V | undefined>>,
+  options: DataOptions<K, V> = {},
+): Data<K, V> {
+  if (!name || /[: ]/.test(name)) {
+    throw new Error(`Data name "${name}" must be set, without spaces or colons`);
+  }
+  const keyOf = options.cacheKey ?? ((key: K) => String(key));
+  const entry = (key: K, viewer: string | undefined) =>
+    options.perViewer ? `${name}:viewer:${viewer ?? ""}:${keyOf(key)}` : `${name}:${keyOf(key)}`;
+
+  const asMap = (keys: K[], result: ReadonlyMap<K, V> | ReadonlyArray<V | undefined>) =>
+    isMap(result)
+      ? new Map(result)
+      : new Map(keys.flatMap((k, i) => (result[i] === undefined ? [] : [[k, result[i]] as const])));
+
+  async function cached(keys: K[], signal: AbortSignal, scope: RequestScope): Promise<Map<K, V>> {
+    const kept = scope.kept;
+    if (
+      !options.cacheMs ||
+      !kept ||
+      !kept.reads ||
+      (options.perViewer && kept.viewer === undefined)
+    ) {
+      // Not cached: it doesn't opt in, there's no cache, an action is reading it fresh, or it's
+      // kept per viewer and the composer can't say who's asking, so it's never shared.
+      return asMap(keys, await fetch(keys, signal));
+    }
+    const viewer = options.perViewer ? kept.viewer?.() : undefined;
+    const cacheKeys = new Map(keys.map((k) => [k, `data:${entry(k, viewer)}`]));
+    const out = new Map<K, V>();
+    let found = new Map<string, string>();
+    try {
+      found = new Map(Object.entries(await kept.cache.getMany([...cacheKeys.values()])));
+    } catch (error) {
+      kept.report(error);
+    }
+    const missing: K[] = [];
+    for (const k of keys) {
+      const raw = found.get(cacheKeys.get(k) ?? "");
+      if (raw !== undefined) {
+        // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+        out.set(k, JSON.parse(raw) as V);
+      } else {
+        missing.push(k);
+      }
+    }
+    if (missing.length === 0) {
+      return out;
+    }
+
+    // One fetch per missing entry across every request: lead the entries no one is fetching,
+    // wait for the rest.
+    const lead = missing.filter((k) => !kept.flights.has(cacheKeys.get(k) ?? ""));
+    const waiting = missing.filter((k) => !lead.includes(k));
+    const waits = new Map(waiting.map((k) => [k, kept.flights.get(cacheKeys.get(k) ?? "")]));
+    if (lead.length) {
+      const fetching = (async () => asMap(lead, await fetch(lead, signal)))();
+      for (const k of lead) {
+        const key = cacheKeys.get(k) ?? "";
+        const one = fetching.then((values) => {
+          const v = values.get(k);
+          return v === undefined ? undefined : JSON.stringify(v);
+        });
+        one.catch(() => {});
+        kept.flights.set(key, one);
+        void one.catch(() => {}).finally(() => kept.flights.delete(key));
+      }
+      const values = await fetching;
+      for (const [k, v] of values) {
+        out.set(k, v);
+        const key = cacheKeys.get(k) ?? "";
+        try {
+          await kept.cache.set(key, JSON.stringify(v), options.cacheMs, [
+            `tag:${key}`,
+            ...(options.tags?.(k, v) ?? []),
+          ]);
+        } catch (error) {
+          kept.report(error);
+        }
+      }
+    }
+    const retry: K[] = [];
+    for (const [k, wait] of waits) {
+      try {
+        const raw = await wait;
+        if (raw !== undefined) {
+          // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+          out.set(k, JSON.parse(raw) as V);
+        }
+      } catch {
+        // The first request failed, perhaps only for its own reasons (its timeout): try ours.
+        retry.push(k);
+      }
+    }
+    if (retry.length) {
+      for (const [k, v] of asMap(retry, await fetch(retry, signal))) {
+        out.set(k, v);
+      }
+    }
+    return out;
+  }
+
+  const loader = defineBatchLoader<K, V>(cached, options);
+  const fresh = async (keys: readonly K[]) =>
+    asMap([...keys], await fetch([...keys], new AbortController().signal));
+
+  return {
+    async load(context, key) {
+      if (!context[scopeSymbol]) {
+        const value = (await fresh([key])).get(key);
+        if (value === undefined) {
+          throw new LoadNotFoundError(key);
+        }
+        return value;
+      }
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+      return loader.load(context as LoadContext, key);
+    },
+    async loadMany(context, keys) {
+      if (!context[scopeSymbol]) {
+        const values = await fresh(keys);
+        for (const key of keys) {
+          if (!values.has(key)) {
+            throw new LoadNotFoundError(key);
+          }
+        }
+        return values;
+      }
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+      return loader.loadMany(context as LoadContext, keys);
+    },
+    tag: (key, viewer) => `tag:data:${entry(key, viewer)}`,
+  };
+}

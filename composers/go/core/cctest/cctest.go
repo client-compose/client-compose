@@ -94,11 +94,18 @@ type RequestOption func(*request)
 type request struct {
 	header         http.Header
 	idempotencyKey string
+	fresh          bool
 }
 
 // Header sets a request header, e.g. Authorization.
 func Header(name, value string) RequestOption {
 	return func(r *request) { r.header.Set(name, value) }
+}
+
+// Fresh has the composer read no cached data for the request, as if the cache were empty
+// (cc.Fresh).
+func Fresh() RequestOption {
+	return func(r *request) { r.fresh = true }
 }
 
 // IdempotencyKey sends an action's idempotency key.
@@ -353,6 +360,9 @@ func (a *App) post(path string, body any, opts []RequestOption) (int, []byte) {
 		o(r)
 	}
 	req := httptest.NewRequest(http.MethodPost, path, bytes.NewReader(raw))
+	if r.fresh {
+		req = req.WithContext(cc.Fresh(req.Context()))
+	}
 	req.Header = r.header
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()

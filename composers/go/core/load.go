@@ -22,6 +22,15 @@ type requestScope struct {
 	mu      sync.Mutex
 	entries map[string]*loadEntry
 	batches map[any]any // *BatchLoader -> *batchState
+
+	// What Data needs to keep values between requests (CMP-18): the composer's cache, unless there's
+	// none, and whether this request reads it (actions read fresh), who's asking, the fetches in
+	// flight across every request, and where to report a cache that errors.
+	cache       Cache
+	cacheReads  bool
+	viewer      func(ctx context.Context) string
+	flights     *flights
+	reportCache func(ctx context.Context, err error)
 }
 
 type loadEntry struct {
@@ -30,10 +39,31 @@ type loadEntry struct {
 	err   error
 }
 
-// withRequestScope returns a context carrying a new request scope; cancel ends the request.
-func withRequestScope(parent context.Context) (ctx context.Context, cancel context.CancelFunc) {
+type freshKey struct{}
+
+// Fresh returns a context whose requests read no cached data: everything they load is fetched
+// (CMP-18). Tests use it to compare what's kept with what's true (cctest.CheckEffects); put it on
+// an HTTP request's context to have the composer serve that request fresh.
+func Fresh(ctx context.Context) context.Context { return context.WithValue(ctx, freshKey{}, true) }
+
+// withRequestScope returns a context carrying a new request scope; cancel ends the request. Data
+// reads the composer's cache when reads is set: for screens and islands, not actions.
+func (c *Composer) withRequestScope(parent context.Context, reads bool) (ctx context.Context, cancel context.CancelFunc) {
 	ctx, cancel = context.WithCancel(parent)
-	s := &requestScope{entries: map[string]*loadEntry{}, batches: map[any]any{}}
+	if fresh, _ := parent.Value(freshKey{}).(bool); fresh {
+		reads = false
+	}
+	s := &requestScope{
+		entries:    map[string]*loadEntry{},
+		batches:    map[any]any{},
+		cache:      c.cache,
+		cacheReads: reads,
+		viewer:     c.viewer,
+		flights:    c.flights,
+		reportCache: func(ctx context.Context, err error) {
+			c.report(ctx, Failure{Kind: CacheFailed, Err: err})
+		},
+	}
 	ctx = context.WithValue(ctx, scopeKey{}, s)
 	s.ctx = ctx
 	return ctx, cancel
