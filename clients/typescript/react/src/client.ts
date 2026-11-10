@@ -489,24 +489,30 @@ export interface ActionState<I, R, E extends DeclaredError> {
   reset: () => void;
 }
 
-/**
- * Perform an action from a component, with its generated descriptor:
- *
- *     const follow = useAction(FollowUserV1);
- *     const res = await follow.run({ userId });
- *     if (res.status === "error" && res.error.code === "blocked") ...
- */
-export function useAction<I, R, E extends DeclaredError>(
+/** Performs any action: what `useRunAction` returns. */
+export type RunAction = <I, R, E extends DeclaredError>(
   action: ActionDescriptor<I, R, E>,
-): ActionState<I, R, E> {
-  const { config, applyEffects } = useClientCompose();
-  const [inFlight, setInFlight] = useState(0);
-  const [last, setLast] = useState<ActionResult<R, E> | undefined>(undefined);
+  input: I,
+  options?: { idempotencyKey?: string },
+) => Promise<ActionResult<R, E>>;
 
-  const run = useCallback(
-    async (input: I, options: { idempotencyKey?: string } = {}): Promise<ActionResult<R, E>> => {
-      setInFlight((n) => n + 1);
-      let outcome: ActionResult<R, E>;
+/**
+ * Perform actions chosen at run time, rather than one known when the component is written: actions
+ * an app kept to perform later (once someone signs in, or comes back online), or a list of them.
+ * `run` behaves as `useAction`'s does, effects and all, and never rejects; it keeps no state.
+ *
+ *     const run = useRunAction();
+ *     for (const kept of keptActions) await run(descriptorFor(kept), kept.input);
+ */
+export function useRunAction(): RunAction {
+  const { config, applyEffects } = useClientCompose();
+
+  return useCallback(
+    async <I, R, E extends DeclaredError>(
+      action: ActionDescriptor<I, R, E>,
+      input: I,
+      options: { idempotencyKey?: string } = {},
+    ): Promise<ActionResult<R, E>> => {
       try {
         const request = buildActionRequest(
           action,
@@ -523,19 +529,42 @@ export function useAction<I, R, E extends DeclaredError>(
               { headers: await config.headers?.() },
               config.fetch,
             );
-        outcome = checkActionResponse(action, response);
+        const outcome = checkActionResponse(action, response);
         if (outcome.status === "ok" && outcome.effects) {
           applyEffects(outcome.effects);
         }
+        return outcome;
       } catch (error) {
-        outcome = { status: "failed", error };
-      } finally {
-        setInFlight((n) => n - 1);
+        return { status: "failed", error };
       }
+    },
+    [config, applyEffects],
+  );
+}
+
+/**
+ * Perform an action from a component, with its generated descriptor:
+ *
+ *     const follow = useAction(FollowUserV1);
+ *     const res = await follow.run({ userId });
+ *     if (res.status === "error" && res.error.code === "blocked") ...
+ */
+export function useAction<I, R, E extends DeclaredError>(
+  action: ActionDescriptor<I, R, E>,
+): ActionState<I, R, E> {
+  const perform = useRunAction();
+  const [inFlight, setInFlight] = useState(0);
+  const [last, setLast] = useState<ActionResult<R, E> | undefined>(undefined);
+
+  const run = useCallback(
+    async (input: I, options: { idempotencyKey?: string } = {}): Promise<ActionResult<R, E>> => {
+      setInFlight((n) => n + 1);
+      const outcome = await perform(action, input, options);
+      setInFlight((n) => n - 1);
       setLast(outcome);
       return outcome;
     },
-    [action, config, applyEffects],
+    [action, perform],
   );
 
   const reset = useCallback(() => setLast(undefined), []);

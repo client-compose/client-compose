@@ -362,6 +362,22 @@ function FollowButton({ userId }: { userId: string }) {
 }
 ```
 
+**`useRunAction`** performs actions chosen at run time rather than one known when the component is
+written: actions an app kept to perform later (once someone signs in, or comes back online), or a
+list of them. Its `run(descriptor, input)` behaves as `useAction`'s `run` does, effects included,
+and keeps no state of its own.
+
+```tsx
+import { useRunAction } from "@client-compose/react";
+
+function useFlushQueued(queued: Queued[]) {
+  const run = useRunAction();
+  return async () => {
+    for (const item of queued) await run(descriptorFor(item), item.input);
+  };
+}
+```
+
 When an action succeeds, its effects are applied before `run` resolves, in this order (spec §5.3):
 
 - **`changes`**: each entity the action changed is changed in every island showing it (from the
