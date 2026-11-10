@@ -3,6 +3,7 @@ package clientcompose
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -212,7 +213,7 @@ func (d *Data[K, V]) load(ctx context.Context, keys []K) (map[K]V, error) {
 		}
 		var v V
 		switch {
-		case f.err == errMissing:
+		case errors.Is(f.err, errMissing):
 		case f.err != nil || json.Unmarshal(f.props, &v) != nil:
 			// The first request failed, perhaps only for its own reasons (its deadline): try ours.
 			retry = append(retry, k)
@@ -233,4 +234,4 @@ func (d *Data[K, V]) load(ctx context.Context, keys []K) (map[K]V, error) {
 }
 
 // errMissing is a fetch that returned no value for a key: those waiting for it miss it too.
-var errMissing = fmt.Errorf("missing")
+var errMissing = errors.New("missing")
