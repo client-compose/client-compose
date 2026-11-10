@@ -1,5 +1,12 @@
 # @client-compose/fastify
 
+## 0.3.7
+
+### Patch Changes
+
+- Updated dependencies [[`0d434d8`](https://github.com/client-compose/client-compose/commit/0d434d8f1f3373db6390ff67f56c997473a7cd06)]:
+  - @client-compose/composer@0.16.0
+
 ## 0.3.6
 
 ### Patch Changes
