@@ -1,5 +1,11 @@
 # @client-compose/composer
 
+## 0.17.0
+
+### Minor Changes
+
+- [#84](https://github.com/client-compose/client-compose/pull/84) [`2616235`](https://github.com/client-compose/client-compose/commit/26162353ed1e2faba4f79b822bf2077e66aeb40b) Thanks [@LewisYearsley](https://github.com/LewisYearsley)! - Layout, resolver and action contexts have `locale`: the language the composer answers in (the catalog's nearest to the client's locale, as the stream's head reports), for formatting and words kept outside the catalog. Without a catalog, the client's own locale.
+
 ## 0.16.0
 
 ### Minor Changes
