@@ -35,6 +35,10 @@ type Call struct {
 // result carries. Generated screen strings types read them: SearchScreenStringsFor(call).Authors().
 func (c Call) ScreenStrings(screen string) StringsTable { return c.words.table(screen) }
 
+// Locale is the language the composer answers the call in, as for a Request: the catalog's nearest
+// to the client's locale, or the client's own without a catalog.
+func (c Call) Locale() string { return c.words.locale(c.Client.Locale) }
+
 // ScreenRef refers to screens: those with this id whose params include all of Params (spec §5.3).
 type ScreenRef struct {
 	Screen string            `json:"screen"`

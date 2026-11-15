@@ -281,6 +281,10 @@ manifest, in the catalog under `screens`, and read in the request's language wit
 type: `AuthorScreenStringsFor(r).Title(name)` (or `r.ScreenStrings("author")`). Actions whose
 results carry words read them the same way, from their `Call`: `SearchScreenStringsFor(call)`.
 
+`r.Locale()` (and `call.Locale()`) is the language the composer answers in: the one the catalog has
+nearest the client's, as the stream's head reports. Format numbers and dates, and choose any words
+kept outside the catalog, in that language, so a screen keeps to one.
+
 In tests, `app.Strings("pl")` fetches the app strings, and an island's entry has its `Strings`.
 
 ## Caching data (optional)

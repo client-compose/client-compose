@@ -294,7 +294,7 @@ Names in *italics* don't exist yet; the parity work below adds them.
 | CMP-19 idempotency adapter | ✅ `Config.Idempotency` | ✅ `idempotency` |
 | CMP-20 island requests | ✅ `cc.DefinePaged`, `ComposeIsland` | ✅ `pagedIsland`, `composeIsland` |
 | CMP-21 streams | ✅ `cc.ScreenStream`, `cc.ReadScreen` | ✅ `ScreenStream`, `collect`, every adapter |
-| CMP-22 strings | ✅ `cc.LoadCatalog`, `Config.Strings`, `r.ScreenStrings` | ✅ `loadCatalog`, `strings`, `lc.strings` |
+| CMP-22 strings | ✅ `cc.LoadCatalog`, `Config.Strings`, `r.ScreenStrings`, `r.Locale` | ✅ `loadCatalog`, `strings`, `lc.strings`, `lc.locale` |
 | CMP-23 island updates | ✅ `Effects.Update` | ✅ `effects.update` |
 | CMP-24 entity changes | ✅ `cc.Set`, `cc.Delete`, `cctest.CheckEffects` | ✅ `changed`, `deleted`, `checkEffects` |
 

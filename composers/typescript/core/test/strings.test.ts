@@ -215,3 +215,41 @@ test("a screen reads its own strings, typed by their descriptor", async () => {
   assert.equal(outside.title({ name: "Ada" }), "Liczby o Ada");
   assert.equal(outside.description({ count: 1 }), "One number");
 });
+
+test("a request says which language it's answered in, as the head does", async () => {
+  const seen: (string | undefined)[] = [];
+  const app = (locale: string, strings?: { catalog: typeof catalog }) =>
+    testComposer(
+      createComposer({
+        screens: [
+          screen("numbers", {
+            islands: [
+              place(
+                "header",
+                island(HeaderV1, (rc) => {
+                  seen.push(rc.locale);
+                  return { name: "" };
+                }),
+              ),
+            ],
+          }),
+        ],
+        strings,
+      }),
+      {
+        client: {
+          platform: "test",
+          appVersion: "1",
+          locale,
+        },
+      },
+    );
+  // The nearest the catalog has: Polish for pl-PL, the default for French.
+  const polish = await app("pl-PL", { catalog }).screen("numbers");
+  const french = await app("fr", { catalog }).screen("numbers");
+  assert.deepEqual([polish.head?.locale, french.head?.locale], ["pl", "en"]);
+  assert.deepEqual(seen, ["pl", "en"]);
+  // Without a catalog, it's the client's own.
+  await app("pl-PL").screen("numbers");
+  assert.equal(seen[2], "pl-PL");
+});
