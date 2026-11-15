@@ -258,6 +258,13 @@ func (t StringsTable) Format(key string, values map[string]string) string {
 // AuthorScreenStringsFor(r).Title(name). Without a catalog, every string is empty.
 func (r Request) ScreenStrings(screen string) StringsTable { return r.words.table(screen) }
 
+// Locale is the language the composer answers the request in (spec §4.7): the one the catalog has
+// nearest the client's locale ("pl-PL", then "pl", then the default), which the stream's head
+// reports and every island's strings are in. Use it for anything else said or formatted in the
+// person's language (numbers, dates, words kept outside the catalog), so a screen keeps to one
+// language. Without a catalog, it's the client's own locale.
+func (r Request) Locale() string { return r.words.locale(r.Client.Locale) }
+
 // ScreenStrings returns a screen's own strings in this language, for words the composer sends
 // outside any request, such as an email or a notification:
 // AuthorScreenStringsFor(config.For(locale)).Title(name).
@@ -267,6 +274,14 @@ func (l LocaleStrings) ScreenStrings(screen string) StringsTable { return l.tabl
 // Call, or a language's strings (StringsConfig.For) outside any request.
 type ScreenStringsSource interface {
 	ScreenStrings(screen string) StringsTable
+}
+
+// locale is the language answered in, or the client's own without a catalog.
+func (l *LocaleStrings) locale(client string) string {
+	if l == nil {
+		return client
+	}
+	return l.Locale
 }
 
 func (l *LocaleStrings) table(screen string) StringsTable {

@@ -38,6 +38,14 @@ export interface LayoutContext<Ctx> extends LoadContext {
    * catalog.
    */
   strings: <S>(descriptor: ScreenStringsDescriptor<S>) => S;
+  /**
+   * The language the composer answers in (spec §4.7): the one the catalog has nearest the client's
+   * locale ("pl-PL", then "pl", then the default), as the stream's head reports, and every island's
+   * strings are in. Use it for anything else said or formatted in the person's language (numbers,
+   * dates, words kept outside the catalog), so a screen keeps to one language. Without a catalog,
+   * the client's own locale.
+   */
+  locale: string | undefined;
 }
 
 /** What a resolver receives: the layout context, plus a signal aborted when this island times out. */

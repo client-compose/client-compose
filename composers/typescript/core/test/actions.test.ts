@@ -133,7 +133,7 @@ test("an action reads screen strings in the client's language", async () => {
   const composer = createComposer({
     actions: [
       action(ConformanceV1, (_, ac) => ({
-        result: { echo: ac.strings(SearchScreenStrings).authors, version: 1 },
+        result: { echo: `${ac.strings(SearchScreenStrings).authors} ${ac.locale}`, version: 1 },
       })),
     ],
     strings: {
@@ -159,7 +159,7 @@ test("an action reads screen strings in the client's language", async () => {
     undefined,
   );
   assert.deepEqual(res.status === 200 && res.body.status === "ok" && res.body.result, {
-    echo: "Autorzy",
+    echo: "Autorzy pl",
     version: 1,
   });
 });

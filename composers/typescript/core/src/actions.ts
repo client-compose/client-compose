@@ -46,6 +46,8 @@ export interface ActionContext<Ctx> extends LoadContext {
    * words an action's result carries: `ac.strings(SearchScreenStrings).authors`.
    */
   strings: <S>(descriptor: ScreenStringsDescriptor<S>) => S;
+  /** The language the composer answers the action in, as in a layout's context. */
+  locale: string | undefined;
 }
 
 /** An island on the screen with exactly these params (spec §5.3), whose content an action changed. */
@@ -217,6 +219,7 @@ export async function performAction<Ctx>(
       signal: request.signal,
       load: scope.load.bind(scope),
       strings: <S>(d: ScreenStringsDescriptor<S>) => screenStrings(words, d),
+      locale: words?.locale ?? req.client.locale,
     },
     scope,
   );

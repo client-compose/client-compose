@@ -248,6 +248,33 @@ func TestAScreenReadsItsOwnStrings(t *testing.T) {
 	}
 }
 
+func TestARequestSaysWhichLanguageItsAnsweredIn(t *testing.T) {
+	var seen []string
+	screen := cc.Screen{
+		ID:      "numbers",
+		Islands: []cc.Placement{cc.Static("header", headerV1{})},
+		Meta: func(_ context.Context, r cc.Request) (cc.ScreenMeta, error) {
+			seen = append(seen, r.Locale())
+			return cc.ScreenMeta{}, nil
+		},
+	}
+	composer := cc.New(cc.Config{Screens: []cc.Screen{screen}, Strings: &cc.StringsConfig{Catalog: catalog(t)}})
+	// The nearest the catalog has, as the head says: Polish for pl-PL, the default for French.
+	for _, locale := range []string{"pl-PL", "fr"} {
+		app := cctest.New(t, composer, cctest.Client(cc.ClientContext{Platform: "test", AppVersion: "1", Locale: locale}))
+		if head := app.Screen("numbers", nil).Head; head.Locale != seen[len(seen)-1] {
+			t.Errorf("%s: answered in %q, the request says %q", locale, head.Locale, seen[len(seen)-1])
+		}
+	}
+	if seen[0] != "pl" || seen[1] != "en" {
+		t.Fatalf("locales: %v", seen)
+	}
+	// Without a catalog, it's the client's own.
+	if got := (cc.Request{Client: cc.ClientContext{Locale: "pl-PL"}}).Locale(); got != "pl-PL" {
+		t.Fatalf("without a catalog: %q", got)
+	}
+}
+
 func TestScreenStringsOutsideARequest(t *testing.T) {
 	config := cc.StringsConfig{Catalog: catalog(t)}
 	var source cc.ScreenStringsSource = config.For("pl-PL")

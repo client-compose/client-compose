@@ -257,6 +257,10 @@ Actions whose results carry words read them the same way: `ac.strings(SearchScre
 sent outside any request, such as an email or a notification, read them from a language's strings:
 `stringsFor(config.strings, locale).strings(InviteScreenStrings)`.
 
+`lc.locale` (and `ac.locale`) is the language the composer answers in: the one the catalog has nearest
+the client's, as the stream's head reports. Format numbers and dates, and choose any words kept
+outside the catalog, in that language, so a screen keeps to one.
+
 In tests, `app.strings({ locale: "pl" })` fetches the app strings, and an island's entry has its
 `strings`.
 

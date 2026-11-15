@@ -300,6 +300,7 @@ export function createComposer<Ctx = undefined, Req = Request>(
       load,
       cursor: req.cursor,
       strings: <S>(d: ScreenStringsDescriptor<S>) => screenStrings(language, d),
+      locale: language?.locale ?? req.client.locale,
     };
     const lc: LayoutContext<Ctx> = attachScope(fields, scope);
     let placements: Placement<Ctx>[];
@@ -424,6 +425,7 @@ export function createComposer<Ctx = undefined, Req = Request>(
       ctx,
       load: scope.load.bind(scope),
       strings: <S>(d: ScreenStringsDescriptor<S>) => screenStrings(language, d),
+      locale: language?.locale ?? req.client.locale,
     };
     const lc: LayoutContext<Ctx> = attachScope(fields, scope);
     try {
@@ -499,6 +501,7 @@ export function createComposer<Ctx = undefined, Req = Request>(
         ctx,
         load,
         strings: <S>(d: ScreenStringsDescriptor<S>) => screenStrings(words, d),
+        locale: words?.locale ?? req.client.locale,
       },
       scope,
     );
