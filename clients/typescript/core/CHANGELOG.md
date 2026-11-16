@@ -1,5 +1,15 @@
 # @client-compose/client
 
+## 0.17.0
+
+### Minor Changes
+
+- [#86](https://github.com/client-compose/client-compose/pull/86) [`6f78d0e`](https://github.com/client-compose/client-compose/commit/6f78d0ec71750ec1bc6ee80181d3064797e6dc52) Thanks [@LewisYearsley](https://github.com/LewisYearsley)! - `useIslandStrings(descriptor)`: a component inside an island gets the island's strings, typed as
+  its `t`. A Client Component inside a Server Component island, which can't be passed `t` (it's made
+  of functions), builds it in the browser from the strings the registry sends with the island. In
+  tests, `inIsland(descriptor, node, { strings, plurals })` renders a component inside an island, and
+  `catalogStrings` gives an island's `strings(descriptor)` and the language's `plurals` for it.
+
 ## 0.16.0
 
 ### Minor Changes
