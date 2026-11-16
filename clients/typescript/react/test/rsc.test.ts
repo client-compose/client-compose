@@ -56,6 +56,8 @@ test("renders a screen in React Server Components", async () => {
   assert.match(html, /<button>count 1<\/button>/);
   // A Client Component island's strings are built in the browser: functions can't be sent there.
   assert.match(html, /<p>Hi Grace 2 posts<\/p>/);
+  // A Client Component inside a Server Component island builds the island's strings itself.
+  assert.match(html, /<section><h3>Toast<\/h3><button>1 like<\/button><\/section>/);
   // A crashing island renders as nothing; the rest of the screen is unaffected, in order.
   assert.doesNotMatch(html, /loading/);
   assert.ok(html.indexOf("<h1>Ada</h1>") < html.indexOf("<button>"), "islands keep their order");

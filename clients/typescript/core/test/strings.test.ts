@@ -143,6 +143,10 @@ test("a catalog's words, as the composer would send them, for tests", () => {
     "1 post",
   );
   assert.equal(english.appStrings.locale, "en");
+  // Its strings as an entry carries them, for a test that renders inside an island.
+  assert.deepEqual(english.strings(CardV1), { heading: "Hello {name}" });
+  assert.equal(english.strings(PlainV1), undefined);
+  assert.deepEqual(english.plurals, { one: "i = 1 and v = 0" });
   assert.deepEqual(english.island("card", CardV1, { name: "Ada" }, "page:2"), {
     key: "card",
     type: "card",

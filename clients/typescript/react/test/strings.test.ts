@@ -12,6 +12,7 @@ import type {
 } from "@client-compose/protocol";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
+import { renderToStaticMarkup } from "react-dom/server";
 
 import {
   AppStringsProvider,
@@ -23,12 +24,15 @@ import {
   richText,
   type StringsCache,
   useAppStrings,
+  useIslandStrings,
   useLocale,
   viaProxy,
 } from "../src/index.ts";
+import { IslandStrings } from "../src/islandStrings.ts";
 import {
   createTestConfig,
   type FakeGatewayHandlers,
+  inIsland,
   island,
   pending,
   screen,
@@ -365,4 +369,59 @@ test("useLocale is the language the client asks for, to format dates and numbers
   const view = await mount(createElement(ClientComposeProvider, { config }, createElement(Locale)));
   assert.equal(view.html(), "<p>pl-PL</p>");
   await view.unmount();
+});
+
+/** A component inside the articles island: it isn't given t, and asks for the island's. */
+function ArticleCount(props: { total: number }) {
+  const t = useIslandStrings(ArticlesV1);
+  return createElement("p", null, t.count({ count: props.total }));
+}
+
+test("a component inside an island gets the island's strings, as the island does", async () => {
+  const nested = new ReactIslandRegistry().registerComponent(ArticlesV1, (props) =>
+    createElement(ArticleCount, { total: props.total }),
+  );
+
+  const { config } = createTestConfig({
+    registry: nested,
+    handlers: {
+      screens: {
+        home: () =>
+          screen(
+            "home",
+            [island("articles", ArticlesV1, { total: 3 }, { strings: articleWords })],
+            {},
+            polish,
+          ),
+      },
+    },
+  });
+  const view = await mount(screenOf(config));
+  assert.equal(view.html(), "<p>3 artykuły</p>");
+  await view.unmount();
+});
+
+test("useIslandStrings outside an island, or for another island, says so", () => {
+  const render = (node: ReactNode) => () => renderToStaticMarkup(node);
+  assert.throws(render(createElement(ArticleCount, { total: 1 })), /must be used inside an island/);
+  assert.throws(
+    render(
+      createElement(
+        IslandStrings,
+        { type: "header", version: 1 },
+        createElement(ArticleCount, { total: 1 }),
+      ),
+    ),
+    /useIslandStrings\(articles@1\) is inside header@1/,
+  );
+});
+
+test("a test renders a component inside an island with inIsland, as the registry would", () => {
+  const html = renderToStaticMarkup(
+    inIsland(ArticlesV1, createElement(ArticleCount, { total: 5 }), {
+      strings: articleWords,
+      plurals: polish.plurals,
+    }),
+  );
+  assert.equal(html, "<p>5 artykułów</p>");
 });

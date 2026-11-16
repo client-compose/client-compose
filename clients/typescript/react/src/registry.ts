@@ -4,7 +4,8 @@ import { IslandRegistry, type WithStrings } from "@client-compose/client";
 import type { IslandDescriptor } from "@client-compose/protocol";
 import { type ComponentType, createElement, type ReactNode } from "react";
 
-// From a Server Component, a client reference: rendered, never called.
+// From a Server Component, client references: rendered, never called.
+import { IslandStrings } from "./islandStrings.ts";
 import { ClientIsland } from "./rendered.ts";
 
 export interface ComponentOptions {
@@ -41,13 +42,30 @@ export class ReactIslandRegistry extends IslandRegistry<ReactNode> {
         // applies actions' changes to it.
         return createElement(ClientIsland, {
           component,
+          type: island.type,
+          version: island.version,
           props: isRecord(entry.props) ? entry.props : {},
           ...(declared && { declared }),
           ...(entry.strings && { strings: entry.strings }),
           ...(plurals && { plurals }),
         });
       }
-      return createElement(component, props);
+      const element = createElement(component, props);
+      if (!declared) {
+        return element;
+      }
+      // The components inside it can have its strings too (useIslandStrings): the strings and
+      // plural rules, which can be sent to the browser, not `t`, which can't.
+      return createElement(
+        IslandStrings,
+        {
+          type: island.type,
+          version: island.version,
+          ...(entry.strings && { strings: entry.strings }),
+          ...(plurals && { plurals }),
+        },
+        element,
+      );
     });
   }
 }

@@ -17,6 +17,7 @@ import {
 } from "react";
 
 import type { EffectsBatch } from "./effects.ts";
+import { IslandStrings } from "./islandStrings.ts";
 import { IslandScopeContext } from "./pages.ts";
 import { ClientComposeContext, type ScreenStore } from "./provider.ts";
 import type { IslandScopeValue } from "./scope.ts";
@@ -26,6 +27,9 @@ type Props = Record<string, unknown>;
 
 export interface ClientIslandProps {
   component: ComponentType<object>;
+  /** The island's type and version, for the components inside it (useIslandStrings). */
+  type: string;
+  version: number;
   /** The island's props, as the server rendered them. */
   props: Props;
   /** Its declared strings, to build its `t` with, if it has any. */
@@ -120,7 +124,7 @@ function caughtUp(
  * of functions, which can't be sent to the browser, so it's built here from the strings that can.
  */
 export function ClientIsland(props: ClientIslandProps): ReactNode {
-  const { component, declared, plurals } = props;
+  const { component, type, version, declared, plurals } = props;
   const context = useContext(ClientComposeContext);
   const screens = context?.screens;
   const onStale = context?.config.onStale;
@@ -170,8 +174,23 @@ export function ClientIsland(props: ClientIslandProps): ReactNode {
     [declared, shown.strings, plurals],
   );
   const merged = useMemo(() => (t ? { ...shown.props, t } : shown.props), [shown.props, t]);
+  const element = createElement(component, merged);
 
-  return createElement(component, merged);
+  if (!declared) {
+    return element;
+  }
+
+  // The components inside it can have its strings too (useIslandStrings), as they are now.
+  return createElement(
+    IslandStrings,
+    {
+      type,
+      version,
+      strings: shown.strings,
+      plurals,
+    },
+    element,
+  );
 }
 
 export interface ServerIslandProps {

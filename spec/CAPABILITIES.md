@@ -195,7 +195,7 @@ service layer of their own: the composer *is* their backend.
 | CLI-8 | **Test kit.** A fake composer answering screens and actions with typed builders, recording requests and effects. | — |
 | CLI-9 | **Conformance.** Passes the client fixtures, rendering and actions. | §8.2 |
 | CLI-10 | **Island requests.** Fetch an island's next page from its entry's `next`, or the island again; through a proxy too. | §4.5 |
-| CLI-12 | **Strings.** An island registered by a descriptor that declares strings gets them typed, as `t`. Counted strings pick their words by the language's plural rules, which the client evaluates itself and which pass CLDR's samples. Fetch the app strings, typed by their descriptor. | §4.7 |
+| CLI-12 | **Strings.** An island registered by a descriptor that declares strings gets them typed, as `t`, and so can the components inside it. Counted strings pick their words by the language's plural rules, which the client evaluates itself and which pass CLDR's samples. Fetch the app strings, typed by their descriptor. | §4.7 |
 | CLI-11 | **Streams.** Read a screen's stream: its head, then each island as it arrives, or all of it at once; islands that never arrive are `incomplete`. | §4.6 |
 | CLI-13 | **Island updates.** Send the client's islands with each action, and apply `update` effects: swap each entry into every matching screen, shown or cached, and reload a screen that can't take it. | §5.3 |
 | CLI-14 | **Entity changes.** Apply `changes` to every island holding the entity, on every screen shown or cached and every page held, from the generated entity maps; reload a screen where a deleted one can't be removed. | §2.1, §5.3 |
@@ -324,7 +324,7 @@ Names in *italics* don't exist yet; the parity work below adds them.
 | UI-10 pages | ✅ `usePages` |
 | CLI-11 streams | ✅ `openScreen`, `fetchScreen` |
 | UI-11 progressive screens | ✅ placeholders, `progressive`, streamed Server Components |
-| CLI-12 strings | ✅ `t`, `fetchStrings`, `proxy.loadStrings` |
+| CLI-12 strings | ✅ `t`, `useIslandStrings`, `fetchStrings`, `proxy.loadStrings` |
 | CLI-13 island updates | ✅ `useAction`, cached and shown screens |
 | CLI-14 entity changes | ✅ `applyChanges`, screens, cache and pages |
 | UI-12 app strings | ✅ `AppStringsProvider`, `useAppStrings` |

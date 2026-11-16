@@ -23,6 +23,7 @@ export {
   useScreen,
   type UseScreenOptions,
 } from "./client.ts";
+export { useIslandStrings } from "./islandStrings.ts";
 export { type PagesState, type PagesStatus, usePages } from "./pages.ts";
 export { ClientComposeProvider } from "./provider.ts";
 export { type ProxyFunctions, type ProxyTransport, viaProxy } from "./proxy.ts";
