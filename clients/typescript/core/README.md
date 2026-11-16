@@ -126,7 +126,8 @@ answers in the nearest language it has. `formatString(template, values, plurals)
 `pluralCategory(plurals, count)` are there for anything else. In tests, the fake composer answers `strings: () => stringsResponse("en", { … })`,
 and `island(key, Descriptor, props, { strings })` gives an island its strings. `catalogStrings(catalog)`
 reads a catalog file (codegen's `catalog`) as the composer would send it, for tests that read the
-real words: `t(Descriptor)`, `app(AppStrings)`, `island(…)` with its strings, and `stringsResponse()`.
+real words: `t(Descriptor)`, `app(AppStrings)`, `island(…)` with its strings, `strings(Descriptor)`
+and `plurals` as an entry and its screen carry them, and `stringsResponse()`.
 
 ## Testing
 

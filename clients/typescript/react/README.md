@@ -264,6 +264,27 @@ formats itself: `new Intl.DateTimeFormat(useLocale())`.
 Client Component island rendered by `@client-compose/react/server` gets its `t` built in the
 browser instead. Nothing changes in the island.
 
+A component inside an island can have the island's strings too, with `useIslandStrings` and the
+island's descriptor: the same `t`, built where it's used. It's how a Client Component inside a
+Server Component island gets them, since the island can't pass it `t`:
+
+```tsx
+// A Server Component island...
+function ProfileHeader(props: IslandProps<typeof ProfileHeaderV1>) {
+  return <header><h1>{props.name}</h1><FollowButton followers={props.followers} /></header>;
+}
+
+// ...and a Client Component inside it.
+"use client";
+function FollowButton(props: { followers: number }) {
+  const t = useIslandStrings(ProfileHeaderV1);
+  return <button>{t.follow} · {t.followers({ count: props.followers })}</button>;
+}
+```
+
+For it, the registry sends each island's strings and plural rules (not `t`) to the browser with
+the island. Asked for an island it isn't in, or outside one, it throws.
+
 The app strings (words outside any island) come from `<AppStringsProvider>`, inside the provider:
 
 ```tsx
@@ -495,6 +516,10 @@ To test with the words people will see, `catalogStrings(catalog)` reads a catalo
 island's `t`, `english.island(key, ArticleListV1, props)` for an island that carries its strings,
 `english.appStrings` for `<AppStringsProvider initial>`, and `english.stringsResponse` for the fake
 composer's `strings` handler. It's English, with English plural rules, unless you pass a language.
+
+A component that reads its island's strings with `useIslandStrings`, rendered in a test without
+its island around it, needs one: `inIsland(Descriptor, node, { strings: english.strings(Descriptor),
+plurals: english.plurals })` renders it as the registry would.
 
 The fake composer itself (no React) is `@client-compose/client/testing`.
 

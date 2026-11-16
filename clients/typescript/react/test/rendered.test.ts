@@ -115,6 +115,8 @@ function todosIsland(todos: Todo[]): ReactNode {
     },
     createElement(ClientIsland, {
       component: TodosIsland,
+      type: "todos",
+      version: 1,
       props: { todos },
       declared: { left: ["count"] },
       strings,

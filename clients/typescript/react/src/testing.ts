@@ -20,11 +20,12 @@ import {
   screen,
   screenError,
 } from "@client-compose/client/testing";
-import type { IslandDescriptor, ScreenRef } from "@client-compose/protocol";
-import { createElement, type ReactElement } from "react";
+import type { IslandDescriptor, PluralRules, ScreenRef, Strings } from "@client-compose/protocol";
+import { createElement, type ReactElement, type ReactNode } from "react";
 
 import { ComposedScreen } from "./client.ts";
 import type { ClientComposeConfig } from "./config.ts";
+import { IslandStrings } from "./islandStrings.ts";
 
 export * from "@client-compose/client/testing";
 
@@ -136,4 +137,35 @@ export function pagedIsland<P>(options: PagedIslandOptions<P>): PagedIsland {
       },
     },
   };
+}
+
+/** An island's strings and its screen's plural rules, as the composer sends them. */
+export interface InIslandOptions {
+  strings?: Strings;
+  plurals?: PluralRules;
+}
+
+/**
+ * A node inside an island, as the registry renders it: for a test that renders an island's component
+ * itself, when a component inside it reads the island's strings with `useIslandStrings`.
+ *
+ *     render(inIsland(ProfileHeaderV1, <ProfileHeader t={english.t(ProfileHeaderV1)} {...props} />, {
+ *       strings: english.strings(ProfileHeaderV1),
+ *       plurals: english.plurals,
+ *     }));
+ */
+export function inIsland<P, S>(
+  descriptor: IslandDescriptor<P, S>,
+  node: ReactNode,
+  options: InIslandOptions = {},
+): ReactElement {
+  return createElement(
+    IslandStrings,
+    {
+      type: descriptor.type,
+      version: descriptor.version,
+      ...options,
+    },
+    node,
+  );
 }

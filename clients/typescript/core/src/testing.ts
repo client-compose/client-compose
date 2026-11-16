@@ -577,6 +577,10 @@ export interface Catalog {
 export interface CatalogStrings {
   /** An island's strings, as its component gets them: `<ArticleList t={english.t(ArticleListV1)} …>`. */
   t<P, S>(descriptor: IslandDescriptor<P, S>): S;
+  /** An island's strings as the composer sends them, in its entry: templates, not functions. */
+  strings<P, S>(descriptor: IslandDescriptor<P, S>): Strings | undefined;
+  /** The language's plural rules, as the screen sends them. */
+  plurals: PluralRules;
   /** The app strings, typed by their generated descriptor: `english.app(AppStrings).retry`. */
   app<S>(descriptor: AppStringsDescriptor<S>): S;
   /** The app strings as the composer answers `/strings`, e.g. for `<AppStringsProvider initial>`. */
@@ -618,6 +622,8 @@ export function catalogStrings(
   return {
     t: (descriptor) =>
       buildStrings(descriptor.strings ?? {}, islandStrings(descriptor), language.plurals),
+    strings: (descriptor) => islandStrings(descriptor),
+    plurals: language.plurals,
     app: (descriptor) => buildStrings(descriptor.strings, appStrings.strings, language.plurals),
     appStrings,
     stringsResponse: () => stringsResponse(language.locale, appStrings.strings, language.plurals),

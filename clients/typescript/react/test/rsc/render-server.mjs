@@ -41,6 +41,14 @@ const response = {
       props: { name: "Grace" },
       strings: { hello: "Hi {name}", posts: { "#one": "{count} post", "#*": "{count} posts" } },
     },
+    {
+      key: "card",
+      type: "card",
+      version: 1,
+      status: "ok",
+      props: { title: "Toast", likes: 1 },
+      strings: { likes: { "#one": "{count} like", "#*": "{count} likes" } },
+    },
   ],
 };
 
