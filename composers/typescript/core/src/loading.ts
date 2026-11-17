@@ -359,6 +359,8 @@ export function defineData<K, V>(
     const waiting = missing.filter((k) => !lead.includes(k));
     const waits = new Map(waiting.map((k) => [k, kept.flights.get(cacheKeys.get(k) ?? "")]));
     if (lead.length) {
+      // Before it's read: an action that changes it from now on wins over what's read (Cache.set).
+      const readAt = Date.now();
       const fetching = (async () => asMap(lead, await fetch(lead, signal)))();
       for (const k of lead) {
         const key = cacheKeys.get(k) ?? "";
@@ -375,10 +377,13 @@ export function defineData<K, V>(
         out.set(k, v);
         const key = cacheKeys.get(k) ?? "";
         try {
-          await kept.cache.set(key, JSON.stringify(v), options.cacheMs, [
-            `tag:${key}`,
-            ...(options.tags?.(k, v) ?? []),
-          ]);
+          await kept.cache.set(
+            key,
+            JSON.stringify(v),
+            options.cacheMs,
+            [`tag:${key}`, ...(options.tags?.(k, v) ?? [])],
+            readAt,
+          );
         } catch (error) {
           kept.report(error);
         }

@@ -8,11 +8,13 @@ import (
 )
 
 // MemoryCache is an in-memory cc.Cache for tests: pass it as Config.Cache to test data that opts in
-// with Data.CacheFor. Entries expire after their TTL, and are invalidated by their tags.
+// with Data.CacheFor. Entries expire after their TTL, and are invalidated by their tags; a value
+// read before one of its tags was invalidated isn't stored.
 type MemoryCache struct {
 	mu      sync.Mutex
 	entries map[string]memoryEntry
 	tags    map[string]map[string]bool
+	cleared map[string]time.Time
 }
 
 type memoryEntry struct {
@@ -22,7 +24,7 @@ type memoryEntry struct {
 
 // NewMemoryCache returns an empty cache.
 func NewMemoryCache() *MemoryCache {
-	return &MemoryCache{entries: map[string]memoryEntry{}, tags: map[string]map[string]bool{}}
+	return &MemoryCache{entries: map[string]memoryEntry{}, tags: map[string]map[string]bool{}, cleared: map[string]time.Time{}}
 }
 
 // GetMany implements cc.Cache.
@@ -39,9 +41,14 @@ func (m *MemoryCache) GetMany(_ context.Context, keys []string) (map[string][]by
 }
 
 // Set implements cc.Cache.
-func (m *MemoryCache) Set(_ context.Context, key string, value []byte, ttl time.Duration, tags []string) error {
+func (m *MemoryCache) Set(_ context.Context, key string, value []byte, ttl time.Duration, tags []string, readAt time.Time) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	for _, tag := range tags {
+		if cleared, ok := m.cleared[tag]; ok && !cleared.Before(readAt) {
+			return nil
+		}
+	}
 	m.entries[key] = memoryEntry{value: append([]byte(nil), value...), expires: time.Now().Add(ttl)}
 	for _, tag := range tags {
 		if m.tags[tag] == nil {
@@ -56,7 +63,9 @@ func (m *MemoryCache) Set(_ context.Context, key string, value []byte, ttl time.
 func (m *MemoryCache) Invalidate(_ context.Context, tags []string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	now := time.Now()
 	for _, tag := range tags {
+		m.cleared[tag] = now
 		for key := range m.tags[tag] {
 			delete(m.entries, key)
 		}

@@ -68,19 +68,25 @@ const AddV1: ActionDescriptor<{ name: string }, Record<string, never>, never> = 
 /**
  * The list as data: all of it under one key, tagged with each item it holds and as the list, so
  * adding to it clears it. Its islands read it; actions finish an item (an entity change) and add one
- * (naming the list as stale), reading the list fresh. `forget` leaves `stale` out.
+ * (naming the list as stale), reading the list fresh. `forget` leaves `stale` out; `hold` keeps
+ * the first fetch waiting once it's read the list, until it resolves.
  */
 function cachedList(
   list: Item[],
   cache: Cache | undefined,
-  options: { forget?: boolean; failures?: Failure[] } = {},
+  options: { forget?: boolean; failures?: Failure[]; hold?: () => Promise<void> } = {},
 ) {
   let fetches = 0;
   const items = defineData(
     "items",
     async (keys: string[]) => {
       fetches++;
-      return new Map(keys.map((k) => [k, list.map((item) => ({ ...item }))]));
+      const read = list.map((item) => ({ ...item }));
+      if (fetches === 1) {
+        await options.hold?.();
+      }
+
+      return new Map(keys.map((k) => [k, read]));
     },
     {
       cacheMs: 60_000,
@@ -341,4 +347,37 @@ test("a broken cache is reported and bypassed", async () => {
   assert.equal(out.status, "ok");
   assert.ok(failures.some((f) => f.kind === "cache" && !("action" in f && f.action)));
   assert.ok(failures.some((f) => f.kind === "cache" && "action" in f && f.action === "finish"));
+});
+
+test("data read before a change isn't kept after it", async () => {
+  let read!: () => void;
+  const reading = new Promise<void>((resolve) => (read = resolve));
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => (release = resolve));
+  const hold = () => {
+    read();
+
+    return released;
+  };
+  const { app } = cachedList(
+    [
+      {
+        id: "1",
+        name: "Milk",
+        done: false,
+      },
+    ],
+    memoryCache(),
+    { hold },
+  );
+
+  // A screen reads the list; an action changes it and clears it; then the screen's request stores
+  // what it read.
+  const before = namesOf(app);
+  await reading;
+  await app.perform(FinishV1, { id: "1" });
+  release();
+
+  assert.deepEqual(await before, ["Milk"]);
+  assert.deepEqual(await namesOf(app), ["Milk (done)"]);
 });

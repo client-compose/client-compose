@@ -487,12 +487,13 @@ function declared(descriptors: IslandDescriptor<unknown>[]): Capabilities {
 
 /**
  * An in-memory `Cache` for tests of data that opts in with `cacheMs`, with the keys it holds and
- * their tags. Entries expire after their
- * TTL, and are invalidated by their tags.
+ * their tags. Entries expire after their TTL, and are invalidated by their tags; a value read before
+ * one of its tags was invalidated isn't stored.
  */
 export function memoryCache(): Cache & { keys(): string[]; tags(key: string): string[] } {
   const entries = new Map<string, { value: string; expires: number }>();
   const tagged = new Map<string, Set<string>>();
+  const cleared = new Map<string, number>();
   const live = (key: string) => {
     const entry = entries.get(key);
     return entry && entry.expires > Date.now() ? entry : undefined;
@@ -505,14 +506,20 @@ export function memoryCache(): Cache & { keys(): string[]; tags(key: string): st
           return value === undefined ? [] : [[key, value]];
         }),
       ),
-    set(key, value, ttlMs, tags) {
+    set(key, value, ttlMs, tags, readAt) {
+      if (tags.some((tag) => (cleared.get(tag) ?? -Infinity) >= readAt)) {
+        return;
+      }
+
       entries.set(key, { value, expires: Date.now() + ttlMs });
       for (const tag of tags) {
         tagged.set(tag, (tagged.get(tag) ?? new Set()).add(key));
       }
     },
     invalidate(tags) {
+      const now = Date.now();
       for (const tag of tags) {
+        cleared.set(tag, now);
         for (const key of tagged.get(tag) ?? []) {
           entries.delete(key);
         }

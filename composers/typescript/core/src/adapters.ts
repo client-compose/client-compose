@@ -13,21 +13,31 @@ import { fail, type PerformResult } from "./results.ts";
  *
  * Each entry is filed under tags: its own, and those its data's `tags` gives it (the entities it
  * holds, the lists it's on). After an action, the composer invalidates the tags of what it says
- * changed, so a change shows on the next request, from every composer sharing the cache. With Redis,
- * keep each tag as a set of keys:
+ * changed, so a change shows on the next request, from every composer sharing the cache.
+ *
+ * A request can read data before an action changes it, and store it after the action has
+ * invalidated its tags: it would bring back what the action changed, for its whole ttl. So
+ * `invalidate` remembers when it cleared each tag, for at least as long as a request takes, and
+ * `set` stores nothing filed under a tag cleared since the value was read (`readAt`). Without a
+ * check that can't be raced, `set` stores, then checks, then removes what it stored: an
+ * `invalidate` that remembers before it removes then always wins. With Redis, keep each tag as a set
+ * of keys, and when it was cleared beside it:
  *
  *     const redisCache: Cache = {
  *       getMany: async (keys) => {
  *         const values = await redis.mGet(keys);
  *         return Object.fromEntries(keys.flatMap((k, i) => (values[i] == null ? [] : [[k, values[i]]])));
  *       },
- *       set: async (key, value, ttlMs, tags) => {
+ *       set: async (key, value, ttlMs, tags, readAt) => {
  *         const tx = redis.multi().set(key, value, { PX: ttlMs });
  *         for (const tag of tags) tx.sAdd(tag, key).pExpire(tag, ttlMs);
  *         await tx.exec();
+ *         const cleared = await redis.mGet(tags.map((tag) => `cleared:${tag}`));
+ *         if (cleared.some((at) => at !== null && Number(at) >= readAt)) await redis.unlink(key);
  *       },
  *       invalidate: async (tags) => {
  *         for (const tag of tags) {
+ *           await redis.set(`cleared:${tag}`, Date.now(), { PX: 60_000 }); // first
  *           const keys = await redis.sMembers(tag);
  *           if (keys.length) await redis.multi().unlink(keys).sRem(tag, keys).exec();
  *         }
@@ -39,9 +49,22 @@ export interface Cache {
   getMany(
     keys: readonly string[],
   ): Promise<Readonly<Record<string, string>>> | Readonly<Record<string, string>>;
-  /** Store `value` under `key` for `ttlMs`, filed under each of `tags`. */
-  set(key: string, value: string, ttlMs: number, tags: readonly string[]): Promise<void> | void;
-  /** Remove every value filed under any of `tags`. */
+  /**
+   * Store `value` under `key` for `ttlMs`, filed under each of `tags`, unless one of them was
+   * invalidated at or after `readAt` (milliseconds since the Unix epoch), when `value` was read: it
+   * predates that change.
+   */
+  set(
+    key: string,
+    value: string,
+    ttlMs: number,
+    tags: readonly string[],
+    readAt: number,
+  ): Promise<void> | void;
+  /**
+   * Remove every value filed under any of `tags`, and remember when, so that a value read before
+   * now isn't stored after it (`set`).
+   */
   invalidate(tags: readonly string[]): Promise<void> | void;
 }
 
