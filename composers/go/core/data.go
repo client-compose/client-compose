@@ -175,6 +175,8 @@ func (d *Data[K, V]) load(ctx context.Context, keys []K) (map[K]V, error) {
 		}
 	}
 	if len(lead) > 0 {
+		// Before it's read: an action that changes it from now on wins over what's read (Cache.Set).
+		readAt := time.Now()
 		values, err := d.fetch(ctx, lead)
 		for _, k := range lead {
 			v, ok := values[k]
@@ -195,7 +197,7 @@ func (d *Data[K, V]) load(ctx context.Context, keys []K) (map[K]V, error) {
 				if d.tags != nil {
 					tags = append(tags, d.tags(k, v)...)
 				}
-				if setErr := s.cache.Set(ctx, cacheKeys[k], encoded, d.ttl, tags); setErr != nil {
+				if setErr := s.cache.Set(ctx, cacheKeys[k], encoded, d.ttl, tags, readAt); setErr != nil {
 					s.reportCache(ctx, fmt.Errorf("cache set %s: %w", cacheKeys[k], setErr))
 				}
 			}

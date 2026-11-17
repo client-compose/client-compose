@@ -307,7 +307,7 @@ func (brokenCache) GetMany(context.Context, []string) (map[string][]byte, error)
 	return nil, errors.New("redis down")
 }
 
-func (brokenCache) Set(context.Context, string, []byte, time.Duration, []string) error {
+func (brokenCache) Set(context.Context, string, []byte, time.Duration, []string, time.Time) error {
 	return errors.New("redis down")
 }
 
@@ -372,5 +372,58 @@ func TestCheckEffectsCatchesDataAnActionDidntSayChanged(t *testing.T) {
 
 	if len(r.errors) != 1 || !strings.Contains(r.errors[0], "served from the cache") {
 		t.Fatalf("errors: %q", r.errors)
+	}
+}
+
+// A screen reads the list, an action changes it and clears it, and only then does the screen's
+// request store what it read: that's from before the change, and isn't kept.
+func TestDataReadBeforeAChangeIsntKeptAfterIt(t *testing.T) {
+	s := &items{list: []itemsV1Item{{ID: "1", Name: "Milk"}}}
+	read := make(chan struct{})
+	release := make(chan struct{})
+	var first atomic.Bool
+	first.Store(true)
+	data := cc.NewData("items", func(_ context.Context, keys []string) (map[string][]itemsV1Item, error) {
+		list := s.all()
+		if first.CompareAndSwap(true, false) {
+			close(read)
+			<-release
+		}
+		out := map[string][]itemsV1Item{}
+		for _, k := range keys {
+			out[k] = list
+		}
+		return out, nil
+	}).CacheFor(time.Minute).Tags(func(_ string, list []itemsV1Item) []string {
+		tags := []string{"tag:list"}
+		for _, item := range list {
+			tags = append(tags, cc.EntityTag("item", item.ID))
+		}
+		return tags
+	})
+	itemsIsland := cc.Define(func(ctx context.Context, _ cc.Request) (itemsV1, error) {
+		list, err := data.Load(ctx, "all")
+		return itemsV1{Items: list}, err
+	})
+	app := cctest.New(t, cc.New(cc.Config{
+		Screens: []cc.Screen{{ID: "list", Islands: []cc.Placement{{Key: "items", Versions: cc.Versions(itemsIsland)}}}},
+		Actions: []cc.Action{cc.DefineAction(func(_ context.Context, _ cc.Call, in finishInput) (struct{}, cc.Effects, error) {
+			s.finish(in.ID)
+			return struct{}{}, finished(in.ID, s.left()), nil
+		})},
+		Cache: cctest.NewMemoryCache(),
+	}))
+
+	before := make(chan []string)
+	go func() { before <- names(t, app.Screen("list", nil)) }()
+	<-read
+	cctest.Perform(app, finishInput{ID: "1"})
+	close(release)
+
+	if got := <-before; !slices.Equal(got, []string{"Milk"}) {
+		t.Fatalf("read before the change: %v", got)
+	}
+	if got := names(t, app.Screen("list", nil)); !slices.Equal(got, []string{"Milk (done)"}) {
+		t.Fatalf("after the change: %v", got)
 	}
 }

@@ -16,10 +16,17 @@ import (
 //
 // Each entry is filed under tags: its own, and those its Data's Tags gives it (the entities it
 // holds, the lists it's on). After an action, the composer invalidates the tags of what it says
-// changed, so a change shows on the next request, from every composer sharing the cache. A Redis
-// implementation keeps each tag as a set of keys:
+// changed, so a change shows on the next request, from every composer sharing the cache.
 //
-//	func (c redisCache) Set(ctx context.Context, key string, value []byte, ttl time.Duration, tags []string) error {
+// A request can read data before an action changes it, and store it after the action has
+// invalidated its tags: it would bring back what the action changed, for its whole ttl. So
+// Invalidate remembers when it cleared each tag, for at least as long as a request takes, and Set
+// stores nothing filed under a tag cleared since the value was read (readAt). Without a check that
+// can't be raced, Set stores, then checks, then removes what it stored: an Invalidate that
+// remembers before it removes then always wins. A Redis implementation keeps each tag as a set of
+// keys, and when it was cleared beside it:
+//
+//	func (c redisCache) Set(ctx context.Context, key string, value []byte, ttl time.Duration, tags []string, readAt time.Time) error {
 //		_, err := c.rdb.TxPipelined(ctx, func(p redis.Pipeliner) error {
 //			p.Set(ctx, key, value, ttl)
 //			for _, tag := range tags {
@@ -28,14 +35,36 @@ import (
 //			}
 //			return nil
 //		})
-//		return err
+//		if err != nil {
+//			return err
+//		}
+//		for _, tag := range tags {
+//			cleared, err := c.rdb.Get(ctx, "cleared:"+tag).Int64()
+//			if err == nil && cleared >= readAt.UnixMilli() {
+//				return c.rdb.Unlink(ctx, key).Err() // read before the change: keep nothing
+//			}
+//		}
+//		return nil
+//	}
+//
+//	func (c redisCache) Invalidate(ctx context.Context, tags []string) error {
+//		for _, tag := range tags {
+//			c.rdb.Set(ctx, "cleared:"+tag, time.Now().UnixMilli(), time.Minute) // first
+//			keys, _ := c.rdb.SMembers(ctx, tag).Result()
+//			if len(keys) > 0 {
+//				c.rdb.Unlink(ctx, keys...)
+//			}
+//		}
+//		return nil
 //	}
 type Cache interface {
 	// GetMany returns the values stored under any of keys, by key: keys with none are left out.
 	GetMany(ctx context.Context, keys []string) (map[string][]byte, error)
-	// Set stores value under key for ttl, filed under each of tags.
-	Set(ctx context.Context, key string, value []byte, ttl time.Duration, tags []string) error
-	// Invalidate removes every value filed under any of tags.
+	// Set stores value under key for ttl, filed under each of tags, unless one of them was
+	// invalidated at or after readAt, when value was read: it predates that change.
+	Set(ctx context.Context, key string, value []byte, ttl time.Duration, tags []string, readAt time.Time) error
+	// Invalidate removes every value filed under any of tags, and remembers when, so that a value
+	// read before now isn't stored after it (Set).
 	Invalidate(ctx context.Context, tags []string) error
 }
 
