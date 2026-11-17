@@ -230,6 +230,7 @@ export async function performAction<Ctx>(
   } as const;
   try {
     const outcome = await handler.perform(input.value, ac);
+    const finished = Date.now();
     if ("error" in outcome) {
       if (!descriptor.errors.includes(outcome.error.code)) {
         throw new UndeclaredErrorCode(`returned undeclared error code ${outcome.error.code}`);
@@ -246,6 +247,8 @@ export async function performAction<Ctx>(
     await invalidateCached(outcome.effects ?? {});
     const effects = await sentEffects(outcome.effects ?? {}, resolveUpdates);
     const hasEffects = Object.keys(effects).length > 0;
+    // When it finished, for the screens rendered before then to catch up with it (spec §5.3).
+    const sent = hasEffects ? { effects: { ...effects, at: finished } } : {};
 
     return {
       status: 200,
@@ -254,7 +257,7 @@ export async function performAction<Ctx>(
         status: "ok",
         // Results are objects: the manifest's result schema says so (spec §5.1).
         result: isRecord(outcome.result) ? outcome.result : {},
-        ...(hasEffects && { effects }),
+        ...sent,
       },
     };
   } catch (err) {

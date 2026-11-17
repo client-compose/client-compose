@@ -86,6 +86,10 @@ type ScreenResponse struct {
 	// Plurals are that language's plural rules, for the islands' counted strings. A pointer, so a
 	// language with none ({}) is still sent.
 	Plurals *PluralRules `json:"plurals,omitempty"`
+	// At is when the composer started answering, in milliseconds since the Unix epoch: what the
+	// screen shows was read no earlier. Clients catch a screen up with actions that finished later
+	// (spec §4, §5.3).
+	At int64 `json:"at,omitempty"`
 }
 
 // IslandRequest is the body a client POSTs to /screens/{screen}/islands/{key}: one island of the

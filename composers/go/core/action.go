@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"time"
 )
 
 // ErrUnauthenticated is returned (or wrapped) by a layout or action when there's no signed-in user
@@ -61,6 +62,9 @@ type Effects struct {
 	Invalidate []ScreenRef `json:"invalidate,omitempty"`
 	// Navigate suggests a screen to show next. Clients map it to their own routes.
 	Navigate *ScreenRef `json:"navigate,omitempty"`
+	// At is when the action finished, in milliseconds since the Unix epoch: a screen whose At is
+	// earlier may not show it, and clients catch it up (spec §5.3). The composer sets it.
+	At int64 `json:"at,omitempty"`
 	// Stale names the cached data the action changed beyond its entities (CMP-18), by tag: a
 	// Data's entry (Data.Tag), or a tag of your own given by Data.Tags, such as a list's when
 	// something joins or leaves it. The composer clears them, with the entities in Changes, before
@@ -214,6 +218,7 @@ func (c *Composer) performAction(ctx context.Context, req ActionRequest) Result 
 	call := Call{IdempotencyKey: req.IdempotencyKey, Client: client, Islands: req.Islands, words: c.words(client.Locale)}
 
 	result, effects, err := runAction(ctx, action, call, req.Input)
+	finished := time.Now().UnixMilli()
 	respond := func(status string) ActionResponse {
 		return ActionResponse{Protocol: ProtocolVersion, Action: action.Name, Version: action.Version, Status: status}
 	}
@@ -226,6 +231,7 @@ func (c *Composer) performAction(ctx context.Context, req ActionRequest) Result 
 		c.invalidateCached(outside, action, effects)
 		effects = c.resolveUpdates(outside, effects, client, req.Islands)
 		if !effects.empty() {
+			effects.At = finished
 			resp.Effects = &effects
 		}
 		return Result{http.StatusOK, resp}

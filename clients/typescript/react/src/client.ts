@@ -153,29 +153,45 @@ function useScreenResponse(options: ScreenResponseOptions): {
   useEffect(() => {
     const forced = forceNext.current;
     forceNext.current = false;
-    if (!forced && fromServer) {
+    // The server's response, caught up with the actions that finished after it was read (spec
+    // §5.3); undefined if only loading it again can show one of them.
+    const server = !forced && fromServer ? caughtUp(fromServer) : undefined;
+    if (!forced && fromServer && server) {
       // Use the server's response without a request (StrictMode remounts land here too).
       if (config.cache !== false) {
-        screens.remember(key, screen, params, fromServer);
+        screens.remember(key, screen, params, server);
       }
       setTaken((prev) =>
         prev.key === key && prev.response === fromServer ? prev : { key, response: fromServer },
       );
       setState((prev) =>
-        prev.key === key && prev.response === fromServer ? prev : settled(key, fromServer),
+        prev.key === key && prev.response === server ? prev : settled(key, server),
       );
       return undefined;
     }
-    const fresh = forced ? undefined : cached();
+    const fresh = forced || fromServer ? undefined : cached();
     const controller = new AbortController();
-    void loadInto(controller.signal, fresh);
+    void loadInto(controller.signal, fresh, forced);
     return () => controller.abort();
     // `key` covers screen and params; a new server response or config (e.g. a new registry) re-runs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, reloads, config, fromServer]);
 
-  /** Shows a cached response, or loads the screen; a failure keeps what's shown, with the error. */
-  async function loadInto(signal: AbortSignal, fresh: ScreenResponse | undefined) {
+  /**
+   * A response caught up with the actions that finished after it was read: it may have been
+   * rendered before them (spec §5.3). Undefined if only loading it again can show one of them.
+   */
+  function caughtUp(response: ScreenResponse): ScreenResponse | undefined {
+    const head = screens.caughtUp(response, params);
+
+    return head && (head === response ? response : completeScreen(head));
+  }
+
+  /**
+   * Shows a cached response, or loads the screen; a failure keeps what's shown, with the error. A
+   * response read before an action it can't catch up with is loaded again, once.
+   */
+  async function loadInto(signal: AbortSignal, fresh: ScreenResponse | undefined, again: boolean) {
     if (fresh) {
       setState(settled(key, fresh));
       return;
@@ -185,12 +201,21 @@ function useScreenResponse(options: ScreenResponseOptions): {
     );
     try {
       const stream = await streamScreen(config, screen, params, { signal });
-      const response = progressive
+      const read = progressive
         ? await showAsItArrives(stream, (shown) => !signal.aborted && setState(shown))
         : await collectScreen(stream);
-      screens.remember(key, screen, params, response);
+      const response = caughtUp(read);
+      if (response === undefined && !again) {
+        if (!signal.aborted) {
+          reload();
+        }
+
+        return;
+      }
+
+      screens.remember(key, screen, params, response ?? read);
       if (!signal.aborted) {
-        setState(settled(key, response));
+        setState(settled(key, response ?? read));
       }
     } catch (error) {
       if (!signal.aborted) {
@@ -214,10 +239,13 @@ function useScreenResponse(options: ScreenResponseOptions): {
     show: (state: (prev: FetchState) => FetchState) => void,
   ): Promise<ScreenResponse> {
     let head = stream.head;
-    show((prev) => streamingState(key, head, prev));
+    // As it arrives, caught up with the actions that finished after it was read (spec §5.3).
+    const shownHead = (now: ScreenHead) => screens.caughtUp(now, params) ?? now;
+    const first = shownHead(head);
+    show((prev) => streamingState(key, first, prev));
     for await (const entry of stream.islands) {
       head = withIsland(head, entry);
-      const now = head;
+      const now = shownHead(head);
       show((prev) => streamingState(key, now, prev));
     }
     return completeScreen(head);

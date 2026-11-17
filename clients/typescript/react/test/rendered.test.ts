@@ -100,8 +100,11 @@ const eggs: Todo = {
 };
 const strings = { left: { "#one": "{count} left", "#*": "{count} left" } };
 
-/** The todos island as a Server Component renders it: its props and strings, in its scope. */
-function todosIsland(todos: Todo[]): ReactNode {
+/**
+ * The todos island as a Server Component renders it: its props and strings, in its scope, with when
+ * its screen was read (`at`), if it says.
+ */
+function todosIsland(todos: Todo[], at?: number): ReactNode {
   return createElement(
     IslandScope,
     {
@@ -111,6 +114,7 @@ function todosIsland(todos: Todo[]): ReactNode {
         key: "todos",
         type: "todos",
         version: 1,
+        ...(at !== undefined && { at }),
       },
     },
     createElement(ClientIsland, {
@@ -126,7 +130,7 @@ function todosIsland(todos: Todo[]): ReactNode {
 }
 
 /** A Server Component island holding these entities: what the server rendered, and a marker. */
-function serverIsland(holds: HeldEntity[]): ReactNode {
+function serverIsland(holds: HeldEntity[], at?: number): ReactNode {
   return createElement(
     IslandScope,
     {
@@ -136,6 +140,7 @@ function serverIsland(holds: HeldEntity[]): ReactNode {
         key: "todo",
         type: "detail",
         version: 1,
+        ...(at !== undefined && { at }),
       },
     },
     createElement(ServerIsland, { holds }, createElement("h1", null, "Milk")),
@@ -389,6 +394,58 @@ test("brought back as it was, an island that missed what only the server can sho
   assert.deepEqual(app.heard, [], "nothing on show was out of date");
   await app.show(page);
 
+  assert.deepEqual(app.heard, [touching]);
+  await app.unmount();
+});
+
+test("a new page read before an action finished catches up with it; one read after doesn't", async () => {
+  const toggled: ActionEffects = {
+    changes: [
+      {
+        entity: "todo",
+        id: "2",
+        set: { done: true },
+      },
+    ],
+    at: 2000,
+  };
+  const app = await render(toggled, null);
+
+  // Navigating while the action is in flight: its effects reach nothing on show.
+  await app.run();
+  await app.show(todosIsland([milk, eggs], 1000));
+
+  assert.equal(app.container.textContent, "Milk,Eggs✓ (1 left)");
+  assert.deepEqual(app.heard, [], "the server isn't asked");
+
+  // Read after it finished, it already shows it: as the server rendered it.
+  await app.show(todosIsland([{ ...milk, title: "Oat milk" }, eggs], 3000));
+  assert.equal(app.container.textContent, "Oat milk,Eggs (2 left)");
+
+  // Without an at, it's taken as current.
+  await app.show(todosIsland([milk, { ...eggs, title: "Brown eggs" }]));
+  assert.equal(app.container.textContent, "Milk,Brown eggs (2 left)");
+  await app.unmount();
+});
+
+test("a new Server Component island read before an action that touches it asks for the server", async () => {
+  const touching: ActionEffects = {
+    changes: [
+      {
+        entity: "todo",
+        id: "1",
+        set: { done: true },
+      },
+    ],
+    at: 2000,
+  };
+  const app = await render(touching, null);
+
+  await app.run();
+  await app.show(serverIsland([{ entity: "todo", id: "1" }], 3000));
+  assert.deepEqual(app.heard, [], "read after it: up to date");
+
+  await app.show(serverIsland([{ entity: "todo", id: "1" }], 1000));
   assert.deepEqual(app.heard, [touching]);
   await app.unmount();
 });

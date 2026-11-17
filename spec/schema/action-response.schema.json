@@ -16,7 +16,12 @@
         "changes": { "type": "array", "items": { "$ref": "#/$defs/entityChange" } },
         "invalidate": { "type": "array", "items": { "$ref": "#/$defs/screenRef" } },
         "update": { "type": "array", "items": { "$ref": "#/$defs/islandUpdate" } },
-        "navigate": { "$ref": "#/$defs/screenRef" }
+        "navigate": { "$ref": "#/$defs/screenRef" },
+        "at": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "When the composer finished the action, in milliseconds since the Unix epoch: a screen whose `at` is earlier may not show it (spec §5.3)."
+        }
       }
     },
     "error": {

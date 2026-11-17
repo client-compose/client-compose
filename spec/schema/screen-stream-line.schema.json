@@ -64,6 +64,9 @@
         "locale": {
           "$ref": "screen-response.json#/properties/locale"
         },
+        "at": {
+          "$ref": "screen-response.json#/properties/at"
+        },
         "plurals": {
           "$ref": "screen-response.json#/properties/plurals"
         }
