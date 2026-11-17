@@ -42,7 +42,7 @@ test("adding todos counts what's left", async () => {
 
   // The first brings the summary, so the screen reloads; the next joins the list.
   const first = await app.perform(AddTodoV1, { title: "Buy milk" });
-  assert.deepEqual(first.effects, { invalidate: [{ screen: "todos" }] });
+  assert.deepEqual(first.effects, { invalidate: [{ screen: "todos" }], at: first.effects?.at });
   const second = await app.perform(AddTodoV1, { title: "  Walk the dog  " });
   assert.deepEqual(
     second.effects?.update?.map((u) => u.island.key),

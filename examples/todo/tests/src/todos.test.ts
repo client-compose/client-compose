@@ -95,7 +95,7 @@ test("todos are added, done, cleared and deleted, each saying what it changed", 
   const dog = await callAction(COMPOSER_URL, AddTodoV1, { title: "  Walk the dog  " }, asClient);
   assert.ok(milk.status === "ok" && dog.status === "ok");
   // The first todo brings the summary, so the screen reloads; the next joins the list.
-  assert.deepEqual(milk.effects, { invalidate: [{ screen: "todos" }] });
+  assert.deepEqual(milk.effects, { invalidate: [{ screen: "todos" }], at: milk.effects?.at });
   assert.deepEqual(
     dog.effects?.update?.map((u) => [u.screen, u.island.key]),
     [["todos", "list"]],
@@ -110,6 +110,7 @@ test("todos are added, done, cleared and deleted, each saying what it changed", 
   );
   // Ticking one changes it and the counts, and nothing is resolved again.
   assert.deepEqual(toggled.status === "ok" && toggled.effects, {
+    at: toggled.status === "ok" ? toggled.effects?.at : undefined,
     changes: [
       {
         entity: "todo",
