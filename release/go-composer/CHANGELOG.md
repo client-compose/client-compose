@@ -1,5 +1,13 @@
 # go-composer
 
+## 0.17.0
+
+### Minor Changes
+
+- [#89](https://github.com/client-compose/client-compose/pull/89) [`f5db8ef`](https://github.com/client-compose/client-compose/commit/f5db8efa3b17dc838a721b29888e064f4391a294) Thanks [@LewisYearsley](https://github.com/LewisYearsley)! - Screens and actions say when (spec §4, §5.3): a screen's `at` is when the composer started answering it, and an action's effects' `at` when it finished, in milliseconds since the Unix epoch. Clients compare them to catch a screen read before an action up with it.
+
+- [#90](https://github.com/client-compose/client-compose/pull/90) [`ad16cfb`](https://github.com/client-compose/client-compose/commit/ad16cfbd2fc7104de0a3dc526aa43203172b87c0) Thanks [@LewisYearsley](https://github.com/LewisYearsley)! - **Breaking:** `Cache.Set` takes `readAt`, when the value was read, and stores nothing filed under a tag invalidated since: a request that read data before an action changed it no longer stores it after the action cleared it, bringing the change back for the entry's whole ttl. `Cache.Invalidate` remembers when it cleared each tag, for at least as long as a request takes. `cctest.MemoryCache` does both; the `Cache` docs show a Redis implementation.
+
 ## 0.16.0
 
 ### Minor Changes

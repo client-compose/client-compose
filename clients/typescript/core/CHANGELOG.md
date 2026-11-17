@@ -1,5 +1,12 @@
 # @client-compose/client
 
+## 0.17.1
+
+### Patch Changes
+
+- Updated dependencies [[`f5db8ef`](https://github.com/client-compose/client-compose/commit/f5db8efa3b17dc838a721b29888e064f4391a294)]:
+  - @client-compose/protocol@0.10.0
+
 ## 0.17.0
 
 ### Minor Changes
