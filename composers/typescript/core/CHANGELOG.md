@@ -1,5 +1,18 @@
 # @client-compose/composer
 
+## 0.18.0
+
+### Minor Changes
+
+- [#89](https://github.com/client-compose/client-compose/pull/89) [`f5db8ef`](https://github.com/client-compose/client-compose/commit/f5db8efa3b17dc838a721b29888e064f4391a294) Thanks [@LewisYearsley](https://github.com/LewisYearsley)! - A screen read before an action finished, and shown after it, catches up with the action (spec §5.3). Composers send `at` on a screen (when they started answering it) and on an action's effects (when it finished). `@client-compose/react` keeps the actions it performed with their `at`, and a screen it shows for the first time, from `useScreen` or rendered by a Server Component, gets the changes and updates of every action that finished after its `at`, or is loaded (or rendered by the server) again when only that can show one. Navigating while an action is in flight no longer shows what it changed as it was.
+
+- [#90](https://github.com/client-compose/client-compose/pull/90) [`ad16cfb`](https://github.com/client-compose/client-compose/commit/ad16cfbd2fc7104de0a3dc526aa43203172b87c0) Thanks [@LewisYearsley](https://github.com/LewisYearsley)! - **Breaking:** `Cache.set` takes `readAt`, when the value was read (milliseconds since the Unix epoch), and stores nothing filed under a tag invalidated since: a request that read data before an action changed it no longer stores it after the action cleared it, bringing the change back for the entry's whole ttl. `invalidate` remembers when it cleared each tag, for at least as long as a request takes. `memoryCache()` does both; the `Cache` docs show a Redis implementation.
+
+### Patch Changes
+
+- Updated dependencies [[`f5db8ef`](https://github.com/client-compose/client-compose/commit/f5db8efa3b17dc838a721b29888e064f4391a294)]:
+  - @client-compose/protocol@0.10.0
+
 ## 0.17.0
 
 ### Minor Changes
