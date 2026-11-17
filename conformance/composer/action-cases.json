@@ -1,5 +1,5 @@
 {
-  "$comment": "Action conformance cases (spec §8.1). The runner POSTs to {base}/actions/{path ?? request.action} with the `conformance` action, version 1, input `input` (default {outcome: ok, echo: hi}), merged with any `request` overrides; `rawBody` replaces the body entirely. Expected bodies are subset matches; arrays must match in length and order, and \"$absent\" requires a value to be missing.",
+  "$comment": "Action conformance cases (spec §8.1). The runner POSTs to {base}/actions/{path ?? request.action} with the `conformance` action, version 1, input `input` (default {outcome: ok, echo: hi}), merged with any `request` overrides; `rawBody` replaces the body entirely. Expected bodies are subset matches; arrays must match in length and order, \"$absent\" requires a value to be missing, and \"$time\" a time in milliseconds since the Unix epoch.",
   "cases": [
     {
       "name": "performs an action and returns its result",
@@ -98,7 +98,8 @@
               "params": {
                 "userId": "u1"
               }
-            }
+            },
+            "at": "$time"
           }
         }
       }

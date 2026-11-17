@@ -236,7 +236,8 @@ together, the stream is the screen, in this shape (`schema/screen-response.schem
     }
   ],
   "meta": { "title": "Ada Lovelace", "description": "Articles by Ada" },
-  "cache": { "maxAge": 30 }
+  "cache": { "maxAge": 30 },
+  "at": 1767225600000
 }
 ```
 
@@ -250,6 +251,13 @@ page's `<title>`, description and sharing image, or a native navigation header's
 | `image`       | Absolute URL of an image representing the screen.         |
 
 All three are optional strings. Clients use what applies to them and ignore the rest.
+
+`at` says when the composer started answering, in milliseconds since the Unix epoch: everything
+the screen shows was read no earlier than that. Composers MUST send it (in a stream, in the
+head). A client compares it with the `at` of an action's effects (§5.3) to know whether a screen it
+shows for the first time may have been rendered before the action finished, and so needs catching
+up (see "Applying them"). It comes from the composer's clock: where several composers serve one
+app, their clocks are expected to agree to within the time a request takes.
 
 ### 4.1 Island entries
 
@@ -613,7 +621,8 @@ Success:
   "result": { "followers": 1043 },
   "effects": {
     "invalidate": [{ "screen": "profile", "params": { "userId": "u_123" } }, { "screen": "feed" }],
-    "navigate": { "screen": "profile", "params": { "userId": "u_123" } }
+    "navigate": { "screen": "profile", "params": { "userId": "u_123" } },
+    "at": 1767225601250
   }
 }
 ```
@@ -648,6 +657,7 @@ that every platform reacts the same way without hard-coding it:
 | `update`     | Islands whose content changed, with their new entries: clients swap them in. |
 | `invalidate` | Screens whose content may have changed. Clients SHOULD drop cached responses for them and reload the ones currently shown. |
 | `navigate`   | A screen to show next. Clients map it to their own routes, and MAY ignore it. |
+| `at`         | When the composer finished the action, in milliseconds since the Unix epoch (§4). Composers MUST send it with any other effect. |
 
 `invalidate` and `navigate` use a **screen reference** `{ "screen": "...", "params": { ... } }`. A
 reference matches a screen with the same id whose params include every param in the reference.
@@ -744,6 +754,15 @@ app then sees every screen as the action left it.
 
 An island's own interactivity stays local (§5): an island MAY show the result of its own action at
 once, and the effects bring the composer's version of it.
+
+A screen can be rendered before an action finishes and shown after it: an app navigates while the
+action is in flight. Effects applied while it wasn't on show didn't reach it, so a client SHOULD
+keep the effects of the actions it performed, with their `at`, and catch a screen up when it first
+shows it: it applies, in order, every action whose `at` is later than the screen's (changes, then
+updates, then invalidations, which reload it). A screen or an action without `at` is taken as
+current. Applying an action the screen already reflects leaves it as it is (changes set what the
+action left, updates are the islands as it left them), which is why a screen's `at` is when its
+composer started answering, not when it finished: a client errs towards catching up.
 
 #### Checking them
 

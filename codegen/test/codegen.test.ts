@@ -73,9 +73,10 @@ test("generated action descriptors work end to end with the composer and client"
     },
     options,
   );
-  assert.deepEqual(ok.status === "ok" && [ok.result.thing, ok.effects], [
+  // When it finished (spec §5.3) is the composer's clock: any time will do.
+  assert.deepEqual(ok.status === "ok" && [ok.result.thing, { ...ok.effects, at: 0 }], [
     { id: "t1", name: "New" },
-    { invalidate: [{ screen: "thing", params: { thingId: "t1" } }] },
+    { invalidate: [{ screen: "thing", params: { thingId: "t1" } }], at: 0 },
   ]);
   const taken = await callAction("", RenameThingV1, { thingId: "t1", name: "taken" }, options);
   assert.deepEqual(

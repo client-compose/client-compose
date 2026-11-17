@@ -11,6 +11,8 @@ export interface IslandScopeValue {
   type: string;
   version: number;
   next?: string;
+  /** When its screen was read (spec §4), for catching it up with actions that finished later. */
+  at?: number;
 }
 
 /** Where a screen's island is, if it resolved; islands that failed have no pages. */
@@ -30,5 +32,6 @@ export function scopeOf(
     type: entry.type,
     version: entry.version,
     ...(entry.next !== undefined && { next: entry.next }),
+    ...(response.at !== undefined && { at: response.at }),
   };
 }

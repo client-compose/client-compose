@@ -505,13 +505,19 @@ export async function runComposerConformance(
 /**
  * Objects in `expected` are subsets of `actual`; arrays must match in length and order;
  * everything else must be strictly equal, except `"$absent"`, which requires the value to be
- * missing. Returns a description of the first mismatch.
+ * missing, and `"$time"`, which requires a time: whole milliseconds since the Unix epoch, after
+ * 2001 (spec §4, §5.3). Returns a description of the first mismatch.
  */
 export function subsetMismatch(
   expected: unknown,
   actual: unknown,
   path: string,
 ): string | undefined {
+  if (expected === "$time") {
+    return Number.isInteger(actual) && Number(actual) > 1e12
+      ? undefined
+      : `${path}: expected a time in milliseconds, got ${JSON.stringify(actual)}`;
+  }
   if (expected === "$absent") {
     return actual === undefined
       ? undefined

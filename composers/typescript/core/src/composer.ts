@@ -490,6 +490,8 @@ export function createComposer<Ctx = undefined, Req = Request>(
     scope: RequestScope,
     end: () => void,
   ): Promise<ComposeResult> {
+    // Before anything is read, so the screen shows nothing older (spec §4).
+    const at = Date.now();
     const params = req.params ?? {};
     const load = scope.load.bind(scope);
     const words = wordsFor(req.client.locale);
@@ -588,6 +590,7 @@ export function createComposer<Ctx = undefined, Req = Request>(
           ...(screenMeta && { meta: screenMeta }),
           ...(screen.cache && { cache: { maxAge: screen.cache.maxAge } }),
           ...(words && { locale: words.locale, plurals: words.plurals }),
+          at,
         },
         islands: inOrderResolved(pending),
       },

@@ -74,6 +74,11 @@ export interface ScreenResponse {
   locale?: string;
   /** That language's plural rules, for the islands' counted strings. */
   plurals?: PluralRules;
+  /**
+   * When the composer started answering, in milliseconds since the Unix epoch: what the screen
+   * shows was read no earlier (spec §4). Clients catch it up with actions that finished later.
+   */
+  at?: number;
 }
 
 /** POST {base}/strings: the app strings, in the client's language (spec §4.7). */
@@ -237,6 +242,11 @@ export interface ActionEffects {
   invalidate?: ScreenRef[];
   /** A screen to show next. Clients map it to their own routes, and may ignore it. */
   navigate?: ScreenRef;
+  /**
+   * When the composer finished the action, in milliseconds since the Unix epoch: a screen whose
+   * `at` is earlier may not show it, and clients catch it up (spec §5.3).
+   */
+  at?: number;
 }
 
 /** A declared error (spec §5.3). Generated code narrows `code` and `details` per action. */

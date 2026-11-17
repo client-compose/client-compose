@@ -73,7 +73,7 @@ func TestDefineActionWithGeneratedTypes(t *testing.T) {
 	}
 
 	for input, want := range map[string]string{
-		`{"thingId":"t1","name":"New"}`:                      `"status":"ok","result":{"thing":{"id":"t1","name":"New"}},"effects":{"invalidate":[{"screen":"thing","params":{"thingId":"t1"}}]}`,
+		`{"thingId":"t1","name":"New"}`:                      `"status":"ok","result":{"thing":{"id":"t1","name":"New"}},"effects":{"invalidate":[{"screen":"thing","params":{"thingId":"t1"}}],"at":`,
 		`{"thingId":"t1","name":"taken"}`:                    `"status":"error","error":{"code":"name_taken","details":{"suggestions":["taken-2"]}}`,
 		`{"thingId":"t1","name":"x","visibility":"private"}`: `"status":"error","error":{"code":"locked"}}`,
 		`{"thingId":"t1","name":"x","visibility":"secret"}`:  `"code":"invalid_input","message":"input.visibility: expected one of public, private"`,

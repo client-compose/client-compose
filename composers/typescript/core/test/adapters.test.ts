@@ -59,7 +59,7 @@ test("retried actions return their first outcome", async () => {
   const retry = await app.perform(ConformanceV1, hi, { ...as("ada"), idempotencyKey: "k1" });
   assert.deepEqual(
     [first.result?.echo, retry.result?.echo, retry.effects],
-    ["hi1", "hi1", { invalidate: [{ screen: "feed" }] }],
+    ["hi1", "hi1", { invalidate: [{ screen: "feed" }], at: first.effects?.at }],
   );
   assert.equal(runs(), 1);
   // Another viewer's call with the same key is theirs; a new key is a new intent; no key, no memory.

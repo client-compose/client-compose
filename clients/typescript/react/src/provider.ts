@@ -5,6 +5,7 @@
 
 import {
   type ActionEffects,
+  type ScreenHead,
   type ScreenRef,
   screenRefMatches,
   type ScreenResponse,
@@ -89,19 +90,48 @@ export class ScreenStore {
   }
 
   /**
-   * The actions an island a Server Component rendered has missed, oldest first: every one since its
-   * props (`from`, as the server sent them) were first shown. Props shown for the first time have
-   * missed none. A page a router brings back from its cache (going back) shows the same props
-   * again, as they were, and catches up with these.
+   * The actions an island a Server Component rendered has missed, oldest first. Props shown again
+   * (a router brought their page back from its cache) missed every one since they were first shown.
+   * Props shown for the first time missed the actions that finished after their screen's `at`: it
+   * may have been rendered before them (spec §5.3). Without an `at`, they're taken as current.
    */
-  missed(from: object): EffectsBatch[] {
+  missed(from: object, at: number | undefined): EffectsBatch[] {
     const since = this.seen.get(from);
     if (since === undefined) {
       this.seen.set(from, this.log.length);
-      return [];
+      return this.since(at);
     }
 
     return this.log.slice(since);
+  }
+
+  /** The actions that finished after `at`, oldest first: none without one (spec §5.3). */
+  since(at: number | undefined): EffectsBatch[] {
+    if (at === undefined) {
+      return [];
+    }
+
+    return this.log.filter((batch) => batch.effects.at !== undefined && batch.effects.at > at);
+  }
+
+  /**
+   * A screen's head caught up with the actions that finished after it was read (spec §5.3), or
+   * undefined when only loading it again can show one of them.
+   */
+  caughtUp(head: ScreenHead, params: Record<string, string>): ScreenHead | undefined {
+    let shown = head;
+    for (const batch of this.since(head.at)) {
+      const next = batch.invalidates(shown.screen, params)
+        ? undefined
+        : batch.screen(shown, params);
+      if (next === undefined) {
+        return undefined;
+      }
+
+      shown = next;
+    }
+
+    return shown;
   }
 
   /** An island a Server Component rendered, which actions change. Returns what stops it. */
