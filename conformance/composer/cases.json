@@ -1,5 +1,5 @@
 {
-  "$comment": "Composer conformance cases (spec §8.1). The runner POSTs to {base}/screens/{path ?? request.screen} with a request built from `placements` and `capabilities`, merged with any `request` overrides; `rawBody` replaces the body entirely. Expected bodies are subset matches, except arrays, which must match in length and order. Strings cases (spec §4.7) run against a composer whose catalog is conformance/composer/strings/. With `metaFromStrings`, the screen's meta is its own strings `title` and `description`, with {name} the param's value.",
+  "$comment": "Composer conformance cases (spec §8.1). The runner POSTs to {base}/screens/{path ?? request.screen} with a request built from `placements` and `capabilities`, merged with any `request` overrides; `rawBody` replaces the body entirely. Expected bodies are subset matches, except arrays, which must match in length and order; \"$time\" requires a time in milliseconds since the Unix epoch. Strings cases (spec §4.7) run against a composer whose catalog is conformance/composer/strings/. With `metaFromStrings`, the screen's meta is its own strings `title` and `description`, with {name} the param's value.",
   "cases": [
     {
       "name": "picks highest mutually supported version",
@@ -36,7 +36,8 @@
                 "v": 2
               }
             }
-          ]
+          ],
+          "at": "$time"
         }
       }
     },

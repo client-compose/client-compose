@@ -179,6 +179,7 @@ test("changes go to clients as the action set them", async () => {
   const out = await app.perform(FinishV1, { id: "1" });
 
   assert.deepEqual(out.effects, {
+    at: out.effects?.at,
     changes: [
       {
         entity: "item",

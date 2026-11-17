@@ -105,7 +105,7 @@ function caughtUp(
     return { shown };
   }
 
-  for (const batch of screens.missed(props.props)) {
+  for (const batch of screens.missed(props.props, scope.at)) {
     const next = after(shown, batch, scope);
     if (!next) {
       return { shown, stale: batch };
@@ -119,8 +119,9 @@ function caughtUp(
 
 /**
  * A Client Component island a Server Component rendered. It takes an action's changes and updates
- * itself, as `useScreen` does, until the server renders it again. Shown again as it was (a router
- * brought its page back from its cache), it catches up with the actions it missed. Its `t` is made
+ * itself, as `useScreen` does, until the server renders it again. It catches up with the actions it
+ * missed: since it was last shown, when a router brings its page back from its cache, or since its
+ * screen was read, when it's new (spec §5.3). Its `t` is made
  * of functions, which can't be sent to the browser, so it's built here from the strings that can.
  */
 export function ClientIsland(props: ClientIslandProps): ReactNode {
@@ -219,9 +220,9 @@ export function ServerIsland(props: ServerIslandProps): ReactNode {
     const touched = (batch: EffectsBatch) =>
       batch.invalidates(scope.screen, scope.params) ||
       batch.touches(holds, scope.screen, scope.params, scope.key);
-    // Shown again as it was (its page brought back from a router's cache): did it miss an action
-    // that touched it?
-    const missed = screens.missed(holds).find(touched);
+    // Did it miss an action that touched it: rendered before the action finished, or shown again as
+    // it was (its page brought back from a router's cache)?
+    const missed = screens.missed(holds, scope.at).find(touched);
     if (missed) {
       onStale?.(missed.effects);
     }

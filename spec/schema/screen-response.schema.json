@@ -49,6 +49,11 @@
       "type": "string",
       "description": "The language the composer answered in (spec §4.7)."
     },
+    "at": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "When the composer started answering, in milliseconds since the Unix epoch: what the screen shows was read no earlier (spec §4)."
+    },
     "plurals": {
       "$ref": "strings-response.json#/properties/plurals"
     }

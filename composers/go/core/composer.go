@@ -321,6 +321,8 @@ func protocolError(err error) (Result, bool) {
 
 func (c *Composer) composeScreen(ctx context.Context, req ScreenRequest) Result {
 	screen := c.screens[req.Screen]
+	// Before anything is read, so the screen shows nothing older (spec §4).
+	started := time.Now().UnixMilli()
 
 	// Shared loads (Load, BatchLoader) live as long as this request: until its stream ends, or it
 	// fails. Whatever is still running then is cancelled.
@@ -398,7 +400,7 @@ func (c *Composer) composeScreen(ctx context.Context, req ScreenRequest) Result 
 		}
 	}
 
-	head := ScreenResponse{Protocol: ProtocolVersion, Screen: screen.ID, Islands: make([]IslandEntry, len(toResolve)), Meta: meta}
+	head := ScreenResponse{Protocol: ProtocolVersion, Screen: screen.ID, Islands: make([]IslandEntry, len(toResolve)), Meta: meta, At: started}
 	if screen.CacheMaxAge > 0 {
 		head.Cache = &CacheHint{MaxAge: int(screen.CacheMaxAge.Seconds())}
 	}
