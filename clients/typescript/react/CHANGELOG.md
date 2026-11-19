@@ -1,5 +1,14 @@
 # @client-compose/react
 
+## 0.22.0
+
+### Minor Changes
+
+- [#92](https://github.com/client-compose/client-compose/pull/92) [`f0d9af6`](https://github.com/client-compose/client-compose/commit/f0d9af69eb59c101967a038f2bfb3892181bb23c) Thanks [@LewisYearsley](https://github.com/LewisYearsley)! - `richText` takes the string itself and its params, with nodes for any of them:
+  `richText(t.newHere, { link: <a href="/sign-up">{t.signUp}</a> })`. Params no longer need filling
+  with their own placeholders first, and are type-checked against the string's. Breaking: pass the
+  string's function, not a formatted string.
+
 ## 0.21.0
 
 ### Minor Changes
