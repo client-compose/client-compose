@@ -336,20 +336,60 @@ test("through a proxy, strings come from the server's loadStrings", async () => 
   await view.unmount();
 });
 
-test("richText puts nodes into a sentence, keeping it whole", async () => {
+test("richText formats a string with nodes among its params, keeping the sentence whole", async () => {
+  const newHere = ({ link, name }: { link: string | number; name: string | number }) =>
+    `New here, ${name}? ${link}, or ${link} later. {link}`;
   const view = await mount(
     createElement(
       "p",
       null,
-      richText("New here? {link}, or {link} later. {unknown}", {
-        link: createElement("a", { href: "/sign-up" }, "Sign up"),
-      }),
+      richText(newHere, { name: "Ada", link: createElement("a", { href: "/sign-up" }, "Sign up") }),
     ),
   );
   assert.equal(
     view.html(),
-    '<p>New here? <a href="/sign-up">Sign up</a>, or <a href="/sign-up">Sign up</a> later. {unknown}</p>',
+    '<p>New here, Ada? <a href="/sign-up">Sign up</a>, or <a href="/sign-up">Sign up</a> later. {link}</p>',
   );
+  await view.unmount();
+});
+
+test("richText's params are the string's own", () => {
+  const signIn = ({ link }: { link: string | number }) => `Have an account? ${link}`;
+  // Type-checked, not run: `href` isn't one of the string's params.
+  const misnamed = () =>
+    // @ts-expect-error -- see above
+    richText(signIn, { href: "/sign-in" });
+  assert.equal(typeof misnamed, "function");
+});
+
+test("richText keeps a plain value as text, even one that looks like a marker", async () => {
+  const byCreator = ({ creator, link }: { creator: string | number; link: string | number }) =>
+    `By ${creator}. ${link}`;
+  const view = await mount(
+    createElement(
+      "p",
+      null,
+      richText(byCreator, {
+        creator: "Ada \uE000link\uE001 {link}",
+        link: createElement("a", { href: "/more" }, "More"),
+      }),
+    ),
+  );
+  assert.equal(view.html(), '<p>By Ada \uE000link\uE001 {link}. <a href="/more">More</a></p>');
+  await view.unmount();
+});
+
+test("richText gives a plural its count as a number", async () => {
+  const saved = ({ count, list }: { count: number; list: string | number }) =>
+    `${count === 1 ? "One recipe" : `${count} recipes`} in ${list}`;
+  const view = await mount(
+    createElement(
+      "p",
+      null,
+      richText(saved, { count: 2, list: createElement("b", null, "Saved") }),
+    ),
+  );
+  assert.equal(view.html(), "<p>2 recipes in <b>Saved</b></p>");
   await view.unmount();
 });
 

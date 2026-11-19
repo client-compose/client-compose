@@ -1,23 +1,59 @@
 // No hooks or context here, so Server Components can use it too.
 import { createElement, Fragment, type ReactNode } from "react";
 
+// Marks where a node goes in the formatted sentence: a param's name between private-use characters,
+// with a nonce made for each call. Translations don't use these characters, and a plain value (a
+// person's name, a title) can't hold a marker on purpose, as it can't know the nonce, so nothing
+// else in the sentence is mistaken for a node.
+const open = "\uE000";
+const close = "\uE001";
+
+/** A formatted string, taking any params. */
+interface Formatter {
+  format(values: Record<string, string | number>): string;
+}
+
+/** What a formatted string's params are given: plain values as they are, anything else as a node. */
+type RichValues<Values> = { [Name in keyof Values]: Values[Name] | ReactNode };
+
 /**
- * Puts React nodes (links, emphasis) into a string, so a sentence stays whole for translators. Each
- * `{name}` in the text becomes `nodes[name]`; other text is kept as is. Fill a string's params with
- * their own placeholders to keep them for richText:
+ * Formats a string with React nodes (links, emphasis) among its params, so a sentence stays whole
+ * for translators. Pass the string itself, not its result: plain values (text, numbers, a plural's
+ * count) are formatted as usual, and each element goes where its param is, as often as it's used.
  *
- *     richText(t.newHere({ link: "{link}" }), { link: <a href="/sign-up">{t.signUp}</a> })
+ *     richText(t.newHere, { link: <a href="/sign-up">{t.signUp}</a> })
+ *     richText(t.saved, { count: 3, list: <a href="/saved">{t.yourList}</a> })
  */
-export function richText(text: string, nodes: Record<string, ReactNode>): ReactNode[] {
-  // Each node is keyed by its placeholder (numbered if the sentence uses it more than once).
+export function richText<Values extends Record<string, string | number>>(
+  message: (values: Values) => string,
+  values: RichValues<Values>,
+): ReactNode[] {
+  const nonce = Math.random().toString(36).slice(2);
+  const nodes = new Map<string, ReactNode>();
+  const formatted: Record<string, string | number> = {};
+  for (const [name, value] of Object.entries(values)) {
+    if (typeof value === "string" || typeof value === "number") {
+      formatted[name] = value;
+    } else {
+      nodes.set(name, value);
+      formatted[name] = `${open}${nonce}:${name}${close}`;
+    }
+  }
+
+  // Each node is keyed by its param (numbered if the sentence uses it more than once).
   const seen = new Map<string, number>();
-  return text.split(/(\{[A-Za-z0-9_]+\})/).map((part) => {
-    const name = /^\{([A-Za-z0-9_]+)\}$/.exec(part)?.[1];
-    if (name === undefined || !(name in nodes)) {
+  // The message is given its own params, each plain value kept and each node marked in its place.
+  // (A method's params are checked both ways, so it takes them without a cast.)
+  const formatter: Formatter = { format: message };
+  const text = formatter.format(formatted);
+  const start = `${open}${nonce}:`;
+  return text.split(new RegExp(`(${start}[A-Za-z0-9_]+${close})`)).map((part) => {
+    const name = part.startsWith(start) ? part.slice(start.length, -close.length) : undefined;
+    if (name === undefined || !nodes.has(name)) {
       return part;
     }
     const count = (seen.get(name) ?? 0) + 1;
     seen.set(name, count);
-    return createElement(Fragment, { key: `${name}#${count}` }, nodes[name]);
+    return createElement(Fragment, { key: `${name}#${count}` }, nodes.get(name));
   });
 }
