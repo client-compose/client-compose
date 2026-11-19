@@ -250,11 +250,12 @@ registry.registerComponent(ArticleListV1, ArticleList);
 
 `IslandProps<typeof ArticleListV1>` is the island's props, with `t` when it declares strings.
 
-A sentence with a link in it stays whole for translators: fill the string's params with their own
-placeholders, and `richText` puts the nodes in (it has no hooks, so Server Components can use it):
+A sentence with a link in it stays whole for translators: give `richText` the string itself and its
+params, with nodes for any of them, and it puts the nodes in where they go (it has no hooks, so
+Server Components can use it). Plain values, such as a plural's count, are formatted as usual:
 
 ```tsx
-richText(t.newHere({ link: "{link}" }), { link: <a href="/sign-up">{t.signUp}</a> })
+richText(t.newHere, { link: <a href="/sign-up">{t.signUp}</a> })
 ```
 
 `useLocale()` is the language the client asks for (`config.client.locale`), for what the app
