@@ -1,11 +1,12 @@
 // No hooks or context here, so Server Components can use it too.
 import { createElement, Fragment, type ReactNode } from "react";
 
-// Marks where a node goes in the formatted sentence: private-use characters, which no translation
-// or plain value holds, so nothing else in the sentence is mistaken for one.
-const open = "";
-const close = "";
-const marked = new RegExp(`(${open}[^${close}]*${close})`);
+// Marks where a node goes in the formatted sentence: a param's name between private-use characters,
+// with a nonce made for each call. Translations don't use these characters, and a plain value (a
+// person's name, a title) can't hold a marker on purpose, as it can't know the nonce, so nothing
+// else in the sentence is mistaken for a node.
+const open = "\uE000";
+const close = "\uE001";
 
 /** A formatted string, taking any params. */
 interface Formatter {
@@ -27,6 +28,7 @@ export function richText<Values extends Record<string, string | number>>(
   message: (values: Values) => string,
   values: RichValues<Values>,
 ): ReactNode[] {
+  const nonce = Math.random().toString(36).slice(2);
   const nodes = new Map<string, ReactNode>();
   const formatted: Record<string, string | number> = {};
   for (const [name, value] of Object.entries(values)) {
@@ -34,7 +36,7 @@ export function richText<Values extends Record<string, string | number>>(
       formatted[name] = value;
     } else {
       nodes.set(name, value);
-      formatted[name] = `${open}${name}${close}`;
+      formatted[name] = `${open}${nonce}:${name}${close}`;
     }
   }
 
@@ -44,8 +46,9 @@ export function richText<Values extends Record<string, string | number>>(
   // (A method's params are checked both ways, so it takes them without a cast.)
   const formatter: Formatter = { format: message };
   const text = formatter.format(formatted);
-  return text.split(marked).map((part) => {
-    const name = part.startsWith(open) ? part.slice(1, -1) : undefined;
+  const start = `${open}${nonce}:`;
+  return text.split(new RegExp(`(${start}[A-Za-z0-9_]+${close})`)).map((part) => {
+    const name = part.startsWith(start) ? part.slice(start.length, -close.length) : undefined;
     if (name === undefined || !nodes.has(name)) {
       return part;
     }

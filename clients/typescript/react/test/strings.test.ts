@@ -362,6 +362,23 @@ test("richText's params are the string's own", () => {
   assert.equal(typeof misnamed, "function");
 });
 
+test("richText keeps a plain value as text, even one that looks like a marker", async () => {
+  const byCreator = ({ creator, link }: { creator: string | number; link: string | number }) =>
+    `By ${creator}. ${link}`;
+  const view = await mount(
+    createElement(
+      "p",
+      null,
+      richText(byCreator, {
+        creator: "Ada \uE000link\uE001 {link}",
+        link: createElement("a", { href: "/more" }, "More"),
+      }),
+    ),
+  );
+  assert.equal(view.html(), '<p>By Ada \uE000link\uE001 {link}. <a href="/more">More</a></p>');
+  await view.unmount();
+});
+
 test("richText gives a plural its count as a number", async () => {
   const saved = ({ count, list }: { count: number; list: string | number }) =>
     `${count === 1 ? "One recipe" : `${count} recipes`} in ${list}`;
